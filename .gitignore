@@ -1,0 +1,18 @@
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 依赖与构建（本项目实际不需要）
+node_modules/
+dist/
+
+# 本地个人数据，绝不提交
+resume-data.local.json
+*.local.json
+个人数据/

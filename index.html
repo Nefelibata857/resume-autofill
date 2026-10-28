@@ -1,0 +1,2081 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>简历填表助手 · 通用版</title>
+<meta name="description" content="免费的网申自动填表工具：简历只需录一次，之后任何招聘网站点一下书签，整页表单自动填好。纯本地运行，数据不上传。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="简历填表助手">
+<meta property="og:description" content="简历只需录一次，之后任何招聘网站点一下书签，整页表单自动填好。纯本地运行，数据不上传。">
+<meta name="theme-color" content="#1a1917">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1917'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h8' stroke='%23b0894f' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f7f5f2; --card:#fff; --ink:#1a1917; --sub:#7d7770; --line:#e8e3db;
+  --gold:#b0894f; --gold-soft:#f3ebdd; --ok:#2f7d4f; --warn:#c98a20; --bad:#b8433a;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{background:var(--bg);color:var(--ink);}
+body{
+  font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:inherit;}
+
+/* ---------- 顶栏 ---------- */
+header{
+  position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);
+}
+.hd{max-width:1440px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.hd h1{font-size:17px;font-weight:600;letter-spacing:.02em;}
+.hd h1 span{color:var(--sub);font-weight:400;font-size:12px;margin-left:10px;letter-spacing:0;}
+.acts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;}
+
+button,.btn{
+  font:inherit;font-size:12.5px;cursor:pointer;border-radius:7px;padding:7px 13px;
+  border:1px solid var(--line);background:#fff;color:var(--ink);transition:.15s;
+}
+button:hover,.btn:hover{border-color:#cfc7ba;background:#fbf9f6;}
+button.primary{background:var(--ink);border-color:var(--ink);color:#fff;}
+button.primary:hover{background:#000;}
+
+/* 数据改过但书签没更新时的提示条 */
+#banner{
+  display:none;background:#fdf6e6;border-bottom:1px solid #eddcb6;
+  font-size:12.5px;color:#7a5c2c;
+}
+#banner.on{display:block;}
+#banner .in{max-width:1440px;margin:0 auto;padding:9px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+#banner b{font-weight:600;}
+#banner button{
+  font-size:12px;padding:4px 11px;background:#7a5c2c;border-color:#7a5c2c;color:#fff;
+}
+#banner button:hover{background:#5f4520;border-color:#5f4520;}
+
+/* ---------- 布局 ---------- */
+.wrap{max-width:1440px;margin:0 auto;padding:22px 24px 80px;display:grid;grid-template-columns:1fr 380px;gap:22px;align-items:start;}
+@media(max-width:1180px){.wrap{grid-template-columns:1fr;}.side{position:static!important;}}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:18px 18px 20px;margin-bottom:16px;}
+.card h2{
+  font-size:12px;font-weight:600;letter-spacing:.14em;color:var(--sub);
+  text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px;
+}
+.card h2::after{content:"";flex:1;height:1px;background:var(--line);}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
+@media(max-width:720px){.grid{grid-template-columns:1fr;}}
+
+.f{display:flex;flex-direction:column;gap:5px;min-width:0;}
+.f.wide{grid-column:1/-1;}
+.fh{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.lab{font-size:11.5px;color:var(--sub);letter-spacing:.03em;display:flex;align-items:center;gap:5px;}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--warn);display:inline-block;}
+.arw{font-style:normal;font-size:9px;color:#b9b2a6;line-height:1;margin-left:1px;}
+
+.f input,.f textarea{
+  width:100%;font:inherit;font-size:13.5px;color:var(--ink);
+  background:#fbfaf8;border:1px solid var(--line);border-radius:7px;padding:8px 10px;
+  transition:.15s;resize:vertical;
+}
+.f textarea{line-height:1.65;min-height:78px;}
+.f input:focus,.f textarea:focus{outline:none;background:#fff;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft);}
+.f input::placeholder,.f textarea::placeholder{color:#bdb6ac;}
+.f input.auto{background:#f4f1ec;color:var(--sub);cursor:not-allowed;}
+
+.cp{font-size:11px;padding:2px 8px;border-radius:5px;color:var(--sub);border-color:transparent;background:transparent;}
+.cp:hover{background:var(--gold-soft);color:var(--gold);border-color:transparent;}
+
+/* ---------- 自检 ---------- */
+.hsum{font-size:13px;padding:9px 12px;border-radius:8px;margin-bottom:10px;}
+.hsum.ok{background:#eef6f0;color:var(--ok);}
+.hsum.warn{background:#fdf6e6;color:#8a6415;}
+.hsum.bad{background:#fbeeec;color:var(--bad);}
+.hsum.idle{background:#f4f1ec;color:var(--sub);font-size:12.5px;line-height:1.6;}
+.hlist{list-style:none;display:grid;gap:5px;}
+.hl{font-size:12.5px;padding-left:15px;position:relative;color:#4a463f;line-height:1.55;}
+.hl::before{content:"";position:absolute;left:3px;top:7px;width:5px;height:5px;border-radius:50%;background:#c9c2b6;}
+.hl.err::before{background:var(--bad);}
+.hl.warn::before{background:var(--warn);}
+.hl.todo::before{background:#bdb6ac;}
+
+/* ---------- 右侧 ---------- */
+.side{position:sticky;top:74px;}
+.side .card{margin-bottom:14px;}
+.step{display:flex;gap:11px;margin-bottom:13px;font-size:13px;color:#4a463f;line-height:1.6;}
+.step .n{
+  flex:0 0 20px;width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;
+  font-size:11px;font-weight:600;font-style:normal;
+  display:flex;align-items:center;justify-content:center;margin-top:2px;
+}
+.step strong{font-weight:600;color:var(--ink);}
+.step code,.tip code{background:#f2efe9;border-radius:4px;padding:1px 5px;font-size:12px;font-family:ui-monospace,Consolas,monospace;}
+
+.bm{
+  display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;
+  border:1px dashed #c9bda9;background:var(--gold-soft);color:#7a5c2c;
+  border-radius:9px;padding:14px;font-size:13px;font-weight:500;cursor:grab;
+  transition:.15s;user-select:none;margin-bottom:9px;
+}
+.bm:hover{border-color:var(--gold);background:#efe2cb;}
+.bm:active{cursor:grabbing;}
+.bm .drag{font-size:15px;opacity:.6;}
+
+.tip{font-size:12px;color:var(--sub);line-height:1.7;}
+.tip b{color:#4a463f;font-weight:500;}
+.linkbtn{font-size:12px;padding:0;border:none;background:none;color:var(--gold);text-decoration:underline;cursor:pointer;}
+.linkbtn:hover{background:none;border:none;color:#8a6a35;}
+
+pre.script{
+  background:#1c1a17;color:#d8d2c6;border-radius:8px;padding:12px;
+  font:11.5px/1.6 ui-monospace,Consolas,monospace;max-height:150px;overflow:auto;
+  white-space:pre-wrap;word-break:break-all;margin-top:8px;
+}
+.status{font-size:12px;color:var(--ok);margin-top:6px;min-height:16px;}
+.status.dirty{color:var(--warn);}
+.sep{height:1px;background:var(--line);margin:14px 0 12px;}
+
+/* ---------- 顶部区块导航 ---------- */
+#tabs{
+  max-width:1440px;margin:0 auto;padding:0 24px 10px;display:flex;gap:5px;
+  flex-wrap:wrap;align-items:center;
+}
+#tabs:empty{display:none;}
+#tabs a{
+  font-size:12px;color:var(--sub);text-decoration:none;padding:4px 9px;
+  border-radius:6px;transition:.15s;white-space:nowrap;
+}
+#tabs a:hover{background:var(--gold-soft);color:var(--gold);}
+#tabs a.top{margin-left:auto;color:#b3aa9c;}
+#tabs a.top:hover{color:var(--gold);}
+.card{scroll-margin-top:110px;}
+
+button.ghost{background:var(--gold-soft);border-color:#e0cfb2;color:#7a5c2c;}
+button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
+
+/* ---------- 使用说明弹层 ---------- */
+.modal{
+  position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;
+  background:rgba(26,25,23,.42);display:none;padding:22px;overflow:auto;
+}
+.modal.on{display:block;}
+.mbox{
+  max-width:720px;margin:16px auto 40px;background:var(--card);border-radius:12px;
+  box-shadow:0 24px 70px rgba(0,0,0,.28);overflow:hidden;
+}
+.mhd{
+  position:sticky;top:0;z-index:2;background:var(--card);border-bottom:1px solid var(--line);
+  padding:15px 22px;display:flex;align-items:center;gap:12px;
+}
+.mhd h3{font-size:15px;font-weight:600;letter-spacing:.02em;}
+.mx{
+  margin-left:auto;border:none;background:none;font-size:22px;line-height:1;
+  color:var(--sub);padding:0 2px;cursor:pointer;
+}
+.mx:hover{background:none;border:none;color:var(--ink);}
+.mbd{padding:20px 24px 30px;font-size:13.5px;line-height:1.78;color:#3f3b35;}
+.mlead{
+  background:var(--gold-soft);color:#6f5426;border-radius:8px;padding:11px 14px;
+  margin-bottom:20px;font-size:13px;line-height:1.72;
+}
+.mbd h4{
+  font-size:13px;font-weight:600;color:var(--ink);letter-spacing:.04em;
+  margin:24px 0 9px;padding-bottom:6px;border-bottom:1px solid var(--line);
+}
+.mbd h4:first-of-type{margin-top:4px;}
+.mbd ol,.mbd ul{margin:0 0 10px 18px;display:grid;gap:6px;}
+.mbd code{
+  background:#f2efe9;border-radius:4px;padding:1px 5px;font-size:12px;
+  font-family:ui-monospace,Consolas,monospace;
+}
+.mbd b{font-weight:600;color:var(--ink);}
+.mtip{color:var(--sub);font-size:12.5px;}
+.mbd dl{margin:0;display:grid;gap:13px;}
+.mbd dt{font-weight:600;font-size:13px;color:var(--ink);}
+.mbd dd{margin:3px 0 0;color:#55504a;font-size:13px;}
+
+/* ---------- 窄屏 ---------- */
+@media(max-width:640px){
+  .hd{padding:11px 14px;gap:9px;}
+  .hd h1{font-size:15px;}
+  .hd h1 span{display:block;margin:3px 0 0;font-size:11px;}
+  .acts{width:100%;margin-left:0;gap:6px;}
+  .acts button,.acts .btn{flex:1 1 auto;padding:6px 9px;font-size:12px;text-align:center;}
+  .wrap{padding:14px 14px 60px;gap:14px;}
+  #tabs{padding:0 14px 8px;overflow-x:auto;flex-wrap:nowrap;}
+  #tabs a.top{display:none;}
+  #banner .in,#hello .in{padding:10px 14px;}
+  .card{padding:15px 14px 17px;}
+  .mbd{padding:16px 16px 24px;}
+  .modal{padding:10px;}
+}
+
+/* ---------- 窄屏浮动下载按钮 ---------- */
+.floatdl{
+  display:none;position:fixed;right:16px;bottom:16px;z-index:120;
+  background:var(--ink);border-color:var(--ink);color:#fff;
+  padding:11px 19px;border-radius:999px;font-size:13px;
+  box-shadow:0 8px 24px rgba(0,0,0,.24);cursor:pointer;
+}
+.floatdl:hover{background:#000;border-color:#000;color:#fff;}
+@media(max-width:1180px){.floatdl{display:block;}}
+
+/* toast */
+#toast{
+  position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(14px);
+  background:var(--ink);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;
+  opacity:0;pointer-events:none;transition:.22s;z-index:99;box-shadow:0 10px 30px rgba(0,0,0,.2);
+  white-space:nowrap;
+}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ---------- 通用版：引导条 / 进度 / 折叠 ---------- */
+#hello{display:none;background:#f3ebdd;border-bottom:1px solid #e6d8bf;}
+#hello .in{
+  max-width:1440px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;
+  gap:15px;flex-wrap:wrap;font-size:12.5px;color:#7a5c2c;
+}
+#hello .ttl{font-weight:600;color:#5f4520;font-size:13px;letter-spacing:.02em;}
+#hello .ws{display:flex;align-items:center;gap:6px;}
+#hello .ws b{
+  width:17px;height:17px;border-radius:50%;background:#7a5c2c;color:#fff;font-size:10px;
+  font-weight:600;display:flex;align-items:center;justify-content:center;flex:0 0 17px;
+}
+#hello .x{
+  margin-left:auto;background:none;border:none;color:#8a6a35;font-size:12px;
+  text-decoration:underline;padding:0;cursor:pointer;
+}
+#hello .x:hover{background:none;border:none;color:#5f4520;}
+
+#progress .pbar{height:6px;background:#efeae2;border-radius:3px;overflow:hidden;margin-bottom:9px;}
+#progress .pbar i{display:block;height:100%;width:0;background:var(--gold);border-radius:3px;transition:width .35s;}
+#progress .ptxt{font-size:12.5px;color:#4a463f;display:flex;gap:16px;flex-wrap:wrap;}
+#progress .ptxt b{font-weight:600;}
+#progress .ptxt .ok{color:var(--ok);}
+#progress .ptxt .no{color:var(--bad);}
+#progress .ptxt .sm{color:var(--bad);font-weight:600;}
+
+#groups .card h2{cursor:pointer;user-select:none;}
+#groups .card h2::before{
+  content:"−";font-size:14px;line-height:1;color:#b3aa9c;flex:0 0 10px;
+}
+#groups .card.fold h2::before{content:"+";}
+#groups .card.fold h2{color:#a8a29a;}
+#groups .card.fold .grid{display:none;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hd">
+    <h1>简历填表助手<span>通用版 · 填一次，以后每份网申一键填完</span><span id="ver"></span></h1>
+    <div class="acts">
+      <button id="btn-help" class="ghost">使用说明</button>
+      <button id="btn-copyall">复制全部为文本</button>
+      <button id="btn-export">导出 JSON</button>
+      <button id="btn-example">填入示例</button>
+      <label class="btn" for="file-imp">导入 JSON</label>
+      <input type="file" id="file-imp" hidden accept=".json">
+      <button id="btn-reset">清空全部</button>
+    </div>
+  </div>
+  <nav id="tabs"></nav>
+</header>
+
+<div id="banner"><div class="in">
+  <b>数据已修改，书签还是旧版本。</b>
+  <span>重新下载书签文件并导入（导入前先删掉旧的「简历填表」书签，否则会重复）。</span>
+  <button id="banner-dl">立即下载</button>
+</div></div>
+
+<div id="hello"><div class="in">
+  <span class="ttl">第一次用 · 三步搞定</span>
+  <span class="ws"><b>1</b>在下面填你自己的信息（只存在本机浏览器）</span>
+  <span class="ws"><b>2</b>点右上「下载书签文件」</span>
+  <span class="ws"><b>3</b>Ctrl+Shift+O 导入书签，以后点一下书签就自动填</span>
+  <button class="x" id="hello-x">知道了，关掉</button>
+</div></div>
+
+<div class="wrap">
+  <div class="main">
+    <div id="health"></div>
+    <div id="groups"></div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h2>一键填表</h2>
+
+      <button class="primary" id="btn-bmfile" style="width:100%;padding:13px;font-size:13.5px;margin-bottom:8px">
+        下载书签文件
+      </button>
+      <button id="btn-copybm" style="width:100%;margin-bottom:14px">
+        复制书签地址（手动添加用）
+      </button>
+
+      <div class="step"><i class="n">1</i><div>点上面的按钮，把 <code id="bm-filename">简历填表书签.html</code> 存下来。</div></div>
+      <div class="step"><i class="n">2</i><div>浏览器打开书签管理器（<code>Ctrl+Shift+O</code>）→ 右上角 <code>⋮</code> → <b>导入书签</b> → 选刚存的文件。</div></div>
+      <div class="step"><i class="n">3</i><div>按 <code>Ctrl+Shift+B</code> 显示书签栏，导入的书签在「已导入」文件夹里，拖出来即可。</div></div>
+      <div class="step"><i class="n">4</i><div>以后打开网申页面，点一下书签，表格自动填好，右下角出现结果清单。</div></div>
+
+      <div class="tip" style="margin:2px 0 8px">
+        <b>也可以在页面里直接拖</b>（部分 Chrome 版本会拦下 javascript 链接，拖不动就用上面的导入法）：
+      </div>
+      <a class="bm" id="bm-full" href="javascript:void 0"><span class="drag">⇢</span> 拖我到书签栏（完整版）</a>
+      <a class="bm" id="bm-short" href="javascript:void 0"><span class="drag">⇢</span> 拖我到书签栏（精简版）</a>
+
+      <div class="tip" style="margin-top:6px">
+        精简版只填姓名/电话/邮箱/学校/专业等短字段，最稳；完整版额外填长文本、以及多段实习经历。
+      </div>
+      <div class="status" id="bm-status">书签已就绪</div>
+
+      <div class="sep"></div>
+      <div class="tip">
+        换了个没见过的招聘系统、填不上？下载一份<b>诊断书签</b>，它只扫描不填写，把整页字段名和当前值列出来，发我就能补匹配规则。
+        <div style="margin-top:8px"><button class="linkbtn" id="btn-diag">下载诊断书签 →</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>控制台脚本</h2>
+      <div class="tip">书签被网站 CSP 拦下时用这个：点下面按钮复制，粘贴到网页 Console 回车。</div>
+      <pre class="script" id="script-preview">生成中…</pre>
+      <button class="primary" id="btn-copyscript" style="margin-top:10px;width:100%">复制填表脚本</button>
+    </div>
+
+    <div class="card">
+      <h2>说明</h2>
+      <div class="tip">
+        · 这个文件<b>不含任何个人信息</b>，可以直接发给同学、朋友，各填各的。<br>
+        · 你填的内容只存在<b>你这台电脑的浏览器</b>里，不上传，关掉页面也不会丢。<br>
+        · 脚本<b>只填空框</b>，已有内容一律跳过，不会覆盖你手填的东西。<br>
+        · 多步骤表单：每翻一页点一次书签。<br>
+        · 表单套在 iframe 里也能填（限同域名）。<br>
+        · 但生成的书签文件里有你的身份证和手机号，<b>别外发</b>。<br>
+        · 换电脑：导出 JSON → 在新电脑导入 → 重新生成书签。
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<button class="floatdl" id="float-dl">生成书签文件</button>
+
+<div id="help" class="modal">
+  <div class="mbox" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="mhd">
+      <h3 id="help-title">使用说明</h3>
+      <button class="mx" id="help-x" aria-label="关闭">×</button>
+    </div>
+    <div class="mbd">
+
+      <p class="mlead">
+        把简历信息在这一页录一次，之后在任何招聘网站点一下书签，整页表单自动填好。
+        全部在你自己浏览器里运行，不联网、不上传。
+      </p>
+
+      <h4>一、装书签（只做一次，用电脑）</h4>
+      <ol>
+        <li>在下面把要用的信息填好。只填 <b>8 个必填项</b>就能生成可用书签，其余按网申要求补。</li>
+        <li>点右上角「<b>下载书签文件</b>」，存下一个 <code>简历填表书签.html</code>。</li>
+        <li>浏览器按 <code>Ctrl + Shift + O</code> 打开书签管理器 → 右上角 <code>⋮</code> → <b>导入书签</b> → 选刚存的文件。</li>
+        <li>按 <code>Ctrl + Shift + B</code> 显示书签栏，导入的书签在「已导入」文件夹里，拖出来即可。</li>
+      </ol>
+      <p class="mtip">
+        拖不进书签栏是正常的 —— 新版 Chrome 会拦下 <code>javascript:</code> 链接的拖拽。用上面的导入法就行。
+      </p>
+
+      <h4>二、以后投简历</h4>
+      <p>打开网申页面 → 点书签栏里的「简历填表」→ 表单自动填好，右下角弹出「已填 N 项，跳过 M 项」。</p>
+      <ul>
+        <li><b>只填空框</b>：你手填过的内容不会被覆盖。</li>
+        <li><b>多步骤表单</b>：每翻一页点一次书签。</li>
+        <li><b>iframe 里的表单</b>也能填（同域名）；跨域的会提示你点进框里再点一次。</li>
+      </ul>
+
+      <h4>三、常见问题</h4>
+      <dl>
+        <dt>点了书签没反应</dt>
+        <dd>
+          有些网站的安全策略（CSP）会拦书签脚本。这时点右侧「复制填表脚本」，到网申页面按
+          <code>F12</code> → <code>Console</code> → 粘贴 → 回车。Chrome 第一次会要求先输入
+          <code>allow pasting</code> 再粘贴。
+        </dd>
+
+        <dt>改完信息，书签还是旧的</dt>
+        <dd>
+          书签里存的是生成那一刻的数据快照。改完数据要重新下载书签文件，并且<b>先删掉旧书签</b>再导入，
+          否则会有两条重名书签。
+        </dd>
+
+        <dt>某些字段没填上</dt>
+        <dd>
+          点「下载诊断书签」，它<b>只扫描不填写</b>，会列出整页字段名和当前值，照着就能判断是哪个字段没认出来。
+        </dd>
+
+        <dt>换电脑 / 换浏览器</dt>
+        <dd>点「导出 JSON」把数据带走，在新电脑「导入 JSON」，再重新生成书签。</dd>
+
+        <dt>手机上能用吗</dt>
+        <dd>填写和预览可以，但手机浏览器装不了书签栏脚本，<b>自动填表请用电脑</b>。</dd>
+
+        <dt>数据安全吗</dt>
+        <dd>
+          所有内容只存在你这台电脑的浏览器本地存储里，页面不联网、不上传，断网也能用。
+          但生成的书签文件里有你的身份证号、手机号，<b>别外发</b>。共用电脑用完点「清空全部」。
+        </dd>
+      </dl>
+
+      <h4>四、它填不了什么</h4>
+      <p>
+        文件上传（简历 PDF、作品集）、短信验证码、需要点开浮层才能选的组件、以及带逻辑跳转的题目，
+        这些仍然要手动完成。它省掉的是那几十个重复的文本框。
+      </p>
+
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="resume-data">
+{
+  "name": "",
+  "enName": "",
+  "gender": "",
+  "birthday": "",
+  "age": "",
+  "phone": "",
+  "email": "",
+  "wechat": "",
+  "qq": "",
+  "mbti": "",
+  "hometown": "",
+  "birthPlace": "",
+  "currentCity": "",
+  "address": "",
+  "ethnicity": "",
+  "political": "",
+  "idType": "",
+  "idcard": "",
+  "height": "",
+  "weight": "",
+  "maritalStatus": "",
+  "healthStatus": "",
+  "emergencyName": "",
+  "emergencyPhone": "",
+  "school": "",
+  "college": "",
+  "major": "",
+  "degree": "",
+  "academicDegree": "",
+  "eduType": "",
+  "isUpgrade": "",
+  "studentId": "",
+  "className": "",
+  "tutor": "",
+  "enrollDate": "",
+  "graduateDate": "",
+  "gpa": "",
+  "majorGpa": "",
+  "rank": "",
+  "majorRank": "",
+  "courses": "",
+  "coursesFull": "",
+  "targetJob": "",
+  "targetJob2": "",
+  "targetCity": "",
+  "expectSalary": "",
+  "jobType": "",
+  "availableDate": "",
+  "portfolio": "",
+  "transferAccept": "",
+  "transferCities": "",
+  "tripartite": "",
+  "exp1_company": "",
+  "exp1_title": "",
+  "exp1_role": "",
+  "exp1_time": "",
+  "exp1_desc": "",
+  "exp2_company": "",
+  "exp2_title": "",
+  "exp2_role": "",
+  "exp2_time": "",
+  "exp2_desc": "",
+  "exp3_company": "",
+  "exp3_title": "",
+  "exp3_role": "",
+  "exp3_time": "",
+  "exp3_desc": "",
+  "selfEval": "",
+  "skills": "",
+  "awards": "",
+  "sports": ""
+}
+</script>
+
+<script>
+/* =====================================================================
+   1. 数据与面板定义
+   ===================================================================== */
+const DEFAULTS = JSON.parse(document.getElementById('resume-data').textContent);
+
+const GROUPS = [
+  { title: '基本信息', fields: [
+    ['name','姓名'], ['enName','英文名'], ['gender','性别'], ['birthday','出生日期'],
+    ['age','年龄（按生日自动算）'], ['phone','手机'], ['email','邮箱'], ['wechat','微信号'],
+    ['qq','QQ'], ['mbti','MBTI'], ['hometown','籍贯'], ['birthPlace','生源所在地'],
+    ['currentCity','现居城市'], ['address','通讯地址'], ['ethnicity','民族'], ['political','政治面貌'],
+    ['idType','证件类型'], ['idcard','身份证号'], ['height','身高(cm)'], ['weight','体重(kg)'],
+    ['maritalStatus','婚姻状况'], ['healthStatus','健康状况'],
+    ['emergencyName','紧急联系人'], ['emergencyPhone','紧急联系人电话']
+  ]},
+  { title: '教育背景', fields: [
+    ['school','学校'], ['college','学院/院系'], ['major','专业'], ['degree','学历'],
+    ['academicDegree','学位'], ['eduType','受教育类型'], ['isUpgrade','是否专升本'],
+    ['studentId','学号'], ['className','班级'], ['tutor','导师'],
+    ['enrollDate','入学时间'], ['graduateDate','毕业时间'], ['gpa','GPA'], ['majorGpa','专业课绩点'],
+    ['rank','年级排名'], ['majorRank','专业排名'], ['courses','主修课程（精选）']
+  ]},
+  { title: '求职意向', fields: [
+    ['targetJob','目标岗位'], ['targetJob2','备选方向'], ['targetCity','期望城市'], ['expectSalary','期望薪资'],
+    ['jobType','求职类型'], ['availableDate','到岗时间'], ['portfolio','作品集链接'],
+    ['transferAccept','接受调剂'], ['transferCities','可接受工作地点'], ['tripartite','可签三方']
+  ]},
+  { title: '经历', fields: [
+    ['exp1_company','经历1 · 单位'], ['exp1_title','经历1 · 项目/标题'],
+    ['exp1_role','经历1 · 角色'], ['exp1_time','经历1 · 时间'],
+    ['exp1_desc','经历1 · 描述（一句话总结）'],
+    ['exp2_company','经历2 · 单位'], ['exp2_title','经历2 · 项目/标题'],
+    ['exp2_role','经历2 · 角色'], ['exp2_time','经历2 · 时间'],
+    ['exp2_desc','经历2 · 描述（一句话总结）'],
+    ['exp3_company','经历3 · 单位'], ['exp3_title','经历3 · 项目/标题'],
+    ['exp3_role','经历3 · 角色'], ['exp3_time','经历3 · 时间'],
+    ['exp3_desc','经历3 · 描述（一句话总结）']
+  ]},
+  { title: '长文本', fields: [
+    ['selfEval','自我评价 / 自我介绍'], ['skills','专业技能'], ['awards','奖项荣誉'],
+    ['coursesFull','主修课程（完整清单）'], ['sports','文体特长']
+  ]}
+];
+
+/* 网申里反复出现的"是/否"题，答案固定，先存着 */
+const YESNO = [
+  ['是否在本公司实习过', '否'],
+  ['是否有亲友任职于本公司', '否']
+];
+
+const TODO = new Set([]);
+const LONG = new Set(['selfEval','skills','awards','courses','coursesFull','exp1_desc','exp2_desc','exp3_desc']);
+
+/* 枚举字段：给个可选下拉，手输也不受限（datalist 不是硬约束） */
+const ENUMS = {
+  gender:          ['男', '女'],
+  degree:          ['大专', '本科', '硕士', '博士'],
+  academicDegree:  ['学士', '硕士', '博士', '无'],
+  eduType:         ['全日制统招', '全日制', '非全日制', '自考', '成人教育'],
+  isUpgrade:       ['是', '否'],
+  maritalStatus:   ['未婚', '已婚', '离异'],
+  political:       ['群众', '共青团员', '中共党员', '民主党派'],
+  healthStatus:    ['健康', '良好', '一般'],
+  transferAccept:  ['是', '否'],
+  tripartite:      ['是', '否'],
+  jobType:         ['全职（校园招聘）', '实习', '兼职', '社会招聘']
+};
+
+/* 关键字段的格式示例，直接写在占位符里，比事后报错强 */
+const PH = {
+  name:        '身份证上的真实姓名',
+  enName:      'Xiaoming Zhang',
+  birthday:    '2004-08-14',
+  phone:       '11 位手机号',
+  email:       'name@example.com',
+  wechat:      '微信号',
+  qq:          '9 位数字',
+  idcard:      '18 位',
+  height:      '175',
+  weight:      '62',
+  hometown:    '省 + 市',
+  school:      '学校全称',
+  college:     '学院 / 系',
+  major:       '专业全称',
+  targetJob:   '如：建筑设计师',
+  enrollDate:  '2023-09-01',
+  graduateDate:'2027-07-01',
+  gpa:         '3.52',
+  majorGpa:    '4.23',
+  rank:        '前 30%',
+  majorRank:   '前 10%',
+  courses:     '课程名，用「、」隔开',
+  expectSalary:'10-20万/年',
+  availableDate:'2027年7月毕业后到岗',
+  portfolio:   'https://…',
+  exp1_time:   '2025.07 - 2025.09',
+  exp2_time:   '2025.09 - 2026.01',
+  exp3_time:   '2026 - 至今',
+  selfEval:    '分三点写：专业能力 / 逻辑能力 / 实践能力，每点一句，别写空话',
+  skills:      '按「设计软件：PS / AI；建模：SketchUp / CAD」的格式罗列',
+  awards:      '奖项 + 时间，用「；」隔开',
+  exp1_desc:   '一句话说清：做了什么、用什么方法、结果如何',
+  exp2_desc:   '一句话说清：做了什么、用什么方法、结果如何',
+  exp3_desc:   '一句话说清：做了什么、用什么方法、结果如何',
+  coursesFull: '按成绩单原样罗列，网申「专业课程」长文本框用这一栏'
+};
+
+const LABELS = {};
+GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
+
+/* =====================================================================
+   2. 填表核心
+   —— 会被序列化进书签，只能用 ES5，且不能引用任何外部变量
+   ===================================================================== */
+function applyResume(D, O) {
+  O = O || {};
+  var DIAG = !!O.diag;
+  var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0 };
+
+  /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
+  var RULES = [
+    ['name',          /(姓\s*名|真实姓名|中文姓名|中文名|申请人姓名)/, /(公司|单位|企业|学校|项目|作品|紧急|家属|父|母|导师|推荐人|英文|拼音|联系人|文件)/],
+    ['enName',        /(英文名|英文姓名|english\s*name)/i, /(中文)/],
+    ['gender',        /(性别)/, /(要求|偏好|比例)/],
+    ['birthday',      /(出生日期|出生年月日|出生年月|生日)/, /(地|籍|省份|城市)/],
+    ['age',           /(年龄)/, /(工龄|教龄)/],
+    ['height',        /(身高)/, null],
+    ['weight',        /(体重)/, null],
+    ['maritalStatus', /(婚姻状况|婚姻状态|婚否|婚姻)/, null],
+    ['healthStatus',  /(健康状况|身体状况|健康情况)/, null],
+    ['phone',         /(手机号码|手机号|手机|联系电话|联系方式|电话号码|移动电话|mobile|phone)/i, /(验证码|区号|固话|紧急|父|母|家属|备用|学校|单位|公司|办公)/],
+    ['email',         /(电子邮箱|邮箱|电子邮件|e-?mail)/i, /(验证码|确认|备用)/],
+    ['emergencyPhone',/(紧急联系.{0,8}(电话|手机|号码)|紧急电话)/, /(姓名|名字)/],
+    ['emergencyName', /(紧急联系人)/, /(电话|手机|号码)/],
+    ['wechat',        /(微信号|微信账号|微信)/, /(公众号|群|二维码)/],
+    ['qq',            /((^|[^a-z])qq([^a-z]|$))/i, /(邮箱|群)/],
+    ['hometown',      /(籍贯|户籍所在地|户籍)/, /(地址|所在|详细)/],
+    ['birthPlace',    /(生源所在地|生源地|生源)/, /(地址)/],
+    ['currentCity',   /(现居住地|现居|所在城市|当前城市|居住城市|常住地)/, /(期望|意向|学校|出生)/],
+    ['address',       /(通讯地址|联系地址|详细地址|邮寄地址|家庭地址|现住址|住址)/, /(邮编|邮箱)/],
+    ['ethnicity',     /(民族)/, /(要求)/],
+    ['political',     /(政治面貌)/, null],
+    ['idType',        /(证件号码类型|证件类型|身份证件类型)/, null],
+    ['idcard',        /(公民身份号码|身份证号码|身份证号|身份证|证件号码|证件号)/, /(类型|有效期|照片|扫描|上传|正面|反面)/],
+    ['mbti',          /(mbti)/i, null],
+    ['school',        /(毕业院校|就读院校|学校名称|毕业学校|院校名称|就读学校|所在院校)/, /(专业|高中|中学|小学|公司|单位|院系)/],
+    ['college',       /(学院|院系|系别)/, /(学校|大学名称)/],
+    ['major',         /(所学专业|专业名称|主修专业|就读专业|专业(?!排名|课程|课|技能|方向|知识|素养|成绩|类别|代码|技术))/, /(方向|排名|技能|辅修)/],
+    ['degree',        /(最高学历|学历|培养层次)/, /(学位|证书编号|毕业院校)/],
+    ['academicDegree',/(学位)/, /(学历|证书编号)/],
+    ['eduType',       /(受教育类型|培养方式|学习形式|教育形式|招生类型|学历类型)/, null],
+    ['isUpgrade',     /(是否专升本|专升本)/, null],
+    ['studentId',     /(学号)/, null],
+    ['className',     /(班级)/, null],
+    ['tutor',         /(导师|指导教师)/, /(推荐人|联系人)/],
+    ['enrollDate',    /(入学时间|入学年月|入学日期)/, null],
+    ['graduateDate',  /(毕业时间|毕业年月|毕业日期|预计毕业)/, /(入学)/],
+    ['gpa',           /(gpa|绩点)/i, /(排名|专业课)/],
+    ['majorGpa',      /(专业课.*(绩点|gpa)|(绩点|gpa).*专业课)/i, null],
+    ['majorRank',     /(专业排名|专业课排名|专业绩点排名|专业名次)/, null],
+    ['rank',          /(年级排名|班级排名|成绩排名|综合排名|排名|名次)/, null],
+    ['targetJob',     /(应聘岗位|求职意向|意向岗位|期望职位|申请职位|应聘职位|应聘方向|目标岗位|意向职位)/, /(城市|地点|薪资|要求|描述)/],
+    ['targetCity',    /(期望城市|意向城市|期望工作地|期望地点|工作城市|意向工作区域|意向工作地|意向地区|工作区域)/, /(岗位|职位)/],
+    ['expectSalary',  /(期望薪资|薪资要求|期望月薪|期望年薪|期望待遇|薪资期望)/, null],
+    ['jobType',       /(求职类型|工作性质|招聘类型)/, null],
+    ['transferAccept',/(是否接受.{0,8}调剂|接受调剂|服从调剂)/, /(地点|城市)/],
+    ['transferCities',/(调剂.{0,6}(地点|城市|区域)|可调剂(地点|城市))/, /(是否|接受)/],
+    ['tripartite',    /(三方协议)/, null],
+    ['availableDate', /(到岗时间|可到岗|可入职时间)/, /(经历|工作经历)/],
+    ['portfolio',     /(作品集|个人主页|作品链接|portfolio|github)/i, /(文件|上传|附件)/],
+    ['exp1_desc',     /(工作内容|工作描述|实习内容|职责描述|主要职责|业绩描述|项目描述)/, null],
+    ['selfEval',      /(自我评价|自我介绍|个人简介|个人优势|个人陈述|自我描述|个人评价|个人特长)/, null],
+    ['skills',        /(专业技能|技能特长|掌握技能|技能水平)/, null],
+    ['awards',        /(获奖情况|奖项荣誉|获奖经历|所获奖励|荣誉奖励|奖惩情况|获奖)/, null],
+    ['sports',        /(兴趣爱好|文体特长|个人爱好|特长爱好|爱好)/, null],
+    ['coursesFull',   /(专业课程|修读课程|课程名称|主修课程清单)/, null],
+    ['courses',       /(主修课程|核心课程|主要课程)/, null]
+  ];
+
+  var YES = /^(是|有|同意|接受|可以|愿意|true|yes|1)$/i;
+  var NO  = /^(否|没有|不同意|不接受|不可以|不愿意|false|no|0)$/i;
+
+  /* ---------- 跨文档小工具 ---------- */
+  function W(el) {
+    try { return (el.ownerDocument && el.ownerDocument.defaultView) || window; }
+    catch (e) { return window; }
+  }
+  function fire(el) {
+    var w = W(el), d = el.ownerDocument || document;
+    function ev(t) {
+      try { el.dispatchEvent(new w.Event(t, { bubbles: true })); }
+      catch (e) {
+        try {
+          var e2 = d.createEvent('HTMLEvents');
+          e2.initEvent(t, true, true);
+          el.dispatchEvent(e2);
+        } catch (e3) {}
+      }
+    }
+    ev('input'); ev('change'); ev('blur');
+  }
+  /* 用原型上的 setter 赋值，React / Vue 受控组件才认 */
+  function protoSet(el, val) {
+    var w = W(el), t = el.tagName, P = null, d = null;
+    try {
+      if (t === 'TEXTAREA') P = w.HTMLTextAreaElement && w.HTMLTextAreaElement.prototype;
+      else if (t === 'SELECT') P = w.HTMLSelectElement && w.HTMLSelectElement.prototype;
+      else P = w.HTMLInputElement && w.HTMLInputElement.prototype;
+      if (P) d = Object.getOwnPropertyDescriptor(P, 'value');
+    } catch (e) {}
+    try { if (d && d.set) d.set.call(el, val); else el.value = val; }
+    catch (e) { el.value = val; }
+    fire(el);
+  }
+  function shown(el) {
+    try { var r = el.getBoundingClientRect(); return r.width > 2 && r.height > 2; }
+    catch (e) { return false; }
+  }
+  /* 用于拼属性选择器的字符串转义（替代 CSS.escape，兼容老浏览器） */
+  function q(s) { return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"'); }
+  function clean(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
+
+  /* 相邻标签文本：Element UI / AntD 的 label 常是输入框的兄弟节点，不是 label[for] */
+  function nearLabel(el) {
+    var p = el.parentElement;
+    if (!p) return '';
+    var prev = p.previousElementSibling;
+    if (prev && !(prev.querySelector && prev.querySelector('input,select,textarea'))) {
+      var t = clean(prev.innerText || '');
+      if (t) return t.slice(0, 26);
+    }
+    var fc = p.firstElementChild;
+    if (fc && fc !== el && !fc.contains(el)
+        && !(fc.querySelector && fc.querySelector('input,select,textarea'))) {
+      var t2 = clean(fc.innerText || '');
+      if (t2) return t2.slice(0, 26);
+    }
+    return '';
+  }
+
+  function labelText(el) {
+    var t = '';
+    try { if (el.labels && el.labels.length) t = el.labels[0].innerText || ''; } catch (e) {}
+    if (!t && el.id) {
+      try {
+        var l = el.ownerDocument.querySelector('label[for="' + q(el.id) + '"]');
+        if (l) t = l.innerText || '';
+      } catch (e) {}
+    }
+    if (!t && el.closest) { try { var cl = el.closest('label'); if (cl) t = cl.innerText || ''; } catch (e) {} }
+    if (!t) t = nearLabel(el);
+    if (!t) t = el.getAttribute('placeholder') || el.getAttribute('aria-label') || el.getAttribute('title') || '';
+    if (!t) t = el.name || el.id || '';
+    t = clean(t).replace(/[:：*＊]\s*$/, '');
+    return t.slice(0, 30);
+  }
+
+  function ctxText(el) {
+    var s = '';
+    try {
+      if (el.labels && el.labels.length) {
+        for (var i = 0; i < el.labels.length; i++) s += ' ' + (el.labels[i].innerText || '');
+      }
+    } catch (e) {}
+    s += ' ' + (el.getAttribute('placeholder') || '')
+       + ' ' + (el.name || '')
+       + ' ' + (el.id || '')
+       + ' ' + (el.getAttribute('aria-label') || '')
+       + ' ' + (el.getAttribute('title') || '')
+       + ' ' + (el.getAttribute('data-name') || '');
+    var p = el.parentElement;
+    if (p) {
+      var prev = el.previousElementSibling, c = 0;
+      while (prev && c < 3) {
+        if (!(prev.querySelector && prev.querySelector('input,select,textarea'))) {
+          s += ' ' + ((prev.innerText || prev.textContent || '').slice(0, 50));
+        }
+        prev = prev.previousElementSibling; c++;
+      }
+      var first = p.firstElementChild;
+      if (first && first !== el && !first.contains(el)
+          && !(first.querySelector && first.querySelector('input,select,textarea'))) {
+        s += ' ' + ((first.innerText || '').slice(0, 50));
+      }
+      for (var k = 0; k < p.childNodes.length; k++) {
+        if (p.childNodes[k].nodeType === 3) s += ' ' + p.childNodes[k].textContent;
+      }
+    }
+    return clean(s);
+  }
+
+  /* 向上两层补上下文：只收纯文本标签，绝不把相邻字段块混进来 */
+  function ctxUp(el, depth) {
+    var s = '', p = el.parentElement, d = 0;
+    while (p && d < depth) {
+      for (var k = 0; k < p.childNodes.length; k++) {
+        if (p.childNodes[k].nodeType === 3) s += ' ' + p.childNodes[k].textContent;
+      }
+      var prev = p.previousElementSibling;
+      if (prev && !(prev.querySelector && prev.querySelector('input,select,textarea'))) {
+        s += ' ' + ((prev.innerText || prev.textContent || '').slice(0, 40));
+      }
+      var fc = p.firstElementChild;
+      if (fc && !fc.contains(el)
+          && !(fc.querySelector && fc.querySelector('input,select,textarea'))) {
+        s += ' ' + ((fc.innerText || fc.textContent || '').slice(0, 40));
+      }
+      p = p.parentElement; d++;
+    }
+    return clean(s);
+  }
+
+  /* 单选/复选组：取组内共同祖先的文本（问题在选项前面），不受相邻字段干扰。
+     返回纯文本，不含 name；调用方自己决定要不要拼 name 去匹配。 */
+  function groupCtx(scope, g) {
+    var rs;
+    try { rs = scope.querySelectorAll('input[name="' + q(g) + '"]'); } catch (e) { return ''; }
+    if (!rs.length) return '';
+    var anc = rs[0].parentElement;
+    function allIn(a) {
+      for (var i = 0; i < rs.length; i++) if (!a.contains(rs[i])) return false;
+      return true;
+    }
+    while (anc && anc.parentElement && !allIn(anc)) anc = anc.parentElement;
+    var s = anc ? clean(anc.innerText || '') : '';
+    /* Element UI / Ant Design 那类结构里，题目文字是组容器的兄弟节点，得往外补一两层；
+       但一旦爬出本题的范围（容器里控件明显变多），就停手，否则会把整页标题带进来 */
+    var p = anc ? anc.parentElement : null, d = 0;
+    while (p && d < 2) {
+      var cnt = 0;
+      try { cnt = p.querySelectorAll('input,select,textarea').length; } catch (e) {}
+      if (cnt > rs.length + 2) break;
+      var prev = p.previousElementSibling;
+      if (prev && !(prev.querySelector && prev.querySelector('input,select,textarea'))) {
+        s += ' ' + clean(prev.innerText || '').slice(0, 30);
+      }
+      var fc = p.firstElementChild;
+      if (fc && rs[0] && !fc.contains(rs[0])
+          && !(fc.querySelector && fc.querySelector('input,select,textarea'))) {
+        s += ' ' + clean(fc.innerText || '').slice(0, 30);
+      }
+      for (var k = 0; k < p.childNodes.length; k++) {
+        if (p.childNodes[k].nodeType === 3) s += ' ' + p.childNodes[k].textContent;
+      }
+      p = p.parentElement; d++;
+    }
+    return clean(s).slice(0, 90);
+  }
+
+  function matchRule(text) {
+    for (var i = 0; i < RULES.length; i++) {
+      var key = RULES[i][0];
+      if (!D[key]) continue;
+      if (!RULES[i][1].test(text)) continue;
+      if (RULES[i][2] && RULES[i][2].test(text)) continue;
+      return key;
+    }
+    return null;
+  }
+
+  /* ---------- 各类控件的写入 ---------- */
+  function setSelect(el, v) {
+    var opts = el.options || [], best = null, loose = null, rev = null, i;
+    var vv = String(v).replace(/\s/g, '');
+    for (i = 0; i < opts.length; i++) {
+      var t = (opts[i].text || '').replace(/\s/g, '');
+      var ov = (opts[i].value || '').replace(/\s/g, '');
+      if (!t || opts[i].disabled) continue;
+      if (/^(请选择|请选取|请输入|--+|——+|please)/i.test(t)) continue;
+      if (ov === vv || t === vv) { best = opts[i]; break; }
+      if (!loose && vv && t.indexOf(vv) >= 0) loose = opts[i];
+      /* 反向包含：值是「全日制统招」而选项只有「全日制」时也能对上，取最长的那个 */
+      if (t.length >= 2 && vv.indexOf(t) >= 0 && (!rev || t.length > rev.n)) {
+        rev = { o: opts[i], n: t.length };
+      }
+    }
+    var pick = best || loose || (rev && rev.o);
+    if (!pick) return false;
+    protoSet(el, pick.value);
+    return true;
+  }
+
+  function setRadio(scope, g, v) {
+    var rs;
+    try { rs = scope.querySelectorAll('input[type=radio][name="' + q(g) + '"]'); } catch (e) { return false; }
+    for (var i = 0; i < rs.length; i++) {
+      var r = rs[i], t = '';
+      if (r.labels && r.labels.length) t = r.labels[0].innerText || '';
+      if (!t && r.parentElement) t = r.parentElement.innerText || '';
+      if (!t) t = r.value || '';
+      t = t.replace(/\s/g, '');
+      if (t.indexOf(v) >= 0 || r.value === v) {
+        try { r.click(); } catch (e) {}
+        if (!r.checked) { r.checked = true; fire(r); }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /* 单个复选框：值是"是"就勾上，"否"则保持不勾 */
+  function setCheckboxOnce(el, v) {
+    var want = YES.test(v) ? true : NO.test(v) ? false : null;
+    if (want === null) return false;
+    if (el.checked === want) return true;
+    if (want) { try { el.click(); } catch (e) {} }
+    if (el.checked !== want) { el.checked = want; fire(el); }
+    return true;
+  }
+
+  /* 复选框组：把「安康、韩城」这种按分隔符拆开逐项勾选 */
+  function setCheckboxGroup(scope, g, v) {
+    var rs;
+    try { rs = scope.querySelectorAll('input[type=checkbox][name="' + q(g) + '"]'); } catch (e) { return 0; }
+    var parts = String(v).split(/[、,，/;；\s]+/).filter(function (x) { return x; });
+    var hit = 0;
+    for (var i = 0; i < rs.length; i++) {
+      var r = rs[i], t = labelText(r).replace(/\s/g, '');
+      for (var j = 0; j < parts.length; j++) {
+        if (t && (t.indexOf(parts[j]) >= 0 || parts[j].indexOf(t) >= 0)) {
+          if (!r.checked) { try { r.click(); } catch (e) {} }
+          if (!r.checked) { r.checked = true; fire(r); }
+          hit++;
+          break;
+        }
+      }
+    }
+    return hit;
+  }
+
+  /* 日期/数字按控件类型与占位符格式化 */
+  function fmtFor(el, val) {
+    var type = (el.getAttribute('type') || '').toLowerCase();
+    var ph = (el.getAttribute('placeholder') || '') + ' ' + (el.getAttribute('data-format') || '');
+    if (type === 'date')   return /^\d{4}-\d{2}$/.test(val) ? val + '-01' : val;
+    if (type === 'month')  return String(val).slice(0, 7);
+    if (type === 'datetime-local') return /^\d{4}-\d{2}-\d{2}$/.test(val) ? val + 'T00:00' : val;
+    if (type === 'number') return String(val).replace(/[^\d.\-]/g, '');
+    if (/yyyy-mm(?!-dd)/i.test(ph)) return String(val).slice(0, 7);
+    var m = String(val).match(/^(\d{4})-(\d{2})(?:-(\d{2}))?$/);
+    if (m && /年/.test(ph)) return m[1] + '年' + m[2] + '月' + (m[3] ? m[3] + '日' : '');
+    if (/\//.test(ph) && m) return m[1] + '/' + m[2] + (m[3] ? '/' + m[3] : '');
+    return val;
+  }
+
+  function isEmpty(el, tag) {
+    if (el.getAttribute('contenteditable') === 'true') return !clean(el.innerText);
+    if (tag === 'select') {
+      var so = el.options[el.selectedIndex];
+      if (!so) return true;
+      var st = (so.text || '').replace(/\s/g, '');
+      var sv = so.value || '';
+      return !sv || /^(请选择|请选取|请输入|--+|——+|please)/i.test(st);
+    }
+    return !clean(el.value);
+  }
+
+  /* ---------- 收集文档（含同源 iframe） ---------- */
+  var docs = [document];
+  var frames = document.querySelectorAll('iframe,frame');
+  for (var f = 0; f < frames.length; f++) {
+    try {
+      var cd = frames[f].contentDocument;
+      if (cd && cd.body && cd.querySelectorAll) docs.push(cd);
+    } catch (e) { RES.cross++; }
+  }
+
+  /* ---------- 主循环 ---------- */
+  for (var di = 0; di < docs.length; di++) {
+    var doc = docs[di], els;
+    try { els = doc.querySelectorAll('input,textarea,select,[contenteditable="true"]'); }
+    catch (e) { continue; }
+    if (!els || !els.length) continue;
+    var seenG = {};
+
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      try {
+        if (el.disabled) continue;
+        var tag = el.tagName.toLowerCase();
+        var type = (el.getAttribute('type') || '').toLowerCase();
+
+        if (tag === 'input' && ['hidden','submit','button','reset','file','image','password'].indexOf(type) >= 0) continue;
+        if (tag === 'input' && type !== 'radio' && type !== 'checkbox' && el.readOnly) continue;
+        if (tag !== 'select' && el.readOnly) continue;
+        if (!shown(el)) continue;
+
+        /* --- 单选 / 复选 --- */
+        if (type === 'radio' || type === 'checkbox') {
+          var g = el.name || '';
+          var grp = [el];
+          if (g) {
+            try { grp = doc.querySelectorAll('input[type=' + type + '][name="' + q(g) + '"]'); }
+            catch (e) { grp = [el]; }
+          }
+          if (!grp.length) grp = [el];
+
+          /* 单个复选框（没有同组兄弟）：按提示文本判断勾不勾，如「是否接受调剂」 */
+          if (type === 'checkbox' && grp.length <= 1) {
+            var ck = matchRule(ctxText(el) + ' ' + ctxUp(el, 3));
+            if (DIAG) { RES.diag.push({ l: labelText(el) || clean(ctxText(el)).slice(0, 24), v: el.checked ? '已勾选' : '', k: ck || '' }); continue; }
+            if (!ck) continue;
+            if (setCheckboxOnce(el, D[ck]) && YES.test(D[ck])) {
+              RES.filled.push({ k: ck, l: labelText(el) || ck, v: '已勾选' });
+            }
+            continue;
+          }
+
+          if (!g) continue;
+          var gk = di + '|' + type + '|' + g;
+          if (seenG[gk]) continue;
+          seenG[gk] = 1;
+
+          var gctx = groupCtx(doc, g);
+          var gkey = matchRule(gctx + ' ' + g);
+          if (DIAG) { RES.diag.push({ l: clean(gctx).slice(0, 30), v: '', k: gkey || '' }); continue; }
+          if (!gkey) continue;
+
+          if (type === 'radio') {
+            if (setRadio(doc, g, D[gkey])) RES.filled.push({ k: gkey, l: clean(gctx).slice(0, 24) || gkey, v: D[gkey] });
+          } else {
+            var n = setCheckboxGroup(doc, g, D[gkey]);
+            if (n) RES.filled.push({ k: gkey, l: clean(gctx).slice(0, 24) || gkey, v: D[gkey] });
+          }
+          continue;
+        }
+
+        /* --- 已填内容跳过 --- */
+        if (!DIAG && !isEmpty(el, tag)) { RES.skipped++; continue; }
+
+        /* --- 匹配字段 --- */
+        var ctx = ctxText(el);
+        var key = matchRule(ctx);
+        if (!key) key = matchRule(ctx + ' ' + ctxUp(el, 2));
+
+        if (DIAG) {
+          var dv = tag === 'select'
+            ? (el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : '')
+            : (el.getAttribute('contenteditable') === 'true' ? el.innerText : el.value);
+          var dl = labelText(el) || clean(ctx).slice(0, 30);
+          if (dl) RES.diag.push({ l: dl, v: clean(dv).slice(0, 26), k: key || '' });
+          continue;
+        }
+
+        if (!key) {
+          var ul = labelText(el) || clean(ctx).slice(0, 30);
+          if (ul && RES.unmatched.length < 60) RES.unmatched.push(ul);
+          continue;
+        }
+
+        var val = D[key], ok = false;
+        /* 开了多段经历模式时，经历类字段交给下面的 exp 逻辑按顺序对位，
+           否则表单里三个「工作内容」会全被填成第一段的描述 */
+        if (O.exp && /^exp\d_/.test(key)) continue;
+        if (tag === 'select') ok = setSelect(el, val);
+        else if (el.getAttribute('contenteditable') === 'true') {
+          try { el.innerText = val; fire(el); ok = true; } catch (e) {}
+        } else {
+          protoSet(el, fmtFor(el, val));
+          ok = true;
+        }
+
+        if (ok) RES.filled.push({ k: key, l: labelText(el) || LABELOF(key), v: String(val).slice(0, 40) });
+        else RES.failed.push({ l: labelText(el) || LABELOF(key), r: '下拉里没有「' + val + '」这一项' });
+      } catch (e) {}
+    }
+  }
+
+  function LABELOF(k) { return k.replace(/^exp(\d)_/, '经历$1·'); }
+
+  /* ---------- 可选：多段经历 ---------- */
+  if (O.exp && !DIAG) {
+    (function () {
+      var EXP = [
+        ['company', /((公司|单位|企业)(名称|全称)?|实习单位|工作单位)/, /(学校|院校|推荐|紧急|项目)/],
+        ['title',   /(项目名称|实习项目|项目课题)/, /(学校|课程|专业)/],
+        ['role',    /(职位|岗位|职务|担任角色|角色)/, /(应聘|意向|期望|申请)/],
+        ['start',   /(开始时间|起始时间|入职时间|开始日期)/, null],
+        ['end',     /(结束时间|离职时间|截止时间|结束日期)/, null],
+        ['desc',    /(工作内容|工作描述|实习内容|职责描述|主要职责|业绩描述|项目描述)/, null]
+      ];
+      var pool = { desc: [] };
+      var cands = [];
+      var all = document.querySelectorAll('input,textarea');
+      for (var a = 0; a < all.length; a++) {
+        var e2 = all[a];
+        try {
+          if (e2.disabled || e2.readOnly || !shown(e2)) continue;
+          if (clean(e2.value)) continue;
+          if (['hidden','submit','button','file','password'].indexOf((e2.getAttribute('type') || '').toLowerCase()) >= 0) continue;
+          cands.push({ el: e2, t: ctxText(e2) + ' ' + nearLabel(e2) + ' ' + ctxUp(e2, 2) });
+        } catch (e) {}
+      }
+      function hit(rule, t) {
+        return rule[1].test(t) && !(rule[2] && rule[2].test(t));
+      }
+      /* 先认「工作内容」，它决定这页到底有没有经历块 */
+      for (var c1 = 0; c1 < cands.length; c1++) {
+        if (!hit(EXP[5], cands[c1].t)) continue;
+        pool.desc.push(cands[c1].el);
+        cands[c1].used = 1;
+      }
+      /* 其余字段必须排在某个「工作内容」前面，才算同一段经历；
+         否则「公司名称」这种问你现在在哪上班的字段也会被当成实习单位填掉 */
+      for (var c2 = 0; c2 < cands.length; c2++) {
+        if (cands[c2].used) continue;
+        for (var b = 0; b < 5; b++) {
+          if (!hit(EXP[b], cands[c2].t)) continue;
+          var hasDescAfter = false;
+          for (var dI = 0; dI < pool.desc.length; dI++) {
+            if (cands[c2].el.compareDocumentPosition(pool.desc[dI]) & 4) { hasDescAfter = true; break; }
+          }
+          if (hasDescAfter) (pool[EXP[b][0]] = pool[EXP[b][0]] || []).push(cands[c2].el);
+          break;
+        }
+      }
+      for (var n = 0; n < 3; n++) {
+        var p = n + 1;
+        var span = String(D['exp' + p + '_time'] || '').split('-');
+        var s0 = clean(span[0] || '').replace(/\./g, '-'), s1 = clean(span[1] || '').replace(/\./g, '-');
+        if (/至今|现在|now/i.test(s1)) s1 = '';
+        var map = {
+          company: D['exp' + p + '_company'],
+          title:   D['exp' + p + '_title'],
+          role:    D['exp' + p + '_role'],
+          start:   s0,
+          end:     s1,
+          desc:    D['exp' + p + '_desc']
+        };
+        for (var kk in map) {
+          if (!map[kk] || !pool[kk] || !pool[kk][n]) continue;
+          var cell = pool[kk][n], mv = map[kk];
+          /* 时间框只要年月日；「2026 - 至今」这种只有年份的，别硬塞，报出来让人手选 */
+          if (kk === 'start' || kk === 'end') {
+            var ct = (cell.getAttribute('type') || '').toLowerCase();
+            if ((ct === 'date' || ct === 'month') && !/^\d{4}-\d{2}(-\d{2})?$/.test(mv)) {
+              RES.failed.push({ l: labelText(cell), r: '只有年份「' + mv + '」，请手动选月份' });
+              continue;
+            }
+          }
+          try {
+            protoSet(cell, fmtFor(cell, mv));
+            RES.filled.push({ k: 'exp' + p + '_' + kk, l: labelText(cell), v: String(mv).slice(0, 40) });
+          } catch (e) {}
+        }
+      }
+    })();
+  }
+
+  /* ---------- 结果清单（右下角面板） ---------- */
+  function panel() {
+    if (O.quiet) return;
+    try {
+      var old = document.getElementById('__rz_rep');
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      if (!document.body) return;
+
+      var host = document.createElement('div');
+      host.id = '__rz_rep';
+      host.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;width:320px;max-width:calc(100vw - 32px);';
+      var sh = null;
+      try { sh = host.attachShadow ? host.attachShadow({ mode: 'open' }) : null; } catch (e) { sh = null; }
+      var root = sh || host;
+
+      function mk(t, css, txt) {
+        var n = document.createElement(t);
+        if (css) n.style.cssText = css;
+        if (txt != null) n.textContent = txt;
+        return n;
+      }
+
+      var box = mk('div', 'font:13px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;'
+        + 'color:#fff;background:#1a1917;border-radius:11px;box-shadow:0 12px 40px rgba(0,0,0,.34);overflow:hidden;');
+      var head = mk('div', 'display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;');
+      var dot = mk('span', 'width:7px;height:7px;border-radius:50%;flex:0 0 7px;background:'
+        + (DIAG ? '#60a5fa' : RES.filled.length ? '#4ade80' : '#f59e0b') + ';');
+      var ttl = mk('div', 'flex:1;font-weight:600;',
+        DIAG ? '页面字段清单 · ' + RES.diag.length + ' 个' : '已填 ' + RES.filled.length + ' 项');
+      var sub = mk('div', 'font-size:11px;color:rgba(255,255,255,.48);', '点击展开');
+      var x = mk('button', 'all:unset;display:inline-block;cursor:pointer;padding:0 4px;font-size:15px;color:rgba(255,255,255,.5);', '×');
+      x.addEventListener('click', function (ev) { ev.stopPropagation(); if (host.parentNode) host.parentNode.removeChild(host); });
+      head.appendChild(dot); head.appendChild(ttl); head.appendChild(sub); head.appendChild(x);
+
+      var body = mk('div', 'padding:0 12px 12px;max-height:300px;overflow:auto;');
+
+      var stat = [];
+      if (DIAG) {
+        stat.push('共扫描 ' + RES.diag.length + ' 个控件，可复制后发我');
+      } else {
+        stat.push('已填 ' + RES.filled.length);
+        if (RES.unmatched.length) stat.push('未识别 ' + RES.unmatched.length);
+        if (RES.failed.length) stat.push('无匹配项 ' + RES.failed.length);
+        if (RES.skipped) stat.push('跳过 ' + RES.skipped);
+      }
+      if (RES.cross) stat.push('跨域 iframe ' + RES.cross + ' 个');
+      body.appendChild(mk('div', 'font-size:12px;color:rgba(255,255,255,.62);padding:2px 0 8px;', stat.join(' · ')));
+
+      function listBlock(title, arr, fmt) {
+        if (!arr.length) return;
+        body.appendChild(mk('div', 'font-size:11px;color:rgba(255,255,255,.45);margin:8px 0 3px;letter-spacing:.04em;', title));
+        for (var i = 0; i < arr.length && i < 24; i++) {
+          body.appendChild(mk('div', 'font-size:12px;color:#e6e1d8;line-height:1.6;padding-left:1px;', '· ' + fmt(arr[i])));
+        }
+        if (arr.length > 24) body.appendChild(mk('div', 'font-size:11px;color:rgba(255,255,255,.4);', '…还有 ' + (arr.length - 24) + ' 项'));
+      }
+
+      if (DIAG) {
+        listBlock('标签 = 当前值 → 命中的字段', RES.diag, function (o) {
+          return o.l + ' = ' + (o.v || '（空）') + (o.k ? '  →  ' + o.k : '  →  ？');
+        });
+      } else {
+        listBlock('未识别字段（复制发我，可补规则）', RES.unmatched, function (s) { return s; });
+        listBlock('已识别但没填进去', RES.failed, function (o) { return o.l + '：' + o.r; });
+        listBlock('已填明细', RES.filled, function (o) { return o.k + ' = ' + o.v; });
+      }
+
+      var bar = mk('div', 'display:flex;gap:7px;margin-top:11px;');
+      var bCopy = mk('button', 'all:unset;display:inline-block;cursor:pointer;flex:1;text-align:center;background:#fff;color:#1a1917;'
+        + 'border-radius:6px;padding:7px 0;font-size:12px;font-weight:600;', '复制清单');
+      bCopy.addEventListener('click', function () {
+        var lines = [];
+        if (DIAG) {
+          lines.push('【页面字段清单 ' + RES.diag.length + ' 个】');
+          for (var i = 0; i < RES.diag.length; i++) {
+            var o = RES.diag[i];
+            lines.push(o.l + ' = ' + (o.v || '') + (o.k ? ' → ' + o.k : ' → 未匹配'));
+          }
+        } else {
+          lines.push('【已填 ' + RES.filled.length + ' 项】');
+          for (var a = 0; a < RES.filled.length; a++) lines.push(RES.filled[a].k + ' = ' + RES.filled[a].v);
+          if (RES.unmatched.length) { lines.push(''); lines.push('【未识别 ' + RES.unmatched.length + ' 项】' + RES.unmatched.join('、')); }
+          if (RES.failed.length) {
+            lines.push('');
+            lines.push('【无匹配项】');
+            for (var b = 0; b < RES.failed.length; b++) lines.push(RES.failed[b].l + '：' + RES.failed[b].r);
+          }
+        }
+        var txt = lines.join('\n');
+        function fb() {
+          var ta = document.createElement('textarea');
+          ta.value = txt;
+          ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+          document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); } catch (e) {}
+          document.body.removeChild(ta);
+        }
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).catch(fb);
+          else fb();
+        } catch (e) { fb(); }
+        bCopy.textContent = '已复制 ✓';
+        setTimeout(function () { bCopy.textContent = '复制清单'; }, 1600);
+      });
+      bar.appendChild(bCopy);
+
+      var bHide = mk('button', 'all:unset;display:inline-block;cursor:pointer;background:rgba(255,255,255,.12);color:#fff;'
+        + 'border-radius:6px;padding:7px 13px;font-size:12px;', '收起');
+      bHide.addEventListener('click', function () { body.style.display = 'none'; sub.textContent = '点击展开'; });
+      bar.appendChild(bHide);
+      body.appendChild(bar);
+
+      head.addEventListener('click', function () {
+        var open = body.style.display !== 'none';
+        body.style.display = open ? 'none' : 'block';
+        sub.textContent = open ? '点击展开' : '点击收起';
+      });
+
+      box.appendChild(head); box.appendChild(body);
+      root.appendChild(box);
+      document.body.appendChild(host);
+      setTimeout(function () {
+        if (body.style.display !== 'none' && document.getElementById('__rz_rep')) {
+          body.style.display = 'none'; sub.textContent = '点击展开';
+        }
+      }, 9000);
+    } catch (e) {}
+  }
+
+  panel();
+  try { RES.data = D; } catch (e) {}
+  return RES;
+}
+
+/* =====================================================================
+   3. 存储与工具
+   ===================================================================== */
+const STORE_KEY = 'resume_filler_v1';
+const HASH_KEY  = 'resume_filler_hash';
+
+/* 每次往 resume-data 写新数据，这个数字 +1。
+   页面下次打开会自动换上最新数据，同时保留你手动补过的空字段 */
+const DATA_VERSION = 1;
+
+/* 已知错误的旧值要在升级时清掉，否则会一直被"保留空字段"的逻辑救活。
+   注意：必须声明在 loadData() 被调用之前。 */
+const MIGRATIONS = [];
+
+let DATA = loadData();
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const o = JSON.parse(raw) || {};
+      const v = o.__v || 0;
+      delete o.__v;
+      if (v === DATA_VERSION) return Object.assign({}, DEFAULTS, o);
+      /* 数据文件更新过：以新默认为准，但保住你手填的那些默认空字段 */
+      const merged = Object.assign({}, DEFAULTS);
+      Object.keys(DEFAULTS).forEach(k => {
+        if (!String(DEFAULTS[k] || '').trim() && o[k] && String(o[k]).trim()) merged[k] = o[k];
+      });
+      /* 已知错误的旧值要在升级时清掉，否则会一直被"保留空字段"的逻辑救活 */
+      MIGRATIONS.forEach(m => { if (m.v > v && m.v <= DATA_VERSION) m.f(merged); });
+      return merged;
+    }
+  } catch (e) {}
+  return Object.assign({}, DEFAULTS);
+}
+
+/* v8：紧急联系人一栏当年填成了手机号，清掉，等真实姓名 */
+
+function saveData() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(Object.assign({}, DATA, { __v: DATA_VERSION })));
+  } catch (e) {}
+}
+
+function ageFrom(b) {
+  const d = new Date(b);
+  if (isNaN(d)) return '';
+  const n = new Date();
+  let a = n.getFullYear() - d.getFullYear();
+  if (n.getMonth() < d.getMonth() || (n.getMonth() === d.getMonth() && n.getDate() < d.getDate())) a--;
+  return a;
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toast._tm);
+  toast._tm = setTimeout(() => t.classList.remove('on'), 1800);
+}
+
+async function copyText(text) {
+  if (!text) { toast('该字段为空'); return false; }
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e2) {}
+    ta.remove();
+    return ok;
+  }
+}
+
+/* =====================================================================
+   4. 数据自检
+   ===================================================================== */
+const PROVS = ['北京','天津','上海','重庆','河北','山西','辽宁','吉林','黑龙江','江苏','浙江','安徽','福建','江西','山东','河南','湖北','湖南','广东','海南','四川','贵州','云南','陕西','甘肃','青海','内蒙古','广西','西藏','宁夏','新疆'];
+function provOf(s) {
+  const m = String(s || '').match(new RegExp(PROVS.join('|')));
+  return m ? m[0] : '';
+}
+function checkId(id) {
+  const s = String(id).trim().toUpperCase();
+  if (!/^\d{17}[\dX]$/.test(s)) return { ok: false, msg: '不是 18 位' };
+  const w = [7,9,10,5,8,4,2,1,6,3,7,9,10,5,8,4,2];
+  const c = '10X98765432';
+  let sum = 0;
+  for (let i = 0; i < 17; i++) sum += Number(s[i]) * w[i];
+  const expect = c[sum % 11];
+  return { ok: expect === s[17], expect, bd: s.slice(6, 14) };
+}
+function parseSpan(s) {
+  const m = String(s || '').split('-').map(x => x.trim());
+  if (!m[0]) return null;
+  const norm = x => /至今|现在|now/i.test(x) ? '9999.99' : x;
+  return { start: norm(m[0]), end: norm(m[1] || '') };
+}
+
+function healthCheck() {
+  const out = [];
+  const add = (lv, t) => out.push({ lv, t });
+  const g = k => String(DATA[k] || '').trim();
+
+  ['name','phone','email','school','major','degree','targetJob','targetCity']
+    .forEach(k => { if (!g(k)) add('err', (LABELS[k] || k) + ' 为空，必填项'); });
+
+  const id = g('idcard');
+  if (id) {
+    const r = checkId(id);
+    if (!r.ok) add('err', '身份证校验位不通过（第 18 位应为 ' + r.expect + '）');
+    else if (r.bd && r.bd !== g('birthday').replace(/-/g, ''))
+      add('warn', '身份证里的出生日期是 ' + r.bd + '，与生日字段 ' + g('birthday') + ' 不一致');
+  }
+  if (g('phone') && !/^1[3-9]\d{9}$/.test(g('phone'))) add('err', '手机号不是 11 位有效号码');
+  if (g('email') && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(g('email'))) add('err', '邮箱格式不对');
+
+  if (g('enrollDate') && g('graduateDate') && g('enrollDate') >= g('graduateDate'))
+    add('err', '入学时间晚于毕业时间');
+
+  const s1 = parseSpan(g('exp1_time')), s2 = parseSpan(g('exp2_time'));
+  if (s1 && s2 && s1.end && s2.start && s1.end > s2.start)
+    add('warn', '经历1 结束（' + g('exp1_time').split('-')[1] + '）晚于 经历2 开始，时间重叠');
+
+  if (g('currentCity') && g('address')) {
+    const a = provOf(g('currentCity')), b = provOf(g('address'));
+    if (a && b && a !== b) add('warn', '现居在' + a + '，通讯地址在' + b + '，确认哪个为准');
+  }
+
+  if (g('emergencyPhone') && !g('emergencyName'))
+    add('warn', '紧急联系人只有电话没有姓名');
+  if (/^\d{11}$/.test(g('emergencyName')))
+    add('err', '「紧急联系人」里存的是手机号，不是姓名');
+
+  TODO.forEach(k => { if (!g(k)) add('todo', (LABELS[k] || k) + ' 未填'); });
+  return out;
+}
+
+function renderHealth() {
+  const box = document.getElementById('health');
+  if (!box) return;
+  const blank = GROUPS.every(g => g.fields.every(f =>
+    f[0] === 'age' || !String(DATA[f[0]] || '').trim()));
+  const list = blank ? [] : healthCheck();
+  const errs  = list.filter(x => x.lv === 'err').length;
+  const warns = list.filter(x => x.lv === 'warn').length;
+  const todos = list.filter(x => x.lv === 'todo').length;
+
+  box.innerHTML = '';
+  const card = document.createElement('section');
+  card.className = 'card';
+  const h = document.createElement('h2');
+  h.textContent = '数据自检';
+  card.appendChild(h);
+
+  const sum = document.createElement('div');
+  if (blank) {
+    sum.className = 'hsum idle';
+    sum.textContent = '还没开始填。填完带「必填」的项目后，这里会自动检查格式和前后一致性。';
+  } else {
+    sum.className = 'hsum ' + (errs ? 'bad' : warns ? 'warn' : 'ok');
+    sum.textContent = errs ? `${errs} 项需要修正`
+      : warns ? `${warns} 项建议确认`
+      : '必填项齐全，格式校验通过';
+    if (todos) sum.textContent += ` · ${todos} 项待补充`;
+  }
+  card.appendChild(sum);
+
+  if (list.length) {
+    const ul = document.createElement('ul');
+    ul.className = 'hlist';
+    list.forEach(it => {
+      const li = document.createElement('li');
+      li.className = 'hl ' + it.lv;
+      li.textContent = it.t;
+      ul.appendChild(li);
+    });
+    card.appendChild(ul);
+  }
+  box.appendChild(card);
+
+  const ver = document.getElementById('ver');
+  if (ver) ver.textContent = (errs ? `${errs} 项待修` : '');
+}
+
+/* =====================================================================
+   5. 面板渲染
+   ===================================================================== */
+function render() {
+  const box = document.getElementById('groups');
+  box.innerHTML = '';
+  GROUPS.forEach(g => {
+    const card = document.createElement('section');
+    card.className = 'card';
+    const h = document.createElement('h2');
+    h.textContent = g.title;
+    card.appendChild(h);
+
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+
+    g.fields.forEach(([key, label]) => {
+      const isLong = LONG.has(key);
+      const isTodo = TODO.has(key);
+      const f = document.createElement('div');
+      f.className = 'f' + (isLong ? ' wide' : '');
+
+      const fh = document.createElement('div');
+      fh.className = 'fh';
+      const lab = document.createElement('span');
+      lab.className = 'lab';
+      lab.textContent = label;
+      if (isTodo) {
+        const dot = document.createElement('i');
+        dot.className = 'dot';
+        dot.title = '待确认 / 待补充';
+        lab.appendChild(dot);
+      }
+      const cp = document.createElement('button');
+      cp.className = 'cp';
+      cp.textContent = '复制';
+      cp.addEventListener('click', async () => {
+        const ok = await copyText((DATA[key] || '').trim());
+        if (ok) toast('已复制：' + label);
+      });
+      fh.appendChild(lab);
+      fh.appendChild(cp);
+      f.appendChild(fh);
+
+      const el = document.createElement(isLong ? 'textarea' : 'input');
+      el.value = key === 'age' ? (ageFrom(DATA.birthday) || '') : (DATA[key] || '');
+      el.placeholder = isTodo ? '待补充' : (PH[key] || '');
+      if (ENUMS[key]) {
+        const dl = document.createElement('datalist');
+        dl.id = 'dl-' + key;
+        ENUMS[key].forEach(v => {
+          const o = document.createElement('option');
+          o.value = v;
+          dl.appendChild(o);
+        });
+        f.appendChild(dl);
+        el.setAttribute('list', dl.id);
+        const arw = document.createElement('i');
+        arw.className = 'arw';
+        arw.textContent = '▾';
+        arw.title = '可点开选，也可以直接输入';
+        lab.appendChild(arw);
+      }
+      if (key === 'age') {
+        /* 年龄跟着生日走，不让手改，免得过一年就变成错的数据 */
+        el.readOnly = true;
+        el.title = '按出生日期自动计算，不用手填';
+        el.classList.add('auto');
+      }
+      if (g.title === '经历' && key.endsWith('_desc')) el.rows = 3;
+      if (isLong && key === 'selfEval') el.rows = 6;
+      el.dataset.key = key;
+      el.addEventListener('input', () => {
+        DATA[key] = el.value;
+        if (key === 'birthday') {
+          const ag = document.querySelector('input[data-key="age"]');
+          if (ag) ag.value = ageFrom(el.value) || '';
+        }
+        saveData();
+        scheduleRefresh();
+      });
+      f.appendChild(el);
+      grid.appendChild(f);
+    });
+
+    card.appendChild(grid);
+    box.appendChild(card);
+  });
+
+  /* 网申里反复问的是非题，答案固定，单独列一张卡 */
+  if (YESNO.length) {
+    const card = document.createElement('section');
+    card.className = 'card';
+    const h = document.createElement('h2');
+    h.textContent = '网申常问题';
+    card.appendChild(h);
+
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    YESNO.forEach(([q, a]) => {
+      const f = document.createElement('div');
+      f.className = 'f';
+      const fh = document.createElement('div');
+      fh.className = 'fh';
+      const lab = document.createElement('span');
+      lab.className = 'lab';
+      lab.textContent = q;
+      const cp = document.createElement('button');
+      cp.className = 'cp';
+      cp.textContent = '复制';
+      cp.addEventListener('click', async () => {
+        if (await copyText(a)) toast('已复制：' + a);
+      });
+      fh.appendChild(lab); fh.appendChild(cp);
+      f.appendChild(fh);
+      const el = document.createElement('input');
+      el.value = a;
+      el.readOnly = true;
+      f.appendChild(el);
+      grid.appendChild(f);
+    });
+    card.appendChild(grid);
+    box.appendChild(card);
+  }
+  bindFold();
+  buildTabs();
+}
+
+/* =====================================================================
+   6. 脚本 / 书签生成
+   ===================================================================== */
+function toAscii(src) {
+  return src.replace(/[\u0080-\uFFFF]/g, c =>
+    '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+}
+
+/* 进书签的代码要尽量短：删掉注释行和行首缩进，能省掉四分之一体积。
+   只在「剪完还能被 JS 解析」时才采用，否则退回原文，不会因为压缩把功能弄坏。 */
+function minifyFn(src) {
+  const out = [];
+  let inBlock = false;
+  src.split('\n').forEach(l => {
+    const t = l.trim();
+    if (inBlock) {
+      if (t.indexOf('*/') >= 0) inBlock = false;
+      return;
+    }
+    if (t.indexOf('/*') === 0) {
+      if (t.indexOf('*/') < 0) inBlock = true;
+      return;
+    }
+    if (t.indexOf('//') === 0) return;
+    out.push(l.replace(/^\s+/, ''));
+  });
+  const cut = out.join('\n');
+  if (cut.length >= src.length) return src;
+  try { new Function('return (' + cut + ')'); return cut; }
+  catch (e) { return src; }
+}
+
+const SHORT_KEYS = new Set([
+  'name','enName','gender','birthday','age','phone','email','wechat','qq','mbti',
+  'hometown','birthPlace','currentCity','address','ethnicity','political','idType','idcard',
+  'height','weight','maritalStatus','healthStatus','emergencyName','emergencyPhone',
+  'transferAccept','transferCities','tripartite',
+  'school','college','major','degree','academicDegree','eduType','isUpgrade','studentId','className','tutor',
+  'enrollDate','graduateDate','gpa','majorGpa','rank','majorRank','courses',
+  'targetJob','targetJob2','targetCity','expectSalary','jobType','availableDate','portfolio'
+]);
+
+function buildScript(opts) {
+  opts = opts || {};
+  const payload = {};
+  Object.keys(DATA).forEach(k => {
+    const v = String(DATA[k] || '').trim();
+    if (!v) return;
+    if (opts.short && !SHORT_KEYS.has(k)) return;
+    payload[k] = v;
+  });
+  /* 年龄按生日实时算，避免写死一个过期数字 */
+  const ag = ageFrom(payload.birthday || DEFAULTS.birthday);
+  if (ag) payload.age = String(ag);
+
+  const flags = {};
+  if (opts.exp) flags.exp = 1;
+  if (opts.diag) flags.diag = 1;
+
+  const src = '(function(){var D=' + JSON.stringify(payload)
+    + ';var O=' + JSON.stringify(flags)
+    + ';var F=' + minifyFn(applyResume.toString())
+    + ';F(D,O);})();';
+  /* 整体转成 ASCII：URL 里不再出现中文，encodeURIComponent 不会膨胀成 3 倍，也更不容易被乱码 */
+  return toAscii(src);
+}
+
+function payloadHash() {
+  const s = buildScript({});
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+function markExported() {
+  try { localStorage.setItem(HASH_KEY, payloadHash()); } catch (e) {}
+  syncBanner();
+}
+
+function syncBanner() {
+  const b = document.getElementById('banner');
+  if (!b) return;
+  let saved = '';
+  try { saved = localStorage.getItem(HASH_KEY) || ''; } catch (e) {}
+  const dirty = saved && saved !== payloadHash();
+  b.classList.toggle('on', !!dirty);
+}
+
+function refreshBookmarks() {
+  const full  = buildScript({ exp: true });
+  const short = buildScript({ short: true });
+  document.getElementById('bm-full').setAttribute('href',  'javascript:' + encodeURIComponent(full));
+  document.getElementById('bm-short').setAttribute('href', 'javascript:' + encodeURIComponent(short));
+  document.getElementById('script-preview').textContent = full;
+
+  const fn = document.getElementById('bm-filename');
+  if (fn) fn.textContent = '简历填表书签.html';
+
+  const s = document.getElementById('bm-status');
+  s.className = 'status';
+  s.textContent = '书签已生成 · ' + (full.length / 1024).toFixed(1) + ' KB';
+
+  /* 通用版：数据一变就同步进度条和引导条 */
+  renderProgress();
+  syncHello();
+}
+
+/* 数据一改：重算自检 + 重生成书签 + 更新提示条（防抖） */
+function scheduleRefresh() {
+  const s = document.getElementById('bm-status');
+  if (s) { s.className = 'status dirty'; s.textContent = '数据已修改，正在重新生成…'; }
+  clearTimeout(scheduleRefresh._tm);
+  scheduleRefresh._tm = setTimeout(() => {
+    refreshBookmarks();
+    renderHealth();
+    syncBanner();
+  }, 500);
+}
+
+/* 生成可直接被浏览器导入的书签文件（Netscape Bookmark 格式） */
+function bookmarksFile() {
+  const now = Math.floor(Date.now() / 1000);
+  const line = (name, script) =>
+    '    <DT><A HREF="javascript:' + encodeURIComponent(script) + '" ADD_DATE="' + now + '">' + name + '</A>\n';
+  return [
+    '<!DOCTYPE NETSCAPE-Bookmark-file-1>',
+    '<!-- 简历填表助手 v' + DATA_VERSION + ' -->',
+    '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">',
+    '<TITLE>Bookmarks</TITLE>',
+    '<H1>Bookmarks</H1>',
+    '<DL><p>',
+    line('简历填表·完整版', buildScript({ exp: true })),
+    line('简历填表·精简版', buildScript({ short: true })),
+    line('简历填表·诊断', buildScript({ diag: true })),
+    '</DL><p>'
+  ].join('\n');
+}
+
+function download(name, text, type) {
+  const blob = new Blob([text], { type: type || 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+
+/* =====================================================================
+   7. 交互绑定
+   ===================================================================== */
+document.getElementById('btn-copyall').addEventListener('click', async () => {
+  const lines = [];
+  GROUPS.forEach(g => {
+    lines.push('【' + g.title + '】');
+    g.fields.forEach(([k, label]) => {
+      const v = (DATA[k] || '').trim();
+      if (v) lines.push(label + '：' + v);
+    });
+    lines.push('');
+  });
+  const ok = await copyText(lines.join('\n'));
+  if (ok) toast('已复制全部字段');
+});
+
+document.getElementById('btn-export').addEventListener('click', () => {
+  download('resume-info.json', JSON.stringify(DATA, null, 2), 'application/json');
+  toast('已导出 resume-info.json');
+});
+
+document.getElementById('file-imp').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    try {
+      const obj = JSON.parse(fr.result);
+      DATA = Object.assign({}, DEFAULTS, obj);
+      saveData();
+      render();
+      renderHealth();
+      refreshBookmarks();
+      syncBanner();
+      toast('已导入，共 ' + Object.keys(obj).length + ' 个字段');
+    } catch (err) {
+      toast('JSON 解析失败');
+    }
+  };
+  fr.readAsText(file);
+  e.target.value = '';
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  if (!confirm('清空所有已填内容？\n\n建议先点「导出 JSON」备份，之后还能导入回来。\n清空后本机浏览器里不会留下你的信息。')) return;
+  DATA = Object.assign({}, DEFAULTS);
+  saveData();
+  render();
+  renderHealth();
+  refreshBookmarks();
+  syncBanner();
+  toast('已清空');
+});
+
+document.getElementById('btn-copyscript').addEventListener('click', async () => {
+  const ok = await copyText(buildScript({ exp: true }));
+  if (ok) toast('脚本已复制，去网申页面按 F12 粘贴');
+});
+
+/* 必填还没填完就导出书签，等于白导入一次，先提醒一句 */
+function incompleteWarn() {
+  const miss = ['name','phone','email','school','major','degree','targetJob','targetCity']
+    .filter(k => !String(DATA[k] || '').trim());
+  if (!miss.length) return true;
+  const names = miss.map(k => LABELS[k] || k).join('、');
+  return confirm('还有 ' + miss.length + ' 个必填项没填：' + names
+    + '\n\n现在生成的书签会缺这些内容，确定继续？');
+}
+
+const doDownloadBookmarks = () => {
+  if (!incompleteWarn()) return;
+  download('简历填表书签.html', bookmarksFile(), 'text/html;charset=utf-8');
+  markExported();
+  toast('已下载，去 Ctrl+Shift+O 导入（先删旧的）');
+};
+
+document.getElementById('btn-bmfile').addEventListener('click', doDownloadBookmarks);
+document.getElementById('float-dl').addEventListener('click', doDownloadBookmarks);
+document.getElementById('banner-dl').addEventListener('click', doDownloadBookmarks);
+
+document.getElementById('btn-diag').addEventListener('click', () => {
+  download('简历诊断书签.html', (function () {
+    const now = Math.floor(Date.now() / 1000);
+    return [
+      '<!DOCTYPE NETSCAPE-Bookmark-file-1>',
+      '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">',
+      '<TITLE>Bookmarks</TITLE><H1>Bookmarks</H1>',
+      '<DL><p>',
+      '    <DT><A HREF="javascript:' + encodeURIComponent(buildScript({ diag: true })) + '" ADD_DATE="' + now + '">简历填表·诊断</A>\n',
+      '</DL><p>'
+    ].join('\n');
+  })(), 'text/html;charset=utf-8');
+  toast('诊断书签已下载，导入后点它会列出整页字段');
+});
+
+document.getElementById('btn-copybm').addEventListener('click', async () => {
+  if (!incompleteWarn()) return;
+  const url = 'javascript:' + encodeURIComponent(buildScript({ exp: true }));
+  const ok = await copyText(url);
+  if (ok) toast('已复制 · 去书签管理器新建书签，粘贴到网址栏');
+});
+
+/* ---------- 区块导航：长表单按分组跳转 ---------- */
+function buildTabs() {
+  const nav = document.getElementById('tabs');
+  if (!nav) return;
+  const cards = document.querySelectorAll('#groups .card');
+  nav.innerHTML = '';
+  if (!cards.length) return;
+  cards.forEach((card, i) => {
+    if (!card.id) card.id = 'g-' + i;
+    const h = card.querySelector('h2');
+    const a = document.createElement('a');
+    a.href = '#' + card.id;
+    a.textContent = h ? h.textContent.trim() : '区块';
+    a.addEventListener('click', ev => {
+      ev.preventDefault();
+      card.classList.remove('fold');
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    nav.appendChild(a);
+  });
+  const top = document.createElement('a');
+  top.href = '#';
+  top.className = 'top';
+  top.textContent = '回到顶部 ↑';
+  top.addEventListener('click', ev => {
+    ev.preventDefault();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  nav.appendChild(top);
+}
+
+/* 卡片标题可点击收起，填完的区块收起来更清爽 */
+function bindFold() {
+  const cards = document.querySelectorAll('#groups .card');
+  for (let i = 0; i < cards.length; i++) {
+    const card = cards[i];
+    const h = card.querySelector('h2');
+    if (!h || h.dataset.fold) continue;
+    h.dataset.fold = '1';
+    h.title = '点击收起 / 展开';
+    h.addEventListener('click', () => card.classList.toggle('fold'));
+  }
+}
+
+/* ---------- 使用说明 ---------- */
+const helpEl = document.getElementById('help');
+function openHelp() {
+  helpEl.classList.add('on');
+  document.body.style.overflow = 'hidden';
+}
+function closeHelp() {
+  helpEl.classList.remove('on');
+  document.body.style.overflow = '';
+}
+document.getElementById('btn-help').addEventListener('click', openHelp);
+document.getElementById('help-x').addEventListener('click', closeHelp);
+helpEl.addEventListener('click', ev => {
+  if (ev.target === helpEl) closeHelp();
+  try { localStorage.setItem('resume_filler_help', '1'); } catch (e) {}
+});
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && helpEl.classList.contains('on')) closeHelp();
+});
+
+/* 第一次打开的人先看一眼说明；已经填过数据的不打扰 */
+(function () {
+  let seen = false;
+  try { seen = localStorage.getItem('resume_filler_help') === '1'; } catch (e) {}
+  if (!seen && !String(DATA.name || '').trim()) setTimeout(openHelp, 350);
+})();
+
+
+/* =====================================================================
+   通用版扩展：示例数据 / 填写进度 / 引导条 / 卡片折叠
+   ===================================================================== */
+const REQUIRED = ['name','phone','email','school','major','degree','targetJob','targetCity'];
+
+/* 虚构人物，只用来演示每个字段该填什么格式，投简历前必须全部改掉 */
+const SAMPLE = {
+  name: '张小明', enName: 'Xiaoming Zhang', gender: '男', birthday: '2002-05-18',
+  phone: '13800138000', email: 'xiaoming@example.com',
+  wechat: 'xiaoming_zhang', qq: '100200300', mbti: 'INTJ',
+  hometown: '浙江省杭州市', birthPlace: '浙江省杭州市西湖区',
+  currentCity: '浙江-杭州', address: '浙江省杭州市西湖区某路 1 号',
+  ethnicity: '汉族', political: '共青团员', idType: '身份证', idcard: '330106200205180014',
+  height: '175', weight: '62', maritalStatus: '未婚', healthStatus: '健康',
+  emergencyName: '张建国', emergencyPhone: '13900139000',
+  school: '浙江大学', college: '建筑工程学院', major: '建筑学', degree: '本科',
+  academicDegree: '学士', eduType: '全日制统招', isUpgrade: '否',
+  studentId: '3200100001', className: '建筑学2201班', tutor: '李华',
+  enrollDate: '2022-09-01', graduateDate: '2026-06-30',
+  gpa: '3.60', majorGpa: '3.85', rank: '前20%', majorRank: '前15%',
+  courses: '设计基础、建筑设计、建筑构造、中国建筑史、城市设计、场地设计',
+  targetJob: '建筑设计师', targetJob2: '空间设计师', targetCity: '杭州',
+  expectSalary: '15-20万/年', jobType: '全职（校园招聘）',
+  availableDate: '2026年7月毕业后到岗', portfolio: 'https://example.com/portfolio',
+  transferAccept: '是', transferCities: '杭州、上海', tripartite: '是',
+  exp1_company: '某某建筑设计研究院', exp1_title: '滨江片区城市更新方案',
+  exp1_role: '方案设计', exp1_time: '2025.07 - 2025.09',
+  exp1_desc: '负责前期调研与案例拆解，独立完成概念推导、SU 模型与效果图输出，方案进入正式汇报。',
+  exp2_company: '某某建筑事务所', exp2_title: '社区服务中心改造',
+  exp2_role: '驻场设计', exp2_time: '2025.10 - 2026.01',
+  exp2_desc: '对接甲方与施工方，输出整改清单与变更记录，把设计意图落到施工细节。',
+  exp3_company: '', exp3_title: '', exp3_role: '', exp3_time: '', exp3_desc: '',
+  selfEval: '一句话说清你能做什么：专业能力 + 解决问题的思路 + 落地经验，别写空话。',
+  skills: '设计软件：PS / AI / InDesign；建模制图：SketchUp / Rhino / CAD；渲染表现：D5 / Enscape',
+  awards: '校级优秀学生（2024）；某某竞赛三等奖（2025）',
+  coursesFull: '按成绩单原样罗列，网申要求填写"专业课程"长文本时用这一栏。',
+  sports: '羽毛球、跑步'
+};
+
+function allKeys() {
+  const out = [];
+  GROUPS.forEach(g => g.fields.forEach(f => { if (f[0] !== 'age') out.push(f[0]); }));
+  return out;
+}
+
+function isSampleOn() {
+  return String(DATA.name || '').trim() === SAMPLE.name;
+}
+
+function renderProgress() {
+  let box = document.getElementById('progress');
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'card';
+    box.id = 'progress';
+    const h = document.createElement('h2');
+    h.textContent = '填写进度';
+    box.appendChild(h);
+    const bar = document.createElement('div');
+    bar.className = 'pbar';
+    bar.appendChild(document.createElement('i'));
+    box.appendChild(bar);
+    const txt = document.createElement('div');
+    txt.className = 'ptxt';
+    box.appendChild(txt);
+    const tip = document.createElement('div');
+    tip.className = 'tip';
+    tip.style.marginTop = '9px';
+    tip.textContent = '最少填完 8 个必填项就能生成可用书签，其余按网申要求补。'
+      + '填完的区块点标题可以收起，看着清爽些。';
+    box.appendChild(tip);
+    const anchor = document.getElementById('health');
+    anchor.parentNode.insertBefore(box, anchor);
+  }
+  const keys = allKeys();
+  const total = keys.length;
+  const done = keys.filter(k => String(DATA[k] || '').trim()).length;
+  const pct = total ? Math.round(done / total * 100) : 0;
+  const miss = REQUIRED.filter(k => !String(DATA[k] || '').trim());
+
+  box.querySelector('.pbar i').style.width = pct + '%';
+  const t = box.querySelector('.ptxt');
+  t.innerHTML = '';
+
+  const a = document.createElement('span');
+  a.innerHTML = '已填 <b>' + done + '</b> / ' + total + ' 项（' + pct + '%）';
+  t.appendChild(a);
+
+  const b = document.createElement('span');
+  if (isSampleOn()) {
+    b.className = 'sm';
+    b.textContent = '当前是示例数据，投递前必须全部改成你自己的';
+  } else if (miss.length) {
+    b.className = 'no';
+    b.textContent = '还缺必填：' + miss.map(k => LABELS[k] || k).join('、');
+  } else {
+    b.className = 'ok';
+    b.textContent = '必填项已齐，可以生成书签了';
+  }
+  t.appendChild(b);
+}
+
+function syncHello() {
+  const el = document.getElementById('hello');
+  if (!el) return;
+  let off = false;
+  try { off = localStorage.getItem('resume_filler_hello') === '1'; } catch (e) {}
+  const empty = allKeys().every(k => !String(DATA[k] || '').trim());
+  el.style.display = (!off && empty) ? 'block' : 'none';
+}
+
+/* 每张卡片的标题可点击收起，填完的区块收起来更清爽（个人版已有，这里不重复定义） */
+
+document.getElementById('hello-x').addEventListener('click', () => {
+  document.getElementById('hello').style.display = 'none';
+  try { localStorage.setItem('resume_filler_hello', '1'); } catch (e) {}
+});
+
+document.getElementById('btn-example').addEventListener('click', () => {
+  if (!confirm('填入一份【虚构的示例数据】，用来演示每个字段该填什么格式。\n\n' +
+               '会覆盖你现在填的内容，建议先「导出 JSON」备份。\n' +
+               '示例里的姓名是「张小明」，投简历前务必全部改掉。')) return;
+  DATA = Object.assign({}, DEFAULTS, SAMPLE);
+  saveData();
+  render();
+  renderHealth();
+  refreshBookmarks();
+  syncBanner();
+  toast('示例已填入，照着改成你自己的就行');
+});
+
+/* ---------- 启动 ---------- */
+render();
+renderHealth();
+refreshBookmarks();
+syncBanner();
+</script>
+</body>
+</html>
