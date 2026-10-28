@@ -222,6 +222,57 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 .floatdl:hover{background:#000;border-color:#000;color:#fff;}
 @media(max-width:1180px){.floatdl{display:block;}}
 
+/* ---------- 简历识别 ---------- */
+.card .sub{font-weight:400;font-size:11.5px;color:var(--mute);margin-left:8px;letter-spacing:0;}
+.drop{
+  border:1.5px dashed #d5cec3;border-radius:10px;padding:20px 16px;text-align:center;
+  background:#fbf9f5;transition:.18s;cursor:pointer;
+}
+.drop:hover,.drop.over{border-color:var(--gold);background:#fdf8ee;}
+.drop .dicon{font-size:19px;color:var(--gold);line-height:1;margin-bottom:7px;}
+.drop b{display:block;font-size:13.5px;color:var(--ink);margin-bottom:4px;}
+.drop span{display:block;font-size:11.5px;color:var(--mute);margin-bottom:11px;}
+.drop button{font-size:12px;padding:6px 14px;}
+.impacts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+.impacts button{flex:1 1 auto;min-width:120px;padding:9px 12px;font-size:12.5px;}
+#resume-text{
+  width:100%;margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
+  font:13px/1.7 inherit;color:var(--ink);background:#fff;resize:vertical;box-sizing:border-box;
+}
+#resume-text:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(184,146,74,.1);}
+
+/* 识别结果 */
+.pr{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;}
+.prh{display:flex;align-items:center;gap:10px;margin-bottom:9px;flex-wrap:wrap;}
+.prh b{font-size:12.5px;color:var(--ink);}
+.prh span{font-size:11.5px;color:var(--mute);}
+.prlist{max-height:330px;overflow:auto;border:1px solid var(--line);border-radius:8px;}
+.prrow{
+  display:grid;grid-template-columns:20px 90px 1fr;gap:8px;align-items:start;
+  padding:7px 10px;font-size:12.5px;border-bottom:1px solid #f2efe9;
+}
+.prrow:last-child{border-bottom:none;}
+.prrow:nth-child(even){background:#fcfbf8;}
+.prrow input[type=checkbox]{margin:2px 0 0;accent-color:var(--gold);}
+.prrow .pl{color:var(--mute);font-size:11.5px;line-height:1.6;padding-top:1px;}
+.prrow .pv{color:var(--ink);line-height:1.65;word-break:break-all;}
+.prrow .pv em{font-style:normal;color:var(--mute);font-size:11px;margin-left:6px;}
+.prrow.over{background:#fdf6f4;}
+.prrow.over .pv em{color:var(--bad);}
+.prfoot{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap;}
+.prfoot button{padding:9px 16px;font-size:12.5px;}
+
+/* ---------- 自定义字段 ---------- */
+.cxrow{display:grid;grid-template-columns:1fr 1.35fr 30px;gap:8px;align-items:center;margin-bottom:8px;}
+.cxrow input{padding:8px 10px;font-size:12.5px;border:1px solid var(--line);border-radius:7px;width:100%;box-sizing:border-box;font-family:inherit;color:var(--ink);}
+.cxrow input:focus{outline:none;border-color:var(--gold);}
+.cxrow .del{
+  border:1px solid var(--line);background:#fff;color:var(--mute);border-radius:7px;
+  width:30px;height:32px;cursor:pointer;font-size:15px;line-height:1;padding:0;
+}
+.cxrow .del:hover{border-color:var(--bad);color:var(--bad);background:#fdf6f4;}
+.cxempty{font-size:12.5px;color:var(--mute);padding:4px 0 10px;line-height:1.7;}
+
 /* toast */
 #toast{
   position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(14px);
@@ -301,6 +352,28 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 <div class="wrap">
   <div class="main">
     <div id="health"></div>
+
+    <section class="card" id="importer">
+      <h2>识别简历<span class="sub">把简历丢进来，自动提取字段填到下面</span></h2>
+
+      <div class="drop" id="drop-zone">
+        <div class="dicon">↓</div>
+        <b>拖入简历文件</b>
+        <span>支持 PDF / TXT · 也可以直接粘贴文字</span>
+        <button class="ghost" id="btn-pick">选择文件</button>
+        <input type="file" id="file-resume" accept=".pdf,.txt,.md" hidden>
+      </div>
+
+      <textarea id="resume-text" rows="5" placeholder="把简历内容整段粘贴到这里，自动挑出姓名、电话、学校、专业、经历……&#10;例：张小明　男　2004.08　西安建筑科技大学　城市设计　本科"></textarea>
+
+      <div class="impacts">
+        <button class="primary" id="btn-parse">识别并预览</button>
+        <button id="btn-paste-clip">读剪贴板</button>
+      </div>
+
+      <div id="parse-result"></div>
+    </section>
+
     <div id="groups"></div>
   </div>
 
@@ -441,6 +514,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 
 <script type="application/json" id="resume-data">
 {
+  "__custom": "",
   "name": "",
   "enName": "",
   "gender": "",
@@ -698,6 +772,9 @@ function applyResume(D, O) {
   var YES = /^(是|有|同意|接受|可以|愿意|true|yes|1)$/i;
   var NO  = /^(否|没有|不同意|不接受|不可以|不愿意|false|no|0)$/i;
 
+  /* 用户自定义字段：[[key, "别名1|别名2|…"]]，内置规则没命中时兜底 */
+  var CX = O.cx || [];
+
   /* ---------- 跨文档小工具 ---------- */
   function W(el) {
     try { return (el.ownerDocument && el.ownerDocument.defaultView) || window; }
@@ -872,6 +949,16 @@ function applyResume(D, O) {
       if (!RULES[i][1].test(text)) continue;
       if (RULES[i][2] && RULES[i][2].test(text)) continue;
       return key;
+    }
+    /* 内置规则都不中，再看自定义字段：别名长度 ≥2 且原文出现即算命中 */
+    for (var c = 0; c < CX.length; c++) {
+      var k2 = CX[c][0];
+      if (!D[k2]) continue;
+      var al = String(CX[c][1] || '').split(/[|/、，,;；]/);
+      for (var a = 0; a < al.length; a++) {
+        var w = clean(al[a]);
+        if (w.length >= 2 && text.indexOf(w) >= 0) return k2;
+      }
     }
     return null;
   }
@@ -1084,7 +1171,12 @@ function applyResume(D, O) {
     }
   }
 
-  function LABELOF(k) { return k.replace(/^exp(\d)_/, '经历$1·'); }
+  function LABELOF(k) {
+    for (var c = 0; c < CX.length; c++) {
+      if (CX[c][0] === k) return String(CX[c][1] || k).split(/[|/、，,;；]/)[0];
+    }
+    return k.replace(/^exp(\d)_/, '经历$1·');
+  }
 
   /* ---------- 可选：多段经历 ---------- */
   if (O.exp && !DIAG) {
@@ -1328,6 +1420,10 @@ function loadData() {
       Object.keys(DEFAULTS).forEach(k => {
         if (!String(DEFAULTS[k] || '').trim() && o[k] && String(o[k]).trim()) merged[k] = o[k];
       });
+      /* 自定义字段（cx_*）不在 DEFAULTS 里，版本升级时必须单独搬过来，否则会丢 */
+      Object.keys(o).forEach(k => {
+        if (k.indexOf('cx_') === 0 && o[k]) merged[k] = o[k];
+      });
       /* 已知错误的旧值要在升级时清掉，否则会一直被"保留空字段"的逻辑救活 */
       MIGRATIONS.forEach(m => { if (m.v > v && m.v <= DATA_VERSION) m.f(merged); });
       return merged;
@@ -1342,6 +1438,30 @@ function saveData() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(Object.assign({}, DATA, { __v: DATA_VERSION })));
   } catch (e) {}
+}
+
+/* ---------- 自定义字段 ----------
+   存在两处：DATA.__custom 放 [{k,label}] 清单，DATA[k] 放值。
+   这样导出 JSON 时清单和值一起带走，不需要额外的存储键。 */
+function getCustom() {
+  try {
+    const a = JSON.parse(DATA.__custom || '[]');
+    return Array.isArray(a) ? a.filter(x => x && x.k) : [];
+  } catch (e) { return []; }
+}
+
+function writeCustom(arr) {
+  DATA.__custom = arr.length ? JSON.stringify(arr) : '';
+  saveData();
+}
+
+function addCustom(label, value) {
+  const arr = getCustom();
+  const k = 'cx_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  arr.push({ k, label: label || '' });
+  DATA[k] = value || '';
+  writeCustom(arr);
+  return k;
 }
 
 function ageFrom(b) {
@@ -1614,8 +1734,102 @@ function render() {
     card.appendChild(grid);
     box.appendChild(card);
   }
+  /* 自定义字段：网申里出现上面没有的问题，自己加一行 */
+  const cc = document.createElement('section');
+  cc.className = 'card';
+  cc.id = 'card-custom';
+  const ch = document.createElement('h2');
+  ch.textContent = '自定义字段';
+  cc.appendChild(ch);
+
+  const cd = document.createElement('div');
+  cd.className = 'cxempty';
+  cd.innerHTML = '网申里出现上面没有的问题（比如「是否有驾照」「能否出差」「身高体测」），在这里加一行：'
+    + '左边写页面上那栏的<b>标题</b>，右边写<b>内容</b>。书签会自动去找标题里含这几个字的输入框。'
+    + '一个字段有几种叫法，用 <code>/</code> 隔开（如 <code>驾照/驾驶证</code>）。';
+  cc.appendChild(cd);
+
+  const cbox = document.createElement('div');
+  cbox.id = 'cx-list';
+  cc.appendChild(cbox);
+
+  const cbtn = document.createElement('button');
+  cbtn.className = 'ghost';
+  cbtn.textContent = '+ 添加自定义字段';
+  cbtn.style.marginTop = '6px';
+  cbtn.addEventListener('click', () => {
+    const k = addCustom('', '');
+    renderCustomRows();
+    scheduleRefresh();
+    const inp = cbox.querySelector('[data-k="' + k + '"] .cxlab');
+    if (inp) inp.focus();
+  });
+  cc.appendChild(cbtn);
+  box.appendChild(cc);
+
+  renderCustomRows();
   bindFold();
   buildTabs();
+}
+
+/* 只重绘自定义字段区，不动整页（否则每敲一个字输入框就失焦） */
+function renderCustomRows() {
+  const box = document.getElementById('cx-list');
+  if (!box) return;
+  box.innerHTML = '';
+  const arr = getCustom();
+  if (!arr.length) {
+    const d = document.createElement('div');
+    d.className = 'cxempty';
+    d.textContent = '还没有自定义字段。';
+    box.appendChild(d);
+    return;
+  }
+  arr.forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'cxrow';
+    row.dataset.k = c.k;
+
+    const li = document.createElement('input');
+    li.className = 'cxlab';
+    li.value = c.label || '';
+    li.placeholder = '页面上的字段名';
+
+    const vi = document.createElement('input');
+    vi.value = DATA[c.k] || '';
+    vi.placeholder = '要填的内容';
+
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.textContent = '×';
+    del.title = '删掉这个字段';
+
+    li.addEventListener('input', () => {
+      const a = getCustom();
+      const t = a.find(x => x.k === c.k);
+      if (t) t.label = li.value;
+      writeCustom(a);
+      scheduleRefresh();
+    });
+    vi.addEventListener('input', () => {
+      DATA[c.k] = vi.value;
+      saveData();
+      scheduleRefresh();
+    });
+    del.addEventListener('click', () => {
+      writeCustom(getCustom().filter(x => x.k !== c.k));
+      delete DATA[c.k];
+      saveData();
+      renderCustomRows();
+      buildTabs();
+      scheduleRefresh();
+    });
+
+    row.appendChild(li);
+    row.appendChild(vi);
+    row.appendChild(del);
+    box.appendChild(row);
+  });
 }
 
 /* =====================================================================
@@ -1664,9 +1878,10 @@ function buildScript(opts) {
   opts = opts || {};
   const payload = {};
   Object.keys(DATA).forEach(k => {
+    if (k.indexOf('__') === 0) return;   /* __custom 是清单，值已经在各自字段里 */
     const v = String(DATA[k] || '').trim();
     if (!v) return;
-    if (opts.short && !SHORT_KEYS.has(k)) return;
+    if (opts.short && !SHORT_KEYS.has(k) && k.indexOf('cx_') !== 0) return;
     payload[k] = v;
   });
   /* 年龄按生日实时算，避免写死一个过期数字 */
@@ -1676,6 +1891,12 @@ function buildScript(opts) {
   const flags = {};
   if (opts.exp) flags.exp = 1;
   if (opts.diag) flags.diag = 1;
+
+  /* 自定义字段的匹配词一起进书签：[[key, "别名1|别名2"]] */
+  const cx = getCustom()
+    .filter(c => String(DATA[c.k] || '').trim() && String(c.label || '').trim())
+    .map(c => [c.k, c.label]);
+  if (cx.length) flags.cx = cx;
 
   const src = '(function(){var D=' + JSON.stringify(payload)
     + ';var O=' + JSON.stringify(flags)
@@ -1938,6 +2159,570 @@ document.addEventListener('keydown', ev => {
   try { seen = localStorage.getItem('resume_filler_help') === '1'; } catch (e) {}
   if (!seen && !String(DATA.name || '').trim()) setTimeout(openHelp, 350);
 })();
+
+/* =====================================================================
+   9. 简历识别：PDF / 文本 → 字段
+   —— 全部在本地完成。PDF 用 pdf.js（首次用时从 CDN 动态加载），
+      加载不到就明确提示改用「粘贴文本」，不会静默失败。
+   ===================================================================== */
+
+/* 简历上常见的字段名，用来把「姓名 张小明 性别 男」这种一行多字段切开 */
+const LABEL_WORDS = [
+  '姓名', '性别', '出生日期', '出生年月', '生日', '年龄', '手机号码', '手机号', '手机', '联系电话', '电话',
+  '电子邮箱', '邮箱', '身份证号码', '身份证', '籍贯', '民族', '政治面貌', '身高', '体重', '婚姻状况', '婚姻',
+  '最高学历', '学历', '学位', '本科', '硕士研究生', '硕士', '博士', '大专', '研究生', '毕业院校', '毕业学校', '学校名称', '就读院校', '院校名称', '学校',
+  '学院', '院系', '所学专业', '专业名称', '主修专业', '就读专业', '专业',
+  '绩点', 'GPA', '年级排名', '专业排名', '排名', '名次',
+  '求职意向', '应聘岗位', '意向岗位', '期望职位', '目标岗位', '应聘方向',
+  '期望城市', '意向城市', '期望工作地', '期望薪资', '期望月薪', '期望年薪', '薪资要求',
+  '到岗时间', '可到岗', '微信号', '微信', 'QQ', '通讯地址', '现居住地', '现居', '紧急联系人',
+  '主修课程', '自我评价', '自我介绍', '专业技能', '获奖情况'
+];
+
+const PAD2 = n => String(n).length < 2 ? '0' + n : String(n);
+
+/* 值后面如果又跟了下一个字段名，切在那里：靠「前面是空白或标点」判断，
+   否则「西安建筑科技大学建筑学院」里的「学院」会被误切 */
+function cutLabel(s) {
+  let cut = s.length;
+  LABEL_WORDS.forEach(w => {
+    let i = s.indexOf(w);
+    while (i > 0 && i < cut) {
+      if (/[\s:：·|/、,，]/.test(s.charAt(i - 1))) { cut = i; break; }
+      i = s.indexOf(w, i + 1);
+    }
+  });
+  return s.slice(0, cut).replace(/[\s:：·\-—|/、,，]+$/, '').trim();
+}
+
+/* 在「标签：值」结构里取值，容忍一行里有多个字段。
+   标签必须出现在行首、或前面是空白/标点才算 —— 否则「西安建筑科技大学 建筑学院」
+   里的「学院」会被当成标签，把后面的内容全吃进去。 */
+function pickField(lines, names) {
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i];
+    for (let n = 0; n < names.length; n++) {
+      let idx = ln.indexOf(names[n]);
+      while (idx >= 0) {
+        const okHead = idx === 0 || /[\s:：·\-—|/、,，（(]/.test(ln.charAt(idx - 1));
+        const after = ln.slice(idx + names[n].length);
+        const m = okHead ? after.match(/^[\s:：·\-—|]+/) : null;
+        if (m) {
+          const v = cutLabel(after.replace(/^[\s:：·\-—|]+/, ''));
+          if (v && v.length <= 40) return v;
+        }
+        idx = ln.indexOf(names[n], idx + 1);
+      }
+    }
+  }
+  return '';
+}
+
+function normDate(s) {
+  const m = String(s || '').match(/((?:19|20)\d{2})\D{0,2}(\d{1,2})?(?:\D{0,2}(\d{1,2}))?/);
+  if (!m) return '';
+  const y = +m[1];
+  if (y < 1950 || y > 2035) return '';
+  return m[1] + '-' + PAD2(m[2] || 1) + '-' + PAD2(m[3] || 1);
+}
+
+/* 时间区间：2023.09 - 2027.07 / 2025.07.15-2026.01.30 / 2026 - 至今 都要认 */
+const RANGE_SRC = '((?:19|20)\\d{2})\\s*[.\\-/年]\\s*(\\d{1,2})?(?:\\s*[.\\-/]\\s*(\\d{1,2}))?\\s*[日号]?'
+  + '\\s*[-–—~～至到]\\s*'
+  + '((?:19|20)\\d{2}|至今|现在|今)\\s*(?:[.\\-/年]\\s*(\\d{1,2}))?(?:\\s*[.\\-/]\\s*(\\d{1,2}))?';
+
+/* 简历里的小标题：遇到这些就说明上一段结束了 */
+const SECHEAD = /^(教育背景|教育经历|工作经历|实习经历|实践经历|项目经历|项目经验|校园经历|社团经历|专业技能|技能特长|技能清单|专业能力|获奖情况|奖项荣誉|获奖经历|所获荣誉|荣誉证书|自我评价|自我介绍|个人优势|兴趣爱好|文体特长|主修课程|核心课程|主要课程|作品集)$/;
+
+/* 把简历文本拆成字段。返回 [{k, value, conf}]，conf 只用于决定默认勾不勾 */
+function parseResumeText(raw) {
+  const out = [];
+  const push = (k, v, conf) => {
+    v = String(v == null ? '' : v).replace(/[ \t]+/g, ' ').trim();
+    if (!v) return;
+    if (out.some(x => x.k === k)) return;
+    out.push({ k, value: v, conf: conf || 'mid' });
+  };
+
+  /* NFKC 很关键：不少 PDF 的中文字体把汉字映射成「康熙部首」码位（⼿机、⼤学、⽣⽇），
+     Unicode 规范里它们和正常汉字是同一个字，NFKC 会归一回来；顺带把全角字母数字拉直。 */
+  const text = String(raw || '').normalize('NFKC').replace(/\r\n?/g, '\n');
+  const lines = text.split('\n')
+    .map(l => l.replace(/[\u00a0\u3000]/g, ' ').trim())
+    .filter(Boolean);
+  const flat = lines.join('\n');
+
+  /* --- 位置无关的高置信项 --- */
+  /* 手机号可能写成 188 2916 9388 / 188-2916-9388，允许中间有空格和短横 */
+  const pm = flat.match(/(?:\+?86[-\s]?)?(1[3-9]\d)[\s-]?(\d{4})[\s-]?(\d{4})/);
+  if (pm) push('phone', pm[1] + pm[2] + pm[3], 'high');
+
+  const mail = (flat.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [])[0];
+  if (mail) push('email', mail, 'high');
+
+  const idc = (flat.match(/[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]/) || [])[0];
+  if (idc) push('idcard', idc.toUpperCase(), 'high');
+
+  /* --- 姓名：先找「姓名：X」，再退到首行里最像人名的词 --- */
+  let nm = pickField(lines, ['姓名', '真实姓名', '中文姓名']);
+  if (!/^[\u4e00-\u9fa5·]{2,6}$/.test(nm)) {
+    nm = '';
+    for (let i = 0; i < Math.min(lines.length, 8); i++) {
+      if (/简历|个人|求职|应聘|RESUME/i.test(lines[i])) continue;
+      const parts = lines[i].split(/[\s|·、,，]+/);
+      for (let p = 0; p < parts.length; p++) {
+        if (/^[\u4e00-\u9fa5]{2,4}$/.test(parts[p])) { nm = parts[p]; break; }
+      }
+      if (nm) break;
+    }
+  }
+  if (nm) push('name', nm, 'high');
+
+  /* --- 性别 --- */
+  let gd = pickField(lines, ['性别']);
+  if (!/^[男女]$/.test(gd)) {
+    const m = flat.match(/性\s*别[\s:：|]*([男女])/);
+    gd = m ? m[1] : '';
+  }
+  if (!gd) {
+    /* 简历上常写成「张小明　男　2004.08」，没有「性别」二字 */
+    for (let i = 0; i < Math.min(lines.length, 12); i++) {
+      const m = lines[i].match(/(?:^|[\s|·、,，])([男女])(?:$|[\s|·、,，])/);
+      if (m) { gd = m[1]; break; }
+    }
+  }
+  if (gd) push('gender', gd, 'high');
+
+  /* --- 生日：优先标签，其次身份证 --- */
+  let bd = normDate(pickField(lines, ['出生日期', '出生年月', '生日', '出生']));
+  if (!bd && idc) bd = normDate(idc.slice(6, 14).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'));
+  if (bd) push('birthday', bd, bd && idc ? 'high' : 'mid');
+
+  /* --- 短字段 --- */
+  const shortMap = [
+    ['hometown',      ['籍贯', '户籍所在地', '户籍'], 'mid'],
+    ['birthPlace',    ['生源所在地', '生源地'], 'mid'],
+    ['currentCity',   ['现居住地', '现居', '所在城市', '常住地'], 'mid'],
+    ['address',       ['通讯地址', '联系地址', '详细地址', '家庭地址'], 'mid'],
+    ['ethnicity',     ['民族'], 'mid'],
+    ['political',     ['政治面貌'], 'mid'],
+    ['maritalStatus', ['婚姻状况', '婚姻状态', '婚否'], 'low'],
+    ['enName',        ['英文名', '英文姓名'], 'low'],
+    ['wechat',        ['微信号', '微信账号'], 'low'],
+    ['qq',            ['QQ号', 'QQ'], 'low'],
+    ['emergencyName', ['紧急联系人'], 'low'],
+    ['emergencyPhone',['紧急联系电话', '紧急联系人电话'], 'low'],
+    ['studentId',     ['学号'], 'mid'],
+    ['className',     ['班级'], 'low'],
+    ['tutor',         ['导师', '指导教师'], 'low']
+  ];
+  shortMap.forEach(([k, names, conf]) => {
+    let v = pickField(lines, names);
+    if (k === 'emergencyName' && /^1[3-9]\d{9}$/.test(v)) v = '';
+    if (k === 'emergencyPhone') v = (v.match(/1[3-9]\d{9}/) || [])[0] || '';
+    if (v) push(k, v, conf);
+  });
+
+  /* --- 身高体重：去掉单位 --- */
+  const hgt = pickField(lines, ['身高']);
+  if (hgt) { const n = (hgt.match(/\d{2,3}/) || [])[0]; if (n) push('height', n, 'mid'); }
+  const wgt = pickField(lines, ['体重']);
+  if (wgt) { const n = (wgt.match(/\d{2,3}/) || [])[0]; if (n) push('weight', n, 'mid'); }
+
+  /* --- 学校 / 学院 / 专业 / 学历 --- */
+  let sc = pickField(lines, ['毕业院校', '毕业学校', '学校名称', '就读院校', '院校名称', '学校']);
+  if (!/大学|学院|学校/.test(sc)) {
+    const u = flat.match(/[\u4e00-\u9fa5]{2,12}大学/);
+    const c = flat.match(/[\u4e00-\u9fa5]{2,12}学院/);
+    sc = u ? u[0] : (c ? c[0] : '');
+  }
+  if (sc) push('school', sc, /大学/.test(sc) ? 'high' : 'mid');
+
+  let col = pickField(lines, ['学院', '院系', '系别']);
+  if (col && (col === sc || /大学/.test(col))) col = '';
+  if (!col) {
+    const m = flat.match(/([\u4e00-\u9fa5]{2,10}学院)/);
+    if (m && !/大学/.test(m[1])) col = m[1];
+  }
+  if (col) push('college', col, 'mid');
+
+  let mj = pickField(lines, ['所学专业', '专业名称', '主修专业', '就读专业', '专业']);
+  if (/排名|课程|技能|方向|知识/.test(mj)) mj = '';
+  if (!mj) {
+    /* 简历常写成「城市设计专业｜本科」，没有「专业：」这种冒号结构 */
+    const m = flat.match(/([\u4e00-\u9fa5]{2,10})专业(?!排名|课程|课|技能|方向|知识|成绩)/);
+    if (m && !/所学|主修|就读|相关/.test(m[1])) mj = m[1];
+  }
+  if (mj) push('major', mj, 'mid');
+
+  let dg = pickField(lines, ['最高学历', '学历', '培养层次']);
+  if (!dg) {
+    const m = flat.match(/(博士研究生|硕士研究生|本科|硕士|博士|大专|研究生|专科)/);
+    dg = m ? m[1] : '';
+  }
+  if (/研究生/.test(dg)) dg = '硕士';
+  if (dg) push('degree', dg, 'high');
+
+  let ad = pickField(lines, ['学位']);
+  if (ad && /学历|证书/.test(ad)) ad = '';
+  if (ad) push('academicDegree', ad, 'mid');
+
+  /* --- 绩点 / 排名 --- */
+  const gm = flat.match(/(?:GPA|绩点)\s*[:：]?\s*([0-9]+(?:\.[0-9]+)?)/i);
+  if (gm) push('gpa', gm[1], 'mid');
+
+  lines.forEach(ln => {
+    if (!/排名|名次/.test(ln)) return;
+    /* 一行里可能有「专业排名 前10%  年级排名 前30%」，逐个往前看 8 个字判断归属 */
+    const re = /(前\s*[0-9.]+\s*%|[0-9]+\s*\/\s*[0-9]+|[0-9]+\s*%)/g;
+    let mm;
+    while ((mm = re.exec(ln))) {
+      const before = ln.slice(Math.max(0, mm.index - 8), mm.index);
+      if (!/排名|名次/.test(before)) continue;
+      const v = mm[1].replace(/\s/g, '');
+      if (/专业/.test(before)) push('majorRank', v, 'mid');
+      else push('rank', v, 'mid');
+    }
+  });
+
+  /* --- 入学 / 毕业：取时间跨度里最早的一组，教育经历通常在最前 --- */
+  const spans = [];
+  const sr = new RegExp(RANGE_SRC, 'g');
+  let sm;
+  while ((sm = sr.exec(flat))) spans.push(sm);
+  let best = null;
+  spans.forEach(s => { if (!best || +s[1] < +best[1]) best = s; });
+  if (best) {
+    push('enrollDate', best[1] + '-' + PAD2(best[2] || 9) + '-01', 'mid');
+    if (/\d/.test(best[4])) push('graduateDate', best[4] + '-' + PAD2(best[5] || 7) + '-01', 'mid');
+  }
+
+  /* --- 求职意向 --- */
+  const want = [
+    ['targetJob',    ['求职意向', '应聘岗位', '意向岗位', '期望职位', '目标岗位', '应聘方向', '求职岗位']],
+    ['targetCity',   ['期望城市', '意向城市', '期望工作地', '期望地点', '工作城市', '工作地点', '意向地区']],
+    ['expectSalary', ['期望薪资', '期望月薪', '期望年薪', '薪资要求', '期望待遇']],
+    ['availableDate',['到岗时间', '可到岗时间', '可入职时间']],
+    ['portfolio',    ['作品集', '作品链接', '个人主页']]
+  ];
+  want.forEach(([k, names]) => {
+    const v = pickField(lines, names);
+    if (v) push(k, v, 'mid');
+  });
+
+  /* --- 长段落：标题后到下一个标题之间的内容 --- */
+  const SEC = [
+    ['selfEval', /^(自我评价|自我介绍|个人简介|个人评价|自我描述|个人优势)/],
+    ['skills',   /^(专业技能|技能特长|掌握技能|专业能力)/],
+    ['awards',   /^(获奖情况|奖项荣誉|获奖经历|荣誉奖项|所获奖励|荣誉证书)/],
+    ['sports',   /^(兴趣爱好|个人爱好|文体特长)/],
+    ['courses',  /^(主修课程|核心课程|主要课程)/]
+  ];
+  for (let i = 0; i < lines.length; i++) {
+    for (let s = 0; s < SEC.length; s++) {
+      if (!SEC[s][1].test(lines[i])) continue;
+      const inline = lines[i].replace(SEC[s][1], '').replace(/^[\s:：·|]+/, '');
+      const buf = inline ? [inline] : [];
+      for (let j = i + 1; j < lines.length && j < i + 12; j++) {
+        if (SECHEAD.test(lines[j])) break;
+        buf.push(lines[j]);
+      }
+      if (buf.length) push(SEC[s][0], buf.join(' ').slice(0, 600), 'mid');
+    }
+  }
+
+  /* --- 经历：公司/单位行 + 时间 --- */
+  const expR = new RegExp(RANGE_SRC);
+  const exps = [];
+  for (let i = 0; i < lines.length && exps.length < 3; i++) {
+    const ln = lines[i];
+    const m = ln.match(expR);
+    if (!m) continue;
+    let head = ln.replace(m[0], '').replace(/^[\s|·—\-]+/, '').replace(/[\s|·—\-]+$/, '').trim();
+    if (!head && i > 0) head = lines[i - 1];
+    if (!/公司|集团|设计院|事务所|工作室|研究院|研究所|有限|实习|项目组|项目|中心/.test(head)) continue;
+    if (/大学|学院|学校/.test(head)) continue;
+    const end = /\d/.test(m[4]) ? m[4] + (m[5] ? '.' + PAD2(m[5]) : '') : '至今';
+    const time = m[1] + (m[2] ? '.' + PAD2(m[2]) : '') + ' - ' + end;
+    const desc = [];
+    for (let j = i + 1; j < lines.length && j < i + 5; j++) {
+      if (SECHEAD.test(lines[j])) break;
+      if (expR.test(lines[j])) {
+        const h2 = lines[j].replace(lines[j].match(expR)[0], '');
+        /* 子项目（带｜的标题行）不算新的一段，单位行才算 */
+        if (/[｜|]/.test(lines[j])) break;
+        if (/公司|集团|设计院|事务所|工作室|研究院|研究所|有限|项目组|中心/.test(h2)) break;
+      }
+      desc.push(lines[j]);
+    }
+    exps.push({ head, time, desc: desc.join(' ').slice(0, 300) });
+  }
+  exps.forEach((e, i) => {
+    const p = i + 1;
+    push('exp' + p + '_company', e.head, 'low');
+    push('exp' + p + '_time', e.time, 'low');
+    if (e.desc) push('exp' + p + '_desc', e.desc, 'low');
+  });
+
+  return out;
+}
+
+/* ---------- PDF 文本提取 ----------
+   先找同目录的 vendor/pdf.min.mjs（仓库自带，离线可用、worker 同源不会跨域）；
+   拿不到再用 CDN —— 这样「双击本地 HTML」的人也还能用（要求联网）。 */
+const PDF_SRC = [
+  { js: './vendor/pdf.min.mjs', w: './vendor/pdf.worker.min.mjs' },
+  { js: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.mjs',
+    w:  'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs' },
+  { js: 'https://unpkg.com/pdfjs-dist@4.0.379/build/pdf.min.mjs',
+    w:  'https://unpkg.com/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs' },
+  { js: 'https://cdn.bootcdn.net/ajax/libs/pdf.js/4.0.379/pdf.min.mjs',
+    w:  'https://cdn.bootcdn.net/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs' }
+];
+let pdfjsMod = null;
+
+async function loadPdfJs() {
+  if (pdfjsMod) return pdfjsMod;
+  let err;
+  for (const s of PDF_SRC) {
+    try {
+      const m = await import(s.js);
+      try { m.GlobalWorkerOptions.workerSrc = s.w; } catch (e) {}
+      pdfjsMod = m;
+      return m;
+    } catch (e) { err = e; }
+  }
+  throw err || new Error('pdf.js 加载失败');
+}
+
+/* 按纵坐标聚合行，再按横坐标排序 —— 否则 PDF 里取出来的字是乱序的 */
+async function pdfToText(file) {
+  const pdfjs = await loadPdfJs();
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjs.getDocument({ data: buf, isEvalSupported: false }).promise;
+  const out = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const tc = await page.getTextContent();
+    const rows = new Map();
+    tc.items.forEach(it => {
+      const s = it.str || '';
+      if (!s.trim()) return;
+      const y = Math.round(it.transform[5] / 5) * 5;
+      if (!rows.has(y)) rows.set(y, []);
+      rows.get(y).push({
+        x: it.transform[4],
+        fs: Math.abs(it.transform[0]) || 10,
+        w: typeof it.width === 'number' && it.width > 0 ? it.width : 0,
+        s
+      });
+    });
+    Array.from(rows.keys()).sort((a, b) => b - a).forEach(y => {
+      const arr = rows.get(y).sort((a, b) => a.x - b.x);
+      let line = '', lastX = null, lastW = 0;
+      const CJK = /[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]/;
+      /* 优先用 pdf.js 给的真实宽度；没有才按字号估算 */
+      const widthOf = (o) => o.w || (function () {
+        let w = 0;
+        for (const ch of o.s) w += CJK.test(ch) ? o.fs : o.fs * 0.52;
+        return w;
+      })();
+      arr.forEach(o => {
+        if (line && lastX !== null) {
+          const gap = o.x - (lastX + lastW);
+          const a = line.slice(-1), b = o.s.charAt(0);
+          const aC = CJK.test(a), bC = CJK.test(b);
+          let need;
+          if (aC && bC) need = gap > o.fs * 0.9;
+          else if (aC || bC) need = gap > o.fs * 0.35;
+          else need = gap > o.fs * 0.15;
+          if (need) line += ' ';
+        }
+        line += o.s;
+        lastX = o.x;
+        lastW = widthOf(o);
+      });
+      const t = line.replace(/\s+/g, ' ').trim();
+      if (t) out.push(t);
+    });
+  }
+  return out.join('\n');
+}
+
+/* ---------- 识别界面 ---------- */
+let pickedFile = null;
+let parsedList = [];
+
+function setParsedHint(txt, cls) {
+  const zone = document.getElementById('drop-zone');
+  if (!zone) return;
+  const s = zone.querySelector('span');
+  if (s) { s.textContent = txt; s.className = cls || ''; }
+}
+
+document.getElementById('btn-pick').addEventListener('click', ev => {
+  ev.stopPropagation();
+  document.getElementById('file-resume').click();
+});
+
+document.getElementById('file-resume').addEventListener('change', ev => {
+  const f = ev.target.files && ev.target.files[0];
+  if (!f) return;
+  pickedFile = f;
+  setParsedHint('已选择：' + f.name + '（点「识别并预览」开始）');
+});
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('click', () => document.getElementById('file-resume').click());
+['dragenter', 'dragover'].forEach(t => dz.addEventListener(t, ev => {
+  ev.preventDefault(); dz.classList.add('over');
+}));
+['dragleave', 'drop'].forEach(t => dz.addEventListener(t, ev => {
+  ev.preventDefault(); dz.classList.remove('over');
+}));
+dz.addEventListener('drop', ev => {
+  const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+  if (!f) return;
+  pickedFile = f;
+  setParsedHint('已选择：' + f.name + '（点「识别并预览」开始）');
+});
+
+document.getElementById('btn-paste-clip').addEventListener('click', async () => {
+  try {
+    const t = await navigator.clipboard.readText();
+    if (!t || !t.trim()) { toast('剪贴板是空的'); return; }
+    document.getElementById('resume-text').value = t;
+    pickedFile = null;
+    toast('已读入剪贴板，点「识别并预览」');
+  } catch (e) {
+    toast('读不到剪贴板，手动粘贴就行（Ctrl+V）');
+  }
+});
+
+document.getElementById('btn-parse').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-parse');
+  const old = btn.textContent;
+  btn.disabled = true;
+  try {
+    let text = '';
+    if (pickedFile) {
+      btn.textContent = '读取文件…';
+      const nm = (pickedFile.name || '').toLowerCase();
+      if (/\.pdf$/.test(nm)) {
+        text = await pdfToText(pickedFile);
+        if (!text.trim()) throw new Error('这个 PDF 没有文字层（可能是扫描件），把内容复制粘贴到下面再识别');
+      } else {
+        text = await pickedFile.text();
+      }
+    } else {
+      text = document.getElementById('resume-text').value;
+    }
+    if (!text.trim()) { toast('先拖入文件，或把简历内容粘贴到框里'); return; }
+    document.getElementById('resume-text').value = text.slice(0, 5000);
+    btn.textContent = '识别中…';
+    parsedList = parseResumeText(text);
+    showParseResult(parsedList);
+  } catch (e) {
+    toast('识别失败：' + (e && e.message ? e.message : e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+  }
+});
+
+function showParseResult(list) {
+  const box = document.getElementById('parse-result');
+  box.innerHTML = '';
+  if (!list.length) { toast('没识别出可用字段，换个格式再试'); return; }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'pr';
+
+  const hd = document.createElement('div');
+  hd.className = 'prh';
+  const b = document.createElement('b');
+  b.textContent = '识别到 ' + list.length + ' 项';
+  const sp = document.createElement('span');
+  const conflict = list.filter(x => String(DATA[x.k] || '').trim() && DATA[x.k] !== x.value).length;
+  sp.textContent = conflict ? conflict + ' 项与现有内容不同（已默认取消勾选，确认要覆盖再勾上）' : '勾选后点应用';
+  hd.appendChild(b); hd.appendChild(sp);
+  wrap.appendChild(hd);
+
+  const lst = document.createElement('div');
+  lst.className = 'prlist';
+  list.forEach(it => {
+    const cur = String(DATA[it.k] || '').trim();
+    const over = cur && cur !== it.value;
+
+    const row = document.createElement('div');
+    row.className = 'prrow' + (over ? ' over' : '');
+    row.dataset.k = it.k;
+    row.dataset.v = it.value;
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !over && it.conf !== 'low';
+
+    const lab = document.createElement('div');
+    lab.className = 'pl';
+    lab.textContent = LABELS[it.k] || it.k;
+
+    const pv = document.createElement('div');
+    pv.className = 'pv';
+    pv.textContent = it.value;
+    if (over) {
+      const em = document.createElement('em');
+      em.textContent = '现有：' + cur.slice(0, 40);
+      pv.appendChild(em);
+    }
+
+    row.appendChild(cb); row.appendChild(lab); row.appendChild(pv);
+    if (it.conf === 'low') row.title = '低置信度，默认不勾选';
+    lst.appendChild(row);
+  });
+  wrap.appendChild(lst);
+
+  const ft = document.createElement('div');
+  ft.className = 'prfoot';
+  const ok = document.createElement('button');
+  ok.className = 'primary';
+  ok.textContent = '应用勾选项';
+  ok.addEventListener('click', applyParsed);
+  const all = document.createElement('button');
+  all.textContent = '全选';
+  all.addEventListener('click', () => {
+    lst.querySelectorAll('input[type=checkbox]').forEach(c => { c.checked = true; });
+  });
+  const none = document.createElement('button');
+  none.textContent = '全不选';
+  none.addEventListener('click', () => {
+    lst.querySelectorAll('input[type=checkbox]').forEach(c => { c.checked = false; });
+  });
+  ft.appendChild(ok); ft.appendChild(all); ft.appendChild(none);
+  wrap.appendChild(ft);
+
+  box.appendChild(wrap);
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function applyParsed() {
+  const rows = document.querySelectorAll('#parse-result .prrow');
+  let n = 0;
+  rows.forEach(row => {
+    const cb = row.querySelector('input[type=checkbox]');
+    if (!cb || !cb.checked) return;
+    DATA[row.dataset.k] = row.dataset.v;
+    n++;
+  });
+  if (!n) { toast('没有勾选任何一项'); return; }
+  saveData();
+  render();
+  scheduleRefresh();
+  toast('已应用 ' + n + ' 项，记得重新生成书签');
+  const box = document.getElementById('parse-result');
+  if (box) box.innerHTML = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 
 /* =====================================================================
