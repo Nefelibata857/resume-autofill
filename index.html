@@ -678,11 +678,36 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
   "exp2_role": "",
   "exp2_time": "",
   "exp2_desc": "",
-  "exp3_company": "",
-  "exp3_title": "",
-  "exp3_role": "",
-  "exp3_time": "",
-  "exp3_desc": "",
+  "prj1_title": "",
+  "prj1_org": "",
+  "prj1_role": "",
+  "prj1_time": "",
+  "prj1_desc": "",
+  "prj2_title": "",
+  "prj2_org": "",
+  "prj2_role": "",
+  "prj2_time": "",
+  "prj2_desc": "",
+  "prj3_title": "",
+  "prj3_org": "",
+  "prj3_role": "",
+  "prj3_time": "",
+  "prj3_desc": "",
+  "prj4_title": "",
+  "prj4_org": "",
+  "prj4_role": "",
+  "prj4_time": "",
+  "prj4_desc": "",
+  "prj5_title": "",
+  "prj5_org": "",
+  "prj5_role": "",
+  "prj5_time": "",
+  "prj5_desc": "",
+  "prj6_title": "",
+  "prj6_org": "",
+  "prj6_role": "",
+  "prj6_time": "",
+  "prj6_desc": "",
   "selfEval": "",
   "skills": "",
   "awards": "",
@@ -700,7 +725,7 @@ const GROUPS = [
   { title: '基本信息', fields: [
     ['name','姓名'], ['enName','英文名'], ['gender','性别'], ['birthday','出生日期'],
     ['age','年龄（按生日自动算）'], ['phone','手机'], ['email','邮箱'], ['wechat','微信号'],
-    ['qq','QQ'], ['mbti','MBTI'], ['hometown','籍贯'], ['nationality','国籍'], ['jobSource','求职信息来源'], ['birthPlace','生源所在地'],
+    ['qq','QQ'], ['mbti','MBTI'], ['hometown','籍贯'], ['nationality','国籍'], ['jobSource','求职信息来源（分号分隔 = 备选顺序）'], ['birthPlace','生源所在地'],
     ['currentCity','现居城市'], ['address','通讯地址'], ['zipcode','邮政编码'], ['ethnicity','民族'], ['political','政治面貌'],
     ['idType','证件类型'], ['idcard','身份证号'], ['height','身高(cm)'], ['weight','体重(kg)'],
     ['maritalStatus','婚姻状况'], ['healthStatus','健康状况'],
@@ -714,20 +739,37 @@ const GROUPS = [
     ['rank','年级排名'], ['majorRank','专业排名'], ['courses','主修课程（精选）']
   ]},
   { title: '求职意向', fields: [
-    ['targetJob','目标岗位'], ['targetJob2','备选方向'], ['targetCity','期望城市'], ['expectSalary','期望薪资'],
+    ['targetJob','目标岗位'], ['targetJob2','备选方向'], ['targetCity','期望城市'], ['expectSalary','期望薪资（分号分隔 = 备选顺序）'],
     ['jobType','求职类型'], ['availableDate','到岗时间'], ['portfolio','作品集链接'],
     ['transferAccept','接受调剂'], ['transferCities','可接受工作地点'], ['tripartite','可签三方']
   ]},
-  { title: '经历', fields: [
-    ['exp1_company','经历1 · 单位'], ['exp1_title','经历1 · 项目/标题'],
-    ['exp1_role','经历1 · 角色'], ['exp1_time','经历1 · 时间'],
-    ['exp1_desc','经历1 · 描述（一句话总结）'],
-    ['exp2_company','经历2 · 单位'], ['exp2_title','经历2 · 项目/标题'],
-    ['exp2_role','经历2 · 角色'], ['exp2_time','经历2 · 时间'],
-    ['exp2_desc','经历2 · 描述（一句话总结）'],
-    ['exp3_company','经历3 · 单位'], ['exp3_title','经历3 · 项目/标题'],
-    ['exp3_role','经历3 · 角色'], ['exp3_time','经历3 · 时间'],
-    ['exp3_desc','经历3 · 描述（一句话总结）']
+  { title: '实习经历', fields: [
+    ['exp1_company','实习1 · 单位'], ['exp1_title','实习1 · 岗位'],
+    ['exp1_role','实习1 · 角色'], ['exp1_time','实习1 · 时间'],
+    ['exp1_desc','实习1 · 描述'],
+    ['exp2_company','实习2 · 单位'], ['exp2_title','实习2 · 岗位'],
+    ['exp2_role','实习2 · 角色'], ['exp2_time','实习2 · 时间'],
+    ['exp2_desc','实习2 · 描述']
+  ]},
+  { title: '项目经历', fields: [
+    ['prj1_title','项目1 · 名称'], ['prj1_org','项目1 · 所属'],
+    ['prj1_role','项目1 · 角色'], ['prj1_time','项目1 · 时间'],
+    ['prj1_desc','项目1 · 描述'],
+    ['prj2_title','项目2 · 名称'], ['prj2_org','项目2 · 所属'],
+    ['prj2_role','项目2 · 角色'], ['prj2_time','项目2 · 时间'],
+    ['prj2_desc','项目2 · 描述'],
+    ['prj3_title','项目3 · 名称'], ['prj3_org','项目3 · 所属'],
+    ['prj3_role','项目3 · 角色'], ['prj3_time','项目3 · 时间'],
+    ['prj3_desc','项目3 · 描述'],
+    ['prj4_title','项目4 · 名称'], ['prj4_org','项目4 · 所属'],
+    ['prj4_role','项目4 · 角色'], ['prj4_time','项目4 · 时间'],
+    ['prj4_desc','项目4 · 描述'],
+    ['prj5_title','项目5 · 名称'], ['prj5_org','项目5 · 所属'],
+    ['prj5_role','项目5 · 角色'], ['prj5_time','项目5 · 时间'],
+    ['prj5_desc','项目5 · 描述'],
+    ['prj6_title','项目6 · 名称'], ['prj6_org','项目6 · 所属'],
+    ['prj6_role','项目6 · 角色'], ['prj6_time','项目6 · 时间'],
+    ['prj6_desc','项目6 · 描述']
   ]},
   { title: '长文本', fields: [
     ['selfEval','自我评价 / 自我介绍'], ['skills','专业技能'], ['awards','奖项荣誉'],
@@ -742,7 +784,8 @@ const YESNO = [
 ];
 
 const TODO = new Set([]);
-const LONG = new Set(['selfEval','skills','awards','courses','coursesFull','exp1_desc','exp2_desc','exp3_desc']);
+const LONG = new Set(['selfEval','skills','awards','courses','coursesFull','exp1_desc','exp2_desc',
+  'prj1_desc','prj2_desc','prj3_desc','prj4_desc','prj5_desc','prj6_desc']);
 
 /* 枚举字段：给个可选下拉，手输也不受限（datalist 不是硬约束） */
 const ENUMS = {
@@ -794,7 +837,12 @@ const PH = {
   awards:      '奖项 + 时间，用「；」隔开',
   exp1_desc:   '一句话说清：做了什么、用什么方法、结果如何',
   exp2_desc:   '一句话说清：做了什么、用什么方法、结果如何',
-  exp3_desc:   '一句话说清：做了什么、用什么方法、结果如何',
+  prj1_desc:   '项目背景 / 你的动作 / 产出与指标',
+  prj2_desc:   '项目背景 / 你的动作 / 产出与指标',
+  prj3_desc:   '项目背景 / 你的动作 / 产出与指标',
+  prj4_desc:   '项目背景 / 你的动作 / 产出与指标',
+  prj5_desc:   '项目背景 / 你的动作 / 产出与指标',
+  prj6_desc:   '项目背景 / 你的动作 / 产出与指标',
   coursesFull: '按成绩单原样罗列，网申「专业课程」长文本框用这一栏'
 };
 
@@ -1300,6 +1348,9 @@ function applyResume(D, O) {
     '女': ['女性'],
     '汉族': ['汉'],
     '全职（校园招聘）': ['全职', '校园招聘'],
+    /* 薪资：网申下拉常按年薪分档，月薪区间要能对上等价的年薪档 */
+    '10000-15000元/月': ['1-1.5万/月', '1万-1.5万/月', '10-15万/年', '10万-15万/年', '10k-15k', '10000-15000'],
+    '10-20万/年': ['10万-20万/年', '10~20万/年'],
     '是': ['接受', '同意', '有'],
     '否': ['不接受', '不同意', '没有']
   };
@@ -1575,6 +1626,9 @@ function applyResume(D, O) {
 
   /* 日期/数字按控件类型与占位符格式化 */
   function fmtFor(el, val) {
+    /* 分号表示「按优先级依次尝试」（如 期望薪资 / 求职渠道）：
+       下拉里会逐个试选项，落到文本框时只取第一段，别把整串塞进去 */
+    val = String(val == null ? '' : val).split(';')[0].replace(/^\s+|\s+$/g, '');
     var type = (el.getAttribute('type') || '').toLowerCase();
     var ph = (el.getAttribute('placeholder') || '') + ' ' + (el.getAttribute('data-format') || '');
     if (type === 'date')   return /^\d{4}-\d{2}$/.test(val) ? val + '-01' : val;
@@ -1719,7 +1773,7 @@ function applyResume(D, O) {
         var val = D[key], ok = false;
         /* 开了多段经历模式时，经历类字段交给下面的 exp 逻辑按顺序对位，
            否则表单里三个「工作内容」会全被填成第一段的描述 */
-        if (O.exp && /^exp\d_/.test(key)) continue;
+        if (O.exp && /^(exp|prj)\d_/.test(key)) continue;
 
         /* 下拉组件：先登记，等主循环跑完再一个个点开选（弹层是异步渲染的） */
         if (combo) {
@@ -1766,21 +1820,51 @@ function applyResume(D, O) {
     for (var c = 0; c < CX.length; c++) {
       if (CX[c][0] === k) return String(CX[c][1] || k).split(/[|/、，,;；]/)[0];
     }
-    return k.replace(/^exp(\d)_/, '经历$1·');
+    if (/^exp\d_/.test(k)) return k.replace(/^exp(\d)_/, '实习$1·');
+    if (/^prj\d_/.test(k)) return k.replace(/^prj(\d)_/, '项目$1·');
+    return k;
   }
 
-  /* ---------- 可选：多段经历 ---------- */
+  /* ---------- 可选：多段经历（实习 / 项目分开对位） ---------- */
   if (O.exp && !DIAG) {
     (function () {
-      var EXP = [
-        ['company', /((公司|单位|企业)(名称|全称)?|实习单位|工作单位)/, /(学校|院校|推荐|紧急|项目)/],
-        ['title',   /(项目名称|实习项目|项目课题)/, /(学校|课程|专业)/],
-        ['role',    /(职位|岗位|职务|担任角色|角色)/, /(应聘|意向|期望|申请)/],
-        ['start',   /(开始时间|起始时间|入职时间|开始日期)/, null],
-        ['end',     /(结束时间|离职时间|截止时间|结束日期)/, null],
-        ['desc',    /(工作内容|工作描述|实习内容|职责描述|主要职责|业绩描述|项目描述)/, null]
-      ];
-      var pool = { desc: [] };
+      var R_ORG   = [/((公司|单位|企业)(名称|全称)?|实习单位|工作单位|所属(公司|单位)|项目所属)/, /(学校|院校|推荐|紧急)/];
+      var R_TITLE = [/(项目名称|实习项目|项目课题|项目\/?课题|项目标题)/, /(学校|课程|专业)/];
+      var R_ROLE  = [/(职位|岗位|职务|担任角色|角色|承担角色|项目角色)/, /(应聘|意向|期望|申请|描述|内容)/];
+      var R_START = [/(开始时间|起始时间|入职时间|开始日期|项目开始)/, null];
+      var R_END   = [/(结束时间|离职时间|截止时间|结束日期|项目结束)/, null];
+      var R_SPAN  = [/(项目时间|项目起止|起止时间|时间区间|起止日期)/, null];
+      var R_DESC  = [/(工作内容|工作描述|实习内容|职责描述|主要职责|业绩描述|项目描述|项目内容|项目职责|项目介绍|项目成果|项目业绩)/, null];
+
+      /* 页面把「实习」和「项目」分成两节时，按所在节归位，别串到一起 */
+      var HP = /(项目经历|项目经验|项目实践|主要项目|科研项目|代表项目)/;
+      var HI = /(实习经历|工作经历|实践经历|职业经历|工作履历|实习经验|工作经验)/;
+      var HEADS = [];
+      try {
+        var wk = document.createTreeWalker(document.body || document.documentElement, 4, null, false), tn;
+        while ((tn = wk.nextNode())) {
+          var st = (tn.nodeValue || '').replace(/\s/g, '');
+          if (!st || st.length > 12) continue;
+          var a1 = HP.test(st), b1 = HI.test(st);
+          if (a1 && b1) continue;            /* 「工作及项目经历」这种不算分节 */
+          var kd = a1 ? 'project' : (b1 ? 'intern' : '');
+          if (!kd) continue;
+          var pe = tn.parentNode;
+          try { if (!pe || !shown(pe)) continue; } catch (e) { continue; }
+          HEADS.push({ el: pe, kind: kd });
+        }
+      } catch (e) {}
+
+      function secKind(el) {
+        var best = '';
+        for (var i = 0; i < HEADS.length; i++) {
+          var r = 0;
+          try { r = HEADS[i].el.compareDocumentPosition(el); } catch (e) { continue; }
+          if (r & 4) best = HEADS[i].kind;   /* el 在这个标题之后 */
+        }
+        return best;
+      }
+
       var cands = [];
       var all = document.querySelectorAll('input,textarea');
       for (var a = 0; a < all.length; a++) {
@@ -1789,61 +1873,100 @@ function applyResume(D, O) {
           if (e2.disabled || e2.readOnly || !shown(e2)) continue;
           if (clean(e2.value)) continue;
           if (['hidden','submit','button','file','password'].indexOf((e2.getAttribute('type') || '').toLowerCase()) >= 0) continue;
-          cands.push({ el: e2, t: ctxText(e2) + ' ' + nearLabel(e2) + ' ' + ctxUp(e2, 2) });
+          cands.push({ el: e2, t: ctxText(e2) + ' ' + nearLabel(e2) + ' ' + ctxUp(e2, 2), k: secKind(e2) });
         } catch (e) {}
       }
+      /* 规则是 [命中正则, 排除正则]，排除正则可能为 null */
       function hit(rule, t) {
-        return rule[1].test(t) && !(rule[2] && rule[2].test(t));
+        return rule[0].test(t) && !(rule[1] && rule[1].test(t));
       }
-      /* 先认「工作内容」，它决定这页到底有没有经历块 */
+      function fieldOf(t) {
+        if (hit(R_DESC, t))  return 'desc';
+        if (hit(R_SPAN, t))  return 'span';
+        if (hit(R_TITLE, t)) return 'title';
+        if (hit(R_ROLE, t))  return 'role';
+        if (hit(R_ORG, t))   return 'org';
+        if (hit(R_END, t))   return 'end';
+        if (hit(R_START, t)) return 'start';
+        return '';
+      }
+
+      var POOL = { intern: {}, project: {}, none: {} };
+      function add(kd, f, el) { (POOL[kd][f] = POOL[kd][f] || []).push(el); }
+
+      /* 第一轮：描述框，它决定这页到底有没有经历块 */
       for (var c1 = 0; c1 < cands.length; c1++) {
-        if (!hit(EXP[5], cands[c1].t)) continue;
-        pool.desc.push(cands[c1].el);
+        if (!hit(R_DESC, cands[c1].t)) continue;
+        add(cands[c1].k || 'none', 'desc', cands[c1].el);
         cands[c1].used = 1;
       }
-      /* 其余字段必须排在某个「工作内容」前面，才算同一段经历；
-         否则「公司名称」这种问你现在在哪上班的字段也会被当成实习单位填掉 */
+      /* 第二轮：其余字段。已分节的按所在节归位；
+         没分节的必须排在某个描述框之前，否则「公司名称」这种问你现在在哪上班的字段也会被当成实习单位 */
       for (var c2 = 0; c2 < cands.length; c2++) {
         if (cands[c2].used) continue;
-        for (var b = 0; b < 5; b++) {
-          if (!hit(EXP[b], cands[c2].t)) continue;
-          var hasDescAfter = false;
-          for (var dI = 0; dI < pool.desc.length; dI++) {
-            if (cands[c2].el.compareDocumentPosition(pool.desc[dI]) & 4) { hasDescAfter = true; break; }
-          }
-          if (hasDescAfter) (pool[EXP[b][0]] = pool[EXP[b][0]] || []).push(cands[c2].el);
-          break;
+        var f2 = fieldOf(cands[c2].t);
+        if (!f2) continue;
+        var k2 = cands[c2].k;
+        if (k2) { add(k2, f2, cands[c2].el); continue; }
+        var descs = (POOL.none.desc || []).concat(POOL.intern.desc || [], POOL.project.desc || []);
+        for (var dI = 0; dI < descs.length; dI++) {
+          if (cands[c2].el.compareDocumentPosition(descs[dI]) & 4) { add('none', f2, cands[c2].el); break; }
         }
       }
-      for (var n = 0; n < 3; n++) {
-        var p = n + 1;
-        var span = String(D['exp' + p + '_time'] || '').split('-');
-        var s0 = clean(span[0] || '').replace(/\./g, '-'), s1 = clean(span[1] || '').replace(/\./g, '-');
-        if (/至今|现在|now/i.test(s1)) s1 = '';
-        var map = {
-          company: D['exp' + p + '_company'],
-          title:   D['exp' + p + '_title'],
-          role:    D['exp' + p + '_role'],
-          start:   s0,
-          end:     s1,
-          desc:    D['exp' + p + '_desc']
-        };
-        for (var kk in map) {
-          if (!map[kk] || !pool[kk] || !pool[kk][n]) continue;
-          var cell = pool[kk][n], mv = map[kk];
-          /* 时间框只要年月日；「2026 - 至今」这种只有年份的，别硬塞，报出来让人手选 */
-          if (kk === 'start' || kk === 'end') {
-            var ct = (cell.getAttribute('type') || '').toLowerCase();
-            if ((ct === 'date' || ct === 'month') && !/^\d{4}-\d{2}(-\d{2})?$/.test(mv)) {
-              RES.failed.push({ l: labelText(cell), r: '只有年份「' + mv + '」，请手动选月份' });
-              continue;
-            }
-          }
-          try {
-            protoSet(cell, fmtFor(cell, mv));
-            RES.filled.push({ k: 'exp' + p + '_' + kk, l: labelText(cell), v: String(mv).slice(0, 40) });
-          } catch (e) {}
+
+      function pack(pre, max) {
+        var out = [];
+        for (var p = 1; p <= max; p++) {
+          var org = clean(D[pre + p + '_company'] || D[pre + p + '_org'] || '');
+          var ttl = clean(D[pre + p + '_title'] || '');
+          if (!org && !ttl) break;
+          var raw = String(D[pre + p + '_time'] || '');
+          var sp = raw.split('-');
+          var s0 = clean(sp[0] || '').replace(/\./g, '-'), s1 = clean(sp[1] || '').replace(/\./g, '-');
+          if (/至今|现在|now/i.test(s1)) s1 = '';
+          out.push({
+            org: org, title: ttl, role: clean(D[pre + p + '_role'] || ''),
+            start: s0, end: s1, span: clean(raw),
+            desc: clean(D[pre + p + '_desc'] || ''), key: pre + p
+          });
         }
+        return out;
+      }
+      var INTERN = pack('exp', 4), PROJ = pack('prj', 6);
+
+      function fill(kd, list) {
+        var P = POOL[kd], hasAny = false;
+        if (!P || !list.length) return;
+        for (var f in P) { if (P[f] && P[f].length) hasAny = true; }
+        if (!hasAny) return;
+        for (var n = 0; n < list.length; n++) {
+          var d = list[n];
+          var map = { org: d.org, title: d.title, role: d.role, start: d.start, end: d.end, span: d.span, desc: d.desc };
+          for (var kk in map) {
+            if (!map[kk] || !P[kk] || !P[kk][n]) continue;
+            var cell = P[kk][n], mv = map[kk];
+            /* 时间框只要年月日；「2026 - 至今」这种只有年份的，别硬塞，报出来让人手选 */
+            if (kk === 'start' || kk === 'end') {
+              var ct = (cell.getAttribute('type') || '').toLowerCase();
+              if ((ct === 'date' || ct === 'month') && !/^\d{4}-\d{2}(-\d{2})?$/.test(mv)) {
+                RES.failed.push({ l: labelText(cell), r: '只有年份「' + mv + '」，请手动选月份' });
+                continue;
+              }
+            }
+            try {
+              protoSet(cell, fmtFor(cell, mv));
+              RES.filled.push({ k: d.key + '_' + kk, l: labelText(cell), v: String(mv).slice(0, 40) });
+            } catch (e) {}
+          }
+        }
+      }
+
+      if (HEADS.length) {
+        fill('intern', INTERN);
+        fill('project', PROJ);
+      } else {
+        /* 没分节：实习在前、项目在后，按顺序对位到同一批块 */
+        fill('none', INTERN.concat(PROJ));
       }
     })();
   }
