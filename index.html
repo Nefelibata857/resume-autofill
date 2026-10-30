@@ -137,6 +137,62 @@ pre.script{
 .status.dirty{color:var(--warn);}
 .sep{height:1px;background:var(--line);margin:14px 0 12px;}
 
+/* ---------- 安装书签 ---------- */
+button.installbtn{
+  width:100%;padding:14px;font-size:14px;font-weight:600;letter-spacing:.02em;
+  background:var(--gold);border-color:var(--gold);color:#fff;
+  box-shadow:0 1px 0 rgba(0,0,0,.06);
+}
+button.installbtn:hover{background:#9d7843;border-color:#9d7843;}
+.minsteps{display:grid;gap:7px;margin-top:12px;}
+.ms{display:flex;gap:9px;font-size:12.5px;color:#4a463f;line-height:1.55;}
+.ms i{
+  flex:0 0 16px;width:16px;height:16px;border-radius:50%;background:#efe9df;color:#8a7f6d;
+  font-size:10.5px;font-weight:600;font-style:normal;display:flex;align-items:center;
+  justify-content:center;margin-top:2px;
+}
+.ms b{color:var(--ink);font-weight:600;}
+kbd{
+  display:inline-block;background:#f4f1ec;border:1px solid #e2dbd0;border-radius:4px;
+  padding:0 5px;font:11px/16px ui-monospace,Consolas,monospace;color:#5c554b;margin:0 1px;
+}
+details.alt{margin-top:4px;}
+details.alt summary{
+  font-size:12px;color:var(--sub);cursor:pointer;padding:3px 0;list-style:none;
+}
+details.alt summary::-webkit-details-marker{display:none;}
+details.alt summary::before{content:"▸ ";color:#b9b2a6;}
+details.alt[open] summary::before{content:"▾ ";}
+details.alt summary:hover{color:var(--gold);}
+details.alt[open] summary{margin-bottom:9px;}
+
+/* 安装引导弹层 */
+.mbox.narrow{max-width:520px;}
+.ins{display:grid;gap:10px;margin:4px 0 16px;}
+.insrow{
+  display:flex;gap:11px;align-items:flex-start;padding:11px 13px;border:1px solid var(--line);
+  border-radius:9px;background:#fbfaf8;
+}
+.insrow.done{background:#eef6f0;border-color:#cfe6d7;}
+.insrow i{
+  flex:0 0 19px;width:19px;height:19px;border-radius:50%;background:#efe9df;color:#8a7f6d;
+  font-size:11px;font-weight:600;font-style:normal;display:flex;align-items:center;
+  justify-content:center;margin-top:1px;
+}
+.insrow.done i{background:#2f7d4f;color:#fff;}
+.insrow div{flex:1;min-width:0;}
+.insrow b{display:block;font-weight:600;color:var(--ink);font-size:13px;}
+.insrow span{color:var(--sub);font-size:12px;}
+.insrow .kb{flex:0 0 auto;display:flex;align-items:center;gap:3px;color:#b9b2a6;font-size:11px;}
+.insrow .kb kbd{font-size:11px;padding:1px 6px;background:#fff;}
+.instip{
+  font-size:12px;color:var(--sub);line-height:1.7;background:var(--gold-soft);
+  border-radius:8px;padding:10px 12px;color:#6f5426;margin-bottom:16px;
+}
+.insbtns{display:flex;gap:9px;}
+.insbtns button{flex:1;padding:11px;font-size:13px;}
+
+
 /* ---------- 顶部区块导航 ---------- */
 #tabs{
   max-width:1440px;margin:0 auto;padding:0 24px 10px;display:flex;gap:5px;
@@ -336,9 +392,9 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 </header>
 
 <div id="banner"><div class="in">
-  <b>数据已修改，书签还是旧版本。</b>
-  <span>重新下载书签文件并导入（导入前先删掉旧的「简历填表」书签，否则会重复）。</span>
-  <button id="banner-dl">立即下载</button>
+  <b>数据改过了，书签里还是旧的。</b>
+  <span>点右边重新复制，再按 Ctrl+D 覆盖旧书签就行。</span>
+  <button id="banner-dl">更新书签</button>
 </div></div>
 
 <div id="hello"><div class="in">
@@ -381,28 +437,30 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
     <div class="card">
       <h2>一键填表</h2>
 
-      <button class="primary" id="btn-bmfile" style="width:100%;padding:13px;font-size:13.5px;margin-bottom:8px">
-        下载书签文件
-      </button>
-      <button id="btn-copybm" style="width:100%;margin-bottom:14px">
-        复制书签地址（手动添加用）
-      </button>
+      <button class="primary installbtn" id="btn-install">安装填表书签</button>
+      <div class="status" id="bm-status">点一下，代码进剪贴板，再按 3 下键就好</div>
 
-      <div class="step"><i class="n">1</i><div>点上面的按钮，把 <code id="bm-filename">简历填表书签.html</code> 存下来。</div></div>
-      <div class="step"><i class="n">2</i><div>浏览器打开书签管理器（<code>Ctrl+Shift+O</code>）→ 右上角 <code>⋮</code> → <b>导入书签</b> → 选刚存的文件。</div></div>
-      <div class="step"><i class="n">3</i><div>按 <code>Ctrl+Shift+B</code> 显示书签栏，导入的书签在「已导入」文件夹里，拖出来即可。</div></div>
-      <div class="step"><i class="n">4</i><div>以后打开网申页面，点一下书签，表格自动填好，右下角出现结果清单。</div></div>
-
-      <div class="tip" style="margin:2px 0 8px">
-        <b>也可以在页面里直接拖</b>（部分 Chrome 版本会拦下 javascript 链接，拖不动就用上面的导入法）：
+      <div class="minsteps">
+        <div class="ms"><i>1</i><div>点上面按钮 → <b>代码已复制</b></div></div>
+        <div class="ms"><i>2</i><div>按 <kbd>Ctrl</kbd>+<kbd>D</kbd> → 弹出「添加收藏夹」</div></div>
+        <div class="ms"><i>3</i><div><kbd>Ctrl</kbd>+<kbd>V</kbd> 粘进<b>网址</b>框 → 回车</div></div>
       </div>
-      <a class="bm" id="bm-full" href="javascript:void 0"><span class="drag">⇢</span> 拖我到书签栏（完整版）</a>
-      <a class="bm" id="bm-short" href="javascript:void 0"><span class="drag">⇢</span> 拖我到书签栏（精简版）</a>
 
-      <div class="tip" style="margin-top:6px">
-        精简版只填姓名/电话/邮箱/学校/专业等短字段，最稳；完整版额外填长文本、以及多段实习经历。
+      <div class="tip" style="margin-top:10px">
+        存到「<b>书签栏</b>」，别丢进文件夹。以后改完数据点一次「安装填表书签」重装即可（会覆盖同名书签，先删旧的再存不会重复）。
       </div>
-      <div class="status" id="bm-status">书签已就绪</div>
+
+      <div class="sep"></div>
+
+      <details class="alt">
+        <summary>其他安装方式</summary>
+        <a class="bm" id="bm-full" href="javascript:void 0"><span class="drag">⇢</span> 直接拖我到书签栏</a>
+        <div class="tip">能拖动就最省事；新版 Chrome 有时会拦下 <code>javascript:</code> 链接的拖拽。</div>
+        <button id="btn-bmfile" style="width:100%;margin-top:10px">下载书签文件再导入</button>
+        <div class="tip" style="margin-top:6px">
+          下载后：<code>Ctrl+Shift+O</code> 打开书签管理器 → <code>⋮</code> → 导入书签 → 选文件。
+        </div>
+      </details>
 
       <div class="sep"></div>
       <div class="tip">
@@ -435,7 +493,45 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 
 <div id="toast"></div>
 
-<button class="floatdl" id="float-dl">生成书签文件</button>
+<button class="floatdl" id="float-dl">装填表书签</button>
+
+<div id="install" class="modal">
+  <div class="mbox narrow" role="dialog" aria-modal="true" aria-labelledby="install-title">
+    <div class="mhd">
+      <h3 id="install-title">安装填表书签</h3>
+      <button class="mx" id="install-x" aria-label="关闭">×</button>
+    </div>
+    <div class="mbd">
+      <div class="ins">
+        <div class="insrow done" id="ins-1">
+          <i>1</i>
+          <div><b>填表代码已复制</b><span id="ins-copy-hint">已放进剪贴板，接下来别再复制别的东西</span></div>
+          <span class="kb" id="ins-1-tick">✓</span>
+        </div>
+        <div class="insrow">
+          <i>2</i>
+          <div><b>按 Ctrl + D</b><span>浏览器会弹出「添加收藏夹 / 添加书签」窗口</span></div>
+          <span class="kb"><kbd>Ctrl</kbd><b>+</b><kbd>D</kbd></span>
+        </div>
+        <div class="insrow">
+          <i>3</i>
+          <div><b>名称随便写，网址框里粘贴</b><span>按 <kbd>Tab</kbd> 跳到「网址」→ <kbd>Ctrl</kbd>+<kbd>A</kbd> 删掉原有内容 → <kbd>Ctrl</kbd>+<kbd>V</kbd> → 回车保存</span></div>
+          <span class="kb"><kbd>Ctrl</kbd><b>+</b><kbd>V</kbd></span>
+        </div>
+      </div>
+
+      <div class="instip">
+        保存位置选「<b>书签栏</b>」，别放进文件夹，不然以后找不到。
+        网页本身没办法直接往你的书签里写东西（这是浏览器的安全限制，否则任何网站都能偷偷塞书签），所以最后这几下按键得你亲自按——一共就一次。
+      </div>
+
+      <div class="insbtns">
+        <button class="primary" id="ins-ok">我装好了</button>
+        <button id="ins-again">再复制一次</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div id="help" class="modal">
   <div class="mbox" role="dialog" aria-modal="true" aria-labelledby="help-title">
@@ -452,13 +548,15 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 
       <h4>一、装书签（只做一次，用电脑）</h4>
       <ol>
-        <li>在下面把要用的信息填好。只填 <b>8 个必填项</b>就能生成可用书签，其余按网申要求补。</li>
-        <li>点右上角「<b>下载书签文件</b>」，存下一个 <code>简历填表书签.html</code>。</li>
-        <li>浏览器按 <code>Ctrl + Shift + O</code> 打开书签管理器 → 右上角 <code>⋮</code> → <b>导入书签</b> → 选刚存的文件。</li>
-        <li>按 <code>Ctrl + Shift + B</code> 显示书签栏，导入的书签在「已导入」文件夹里，拖出来即可。</li>
+        <li>把要用的信息填好。只填 <b>8 个必填项</b>就能生成可用书签，其余按网申要求补。</li>
+        <li>点右侧「<b>安装填表书签</b>」——代码自动进剪贴板，并弹出三步引导。</li>
+        <li>按 <code>Ctrl + D</code>，浏览器弹出「添加收藏夹」；名称随便写「填表」。</li>
+        <li>按 <code>Tab</code> 跳到「网址」框 → <code>Ctrl + A</code> 删掉原有内容 → <code>Ctrl + V</code> → 回车。</li>
+        <li>保存位置选「<b>书签栏</b>」，并按 <code>Ctrl + Shift + B</code> 让书签栏一直显示。</li>
       </ol>
       <p class="mtip">
-        拖不进书签栏是正常的 —— 新版 Chrome 会拦下 <code>javascript:</code> 链接的拖拽。用上面的导入法就行。
+        网页没法直接往你的书签里写东西（浏览器安全限制），所以复制之后要你亲自按这三下，一共只做一次。
+        改完资料要重装：再点一次「安装填表书签」，把<a>旧书签删掉</a>再存新的，避免两条重名。
       </p>
 
       <h4>二、以后投简历</h4>
@@ -530,6 +628,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
   "birthPlace": "",
   "currentCity": "",
   "address": "",
+  "zipcode": "",
   "ethnicity": "",
   "political": "",
   "idType": "",
@@ -602,7 +701,7 @@ const GROUPS = [
     ['name','姓名'], ['enName','英文名'], ['gender','性别'], ['birthday','出生日期'],
     ['age','年龄（按生日自动算）'], ['phone','手机'], ['email','邮箱'], ['wechat','微信号'],
     ['qq','QQ'], ['mbti','MBTI'], ['hometown','籍贯'], ['nationality','国籍'], ['jobSource','求职信息来源'], ['birthPlace','生源所在地'],
-    ['currentCity','现居城市'], ['address','通讯地址'], ['ethnicity','民族'], ['political','政治面貌'],
+    ['currentCity','现居城市'], ['address','通讯地址'], ['zipcode','邮政编码'], ['ethnicity','民族'], ['political','政治面貌'],
     ['idType','证件类型'], ['idcard','身份证号'], ['height','身高(cm)'], ['weight','体重(kg)'],
     ['maritalStatus','婚姻状况'], ['healthStatus','健康状况'],
     ['emergencyName','紧急联系人'], ['emergencyPhone','紧急联系人电话']
@@ -610,7 +709,7 @@ const GROUPS = [
   { title: '教育背景', fields: [
     ['school','学校'], ['college','学院/院系'], ['major','专业'], ['degree','学历'],
     ['academicDegree','学位'], ['eduType','受教育类型'], ['isUpgrade','是否专升本'],
-    ['studentId','学号'], ['className','班级'], ['tutor','导师'],
+    ['studentId','学号'], ['className','班级'], ['tutor','导师（研究生填，本科留空）'],
     ['enrollDate','入学时间'], ['graduateDate','毕业时间'], ['gpa','GPA'], ['majorGpa','专业课绩点'],
     ['rank','年级排名'], ['majorRank','专业排名'], ['courses','主修课程（精选）']
   ]},
@@ -730,6 +829,7 @@ function applyResume(D, O) {
     ['wechat',        /(微信号|微信账号|微信)/, /(公众号|群|二维码)/],
     ['qq',            /((^|[^a-z])qq([^a-z]|$))/i, /(邮箱|群)/],
     ['hometown',      /(籍贯|户籍所在地|户籍|户口所在地|户口所在)/, /(详细地址|通讯地址|家庭地址)/],
+    ['zipcode',       /(邮政编码|邮编|邮\s*编|zip\s*code|postcode)/, /(电话|手机|邮箱)/],
     ['birthPlace',    /(生源所在地|生源地|生源)/, /(地址)/],
     ['currentCity',   /(现居住地|现居|所在城市|当前城市|居住城市|常住地)/, /(期望|意向|学校|出生)/],
     ['address',       /(通讯地址|联系地址|详细地址|邮寄地址|家庭地址|现住址|住址)/, /(邮编|邮箱)/],
@@ -2429,17 +2529,19 @@ function syncBanner() {
 
 function refreshBookmarks() {
   const full  = buildScript({ exp: true });
-  const short = buildScript({ short: true });
-  document.getElementById('bm-full').setAttribute('href',  'javascript:' + encodeURIComponent(full));
-  document.getElementById('bm-short').setAttribute('href', 'javascript:' + encodeURIComponent(short));
-  document.getElementById('script-preview').textContent = full;
+  const el = document.getElementById('bm-full');
+  if (el) el.setAttribute('href', 'javascript:' + encodeURIComponent(full));
+  const sp = document.getElementById('script-preview');
+  if (sp) sp.textContent = full;
 
   const fn = document.getElementById('bm-filename');
   if (fn) fn.textContent = '简历填表书签.html';
 
   const s = document.getElementById('bm-status');
-  s.className = 'status';
-  s.textContent = '书签已生成 · ' + (full.length / 1024).toFixed(1) + ' KB';
+  if (s) {
+    s.className = 'status';
+    s.textContent = '书签已就绪 · ' + (full.length / 1024).toFixed(1) + ' KB';
+  }
 
   /* 通用版：数据一变就同步进度条和引导条 */
   renderProgress();
@@ -2564,8 +2666,8 @@ const doDownloadBookmarks = () => {
 };
 
 document.getElementById('btn-bmfile').addEventListener('click', doDownloadBookmarks);
-document.getElementById('float-dl').addEventListener('click', doDownloadBookmarks);
-document.getElementById('banner-dl').addEventListener('click', doDownloadBookmarks);
+document.getElementById('float-dl').addEventListener('click', doInstall);
+document.getElementById('banner-dl').addEventListener('click', doInstall);
 
 document.getElementById('btn-diag').addEventListener('click', () => {
   download('简历诊断书签.html', (function () {
@@ -2582,12 +2684,59 @@ document.getElementById('btn-diag').addEventListener('click', () => {
   toast('诊断书签已下载，导入后点它会列出整页字段');
 });
 
-document.getElementById('btn-copybm').addEventListener('click', async () => {
+/* ---------- 安装书签：一下复制，三步装好 ---------- */
+const installEl = document.getElementById('install');
+function openInstall() {
+  installEl.classList.add('on');
+  document.body.style.overflow = 'hidden';
+}
+function closeInstall() {
+  installEl.classList.remove('on');
+  document.body.style.overflow = '';
+}
+
+async function doInstall() {
   if (!incompleteWarn()) return;
   const url = 'javascript:' + encodeURIComponent(buildScript({ exp: true }));
+  openInstall();                        /* 先弹层：即便复制失败，也有别的出口 */
   const ok = await copyText(url);
-  if (ok) toast('已复制 · 去书签管理器新建书签，粘贴到网址栏');
+  const row  = document.getElementById('ins-1');
+  const hint = document.getElementById('ins-copy-hint');
+  const tick = document.getElementById('ins-1-tick');
+  if (ok) {
+    row.classList.add('done');
+    tick.textContent = '✓';
+    hint.textContent = '已放进剪贴板（' + (url.length / 1024).toFixed(0) + ' KB），接下来别再复制别的东西';
+    markExported();
+  } else {
+    row.classList.remove('done');
+    tick.textContent = '!';
+    hint.textContent = '剪贴板没写进去 —— 点下面「再复制一次」，或换用「下载书签文件」';
+  }
+}
+
+document.getElementById('btn-install').addEventListener('click', doInstall);
+document.getElementById('install-x').addEventListener('click', closeInstall);
+installEl.addEventListener('click', ev => { if (ev.target === installEl) closeInstall(); });
+document.getElementById('ins-ok').addEventListener('click', () => {
+  closeInstall();
+  toast('装好了 · 打开网申页面点一下书签就会自动填');
 });
+document.getElementById('ins-again').addEventListener('click', async () => {
+  const url = 'javascript:' + encodeURIComponent(buildScript({ exp: true }));
+  const ok = await copyText(url);
+  if (ok) {
+    document.getElementById('ins-1').classList.add('done');
+    document.getElementById('ins-1-tick').textContent = '✓';
+    document.getElementById('ins-copy-hint').textContent =
+      '已重新复制（' + (url.length / 1024).toFixed(0) + ' KB），现在按 Ctrl+D';
+    markExported();
+    toast('已重新复制');
+  } else {
+    toast('还是没复制成功，改用「下载书签文件」');
+  }
+});
+
 
 /* ---------- 区块导航：长表单按分组跳转 ---------- */
 function buildTabs() {
@@ -2804,6 +2953,7 @@ function parseResumeText(raw) {
     ['birthPlace',    ['生源所在地', '生源地'], 'mid'],
     ['currentCity',   ['现居住地', '现居', '所在城市', '常住地'], 'mid'],
     ['address',       ['通讯地址', '联系地址', '详细地址', '家庭地址'], 'mid'],
+    ['zipcode',       ['邮政编码', '邮编'], 'mid'],
     ['ethnicity',     ['民族'], 'mid'],
     ['political',     ['政治面貌'], 'mid'],
     ['maritalStatus', ['婚姻状况', '婚姻状态', '婚否'], 'low'],
