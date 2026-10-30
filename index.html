@@ -973,6 +973,8 @@ function applyResume(D, O) {
   var ASYNC = [];
   var TEXTKEY = /^(name|enName|phone|emergencyPhone|email|idcard|wechat|qq|studentId|portfolio|gpa|majorGpa|height|weight|className|tutor)$/;
   var COMBO_CLS = /(^|[\s_-])(ant-select|ant-cascader|el-select|el-cascader|ivu-select|ivu-cascader|n-select|n-cascader|arco-select|layui-form-select|select2|chosen-container|vue-treeselect|react-select)/;
+  /* 这几种是「点击目标本身就是个壳」，里面没有 input，原生 select 被 display:none 藏了 */
+  var SHELL_CLS = /(^|[\s_-])(select2-selection|chosen-single|layui-select-title)(\s|$)/;
   var OPT_SEL = '.ant-select-item-option,.ant-select-dropdown-menu-item,.el-select-dropdown__item,'
     + '.el-select-dropdown li,.el-cascader-node,.ant-cascader-menu-item,'
     + '.ivu-select-item,.n-base-select-option,.arco-select-option,.t-select-option,.semi-select-option,'
@@ -1330,7 +1332,8 @@ function applyResume(D, O) {
   var seenK = {};
   for (var di = 0; di < docs.length; di++) {
     var doc = docs[di], els;
-    try { els = doc.querySelectorAll('input,textarea,select,[contenteditable="true"],[role="combobox"]'); }
+    try { els = doc.querySelectorAll('input,textarea,select,[contenteditable="true"],[role="combobox"],'
+      + '.select2-selection,.chosen-single,.layui-select-title'); }
     catch (e) { continue; }
     if (!els || !els.length) continue;
     var seenG = {};
@@ -1347,8 +1350,9 @@ function applyResume(D, O) {
            也兼容纯 div 做的下拉（role=combobox，里面没有 input）。 */
         var combo = false, ro = !!el.readOnly;
         var role = (el.getAttribute('role') || '').toLowerCase();
-        if (tag !== 'select' && type !== 'radio' && type !== 'checkbox' && (ro || role === 'combobox')) {
-          if (isCombo(el)) combo = true;
+        if (tag !== 'select' && type !== 'radio' && type !== 'checkbox') {
+          var shell = SHELL_CLS.test(clsOf(el));
+          if (isCombo(el) && (ro || role === 'combobox' || shell)) combo = true;
           else if (ro) continue;
         }
         if (!shown(el)) continue;
