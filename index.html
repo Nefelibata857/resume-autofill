@@ -2808,6 +2808,28 @@ document.getElementById('file-imp').addEventListener('change', e => {
   e.target.value = '';
 });
 
+/* 一键清空：所有字段置空。自定义字段的行保留，只是值变空，免得重新加字段 */
+function clearAllFields() {
+  const blank = {};
+  Object.keys(DEFAULTS).forEach(k => { blank[k] = ''; });
+  Object.keys(DATA).forEach(k => { blank[k] = ''; });
+  blank.__custom = DATA.__custom || '';
+  DATA = blank;
+  saveData();
+  render();
+  renderHealth();
+  refreshBookmarks();
+  syncBanner();
+  toast('已清空');
+}
+
+/* 通用版会把这个按钮删掉（它的「清空全部」就是清空），所以这里要容错 */
+const btnClearAll = document.getElementById('btn-clearall');
+if (btnClearAll) btnClearAll.addEventListener('click', () => {
+  if (!confirm('清空所有已填内容？\n\n建议先点「导出 JSON」备份，之后还能导入回来。\n清空后本机浏览器里不会留下你的信息。')) return;
+  clearAllFields();
+});
+
 document.getElementById('btn-reset').addEventListener('click', () => {
   if (!confirm('清空所有已填内容？\n\n建议先点「导出 JSON」备份，之后还能导入回来。\n清空后本机浏览器里不会留下你的信息。')) return;
   DATA = Object.assign({}, DEFAULTS);
