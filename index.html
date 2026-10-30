@@ -876,7 +876,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v12';
+  var ENGINE_VER = 'v13';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -1216,13 +1216,14 @@ function applyResume(D, O) {
      主循环只负责把待办登记到 ASYNC，循环跑完再一个个处理。 */
   var ASYNC = [];
   var TEXTKEY = /^(name|enName|phone|emergencyPhone|email|idcard|wechat|qq|studentId|portfolio|gpa|majorGpa|height|weight|className|tutor)$/;
-  var COMBO_CLS = /(^|[\s_-])(ant-select|ant-cascader|el-select|el-cascader|ivu-select|ivu-cascader|n-select|n-cascader|arco-select|layui-form-select|select2|chosen-container|vue-treeselect|react-select)/;
+  var COMBO_CLS = /(^|[\s_-])(ant-select|ant-cascader|el-select|el-cascader|ivu-select|ivu-cascader|n-select|n-cascader|arco-select|layui-form-select|select2|chosen-container|vue-treeselect|react-select|semi-select|semi-cascader|semi-tree-select|semi-datepicker)/;
   /* 这几种是「点击目标本身就是个壳」，里面没有 input，原生 select 被 display:none 藏了 */
   var SHELL_CLS = /(^|[\s_-])(select2-selection|chosen-single|layui-select-title)(\s|$)/;
   var OPT_SEL = '.ant-select-item-option,.ant-select-dropdown-menu-item,.el-select-dropdown__item,'
     + '.el-select-dropdown li,.el-cascader-node,.ant-cascader-menu-item,'
     + '.ivu-select-item,.n-base-select-option,.arco-select-option,.t-select-option,.semi-select-option,'
-    + '.layui-form-select dd,.select2-results__option,.chosen-results li,.react-select__option,[role="option"]';
+    + '.layui-form-select dd,.select2-results__option,.chosen-results li,.react-select__option,'
+    + '.semi-select-option,.semi-cascader-option,.semi-tree-option,[role="option"],[role="menuitem"]';
 
   function clsOf(n) {
     if (!n || !n.className) return '';
@@ -1255,7 +1256,8 @@ function applyResume(D, O) {
     var b = comboBox(el), t = null;
     try {
       t = b.querySelector('.ant-select-selector,.el-select__wrapper,.el-input,.ivu-select-selection,'
-        + '.n-base-selection,.arco-select-view,.select2-selection,.chosen-single,.layui-select-title');
+        + '.n-base-selection,.arco-select-view,.select2-selection,.chosen-single,.layui-select-title,'
+        + '.semi-select,.semi-cascader,.semi-input-wrapper');
     } catch (e) {}
     return t || el;
   }
@@ -1265,7 +1267,8 @@ function applyResume(D, O) {
     try {
       nodes = b.querySelectorAll('.ant-select-selection-item,.ant-select-selection-selected-value,'
         + '.el-select__selected-item,.el-select__placeholder,.ivu-select-selected-value,'
-        + '.n-base-selection-label,.arco-select-view-value,.select2-selection__rendered,.chosen-single span');
+        + '.n-base-selection-label,.arco-select-view-value,.select2-selection__rendered,.chosen-single span,'
+        + '.semi-select-selection-text,.semi-cascader-selection,.semi-select-selection-placeholder');
     } catch (e) { nodes = null; }
     for (i = 0; nodes && i < nodes.length; i++) {
       var s = clean(nodes[i].innerText || '');
@@ -1274,6 +1277,57 @@ function applyResume(D, O) {
     if (!t) t = clean(el.value || '');
     if (PH.test(t.replace(/\s/g, ''))) t = '';
     return t;
+  }
+  /* ---------- 认「普通 div 列表」型的选项 ----------
+     有些组件库（字节 Semi）的下拉不是浮层，也不是 role="option"：
+     选项就是紧贴控件下方、正常排布的一串 div。类名靠不住，只能靠「点完多出来的字」。 */
+  var LEAF_SEQ = 0;
+  function idxOf(e) {
+    try { if (!e.__rz_i) e.__rz_i = ++LEAF_SEQ; return e.__rz_i; } catch (x) { return 0; }
+  }
+  /* 当前可见的短文字叶子节点（选项一定是叶子，父容器会把整列文字连坐） */
+  function leafSnap(doc) {
+    var out = [], all, i;
+    try { all = doc.querySelectorAll('div,li,span,a,p,dd,td,label'); } catch (e) { return out; }
+    for (i = 0; i < all.length && i < 8000; i++) {
+      var e = all[i];
+      if (e.children && e.children.length) continue;
+      if (!shown(e)) continue;
+      var t = clean(e.innerText || '');
+      if (!t || t.length > 30) continue;
+      out.push(e);
+    }
+    return out;
+  }
+  /* 控件附近的短文字：优先「点击后新增的」，一个都没新增就退回「附近全部」，
+     最终仍由 pickOpt 按值比对来定，误捡的别的字不会造成错选 */
+  function candNear(el, before, onlyFresh) {
+    var doc = el.ownerDocument || document, r, all, i, j;
+    try { r = el.getBoundingClientRect(); } catch (e) { return []; }
+    var old = {};
+    for (j = 0; before && j < before.length; j++) old[idxOf(before[j])] = 1;
+    var fresh = [], loose = [];
+    try { all = doc.querySelectorAll('div,li,span,a,p,dd,td,label'); } catch (e2) { return []; }
+    for (i = 0; i < all.length && i < 8000; i++) {
+      var e = all[i];
+      if (e.children && e.children.length) continue;
+      if (!shown(e)) continue;
+      var t = clean(e.innerText || '');
+      if (!t || t.length > 30) continue;
+      var q;
+      try { q = e.getBoundingClientRect(); } catch (e3) { continue; }
+      /* 竖直：控件下方 0~620，或上方 0~220（有的面板向上弹） */
+      if (q.top < r.top - 220 || q.top > r.bottom + 620) continue;
+      /* 水平：和控件有重叠，左右各让 60px */
+      if (q.right < r.left - 60 || q.left > r.right + 60) continue;
+      /* 控件自己框里的字（占位符）不算 */
+      if (q.top >= r.top - 6 && q.bottom <= r.bottom + 6) continue;
+      var o = { el: e, t: t };
+      loose.push(o);
+      if (!old[idxOf(e)]) fresh.push(o);
+    }
+    if (fresh.length) return fresh;
+    return onlyFresh ? [] : loose;
   }
   function mouseIn(el, t) {
     var w = W(el);
@@ -1542,13 +1596,27 @@ function applyResume(D, O) {
       if (sg.length > 1) { step(sg, 0); return; }
       fin(false);
     }
+    /* 内联面板（选项就是贴在控件下方的一串普通 div）点第二次会把面板关掉，
+       所以顺序必须是：点开 → 标准选择器找 → 就地取「新增文字」→ 实在没有才点外壳重试 */
+    function tryNear(onlyFresh) {
+      var LN = candNear(el, before, onlyFresh), csN = candOf(val), hN = null, iN;
+      for (iN = 0; iN < csN.length; iN++) { hN = pickOpt(LN, csN[iN]); if (hN) break; }
+      if (!hN) return false;
+      /* 多选组件点完还开着，属正常，别当成没选中 */
+      tap(hN.el);
+      fin(true, '', hN.t);
+      return true;
+    }
+    var before = leafSnap(doc);
     tap(el);
     waitOpts(doc, function (L) {
       if (L.length) { go(L); return; }
+      if (tryNear(true)) return;
       /* 有的组件点 input 不弹，得点外壳再试一次 */
       tap(comboTarget(el));
       waitOpts(doc, function (L2) {
         if (L2.length) { go(L2); return; }
+        if (tryNear(false)) return;
         /* 自家组件的弹层没有标准类名：按「浮层里的叶子文字」再试一次 */
         var L3 = looseOpts(el), cs3 = candOf(val), hit = null, i3;
         for (i3 = 0; i3 < cs3.length; i3++) { hit = pickOpt(L3, cs3[i3]); if (hit) break; }
@@ -1684,6 +1752,28 @@ function applyResume(D, O) {
     if (m && /年/.test(ph)) return m[1] + '年' + m[2] + '月' + (m[3] ? m[3] + '日' : '');
     if (/\//.test(ph) && m) return m[1] + '/' + m[2] + (m[3] ? '/' + m[3] : '');
     return val;
+  }
+
+  /* 同一行里若有 2~3 个输入框，返回 el 是从左数第几个（0 起）；不是这种结构返回 -1 */
+  function dateRowIdx(el) {
+    var doc = el.ownerDocument || document, all, i, row = [], r0;
+    try { r0 = el.getBoundingClientRect(); } catch (e) { return -1; }
+    if (!r0.width) return -1;
+    try { all = doc.querySelectorAll('input'); } catch (e2) { return -1; }
+    for (i = 0; i < all.length && i < 400; i++) {
+      var e = all[i], ty = (e.getAttribute('type') || '').toLowerCase();
+      if (['hidden', 'checkbox', 'radio', 'file', 'submit', 'button', 'image', 'reset'].indexOf(ty) >= 0) continue;
+      var r;
+      try { r = e.getBoundingClientRect(); } catch (e3) { continue; }
+      if (!r.width) continue;
+      if (Math.abs(r.top - r0.top) > 6) continue;
+      if (Math.abs(r.height - r0.height) > 10) continue;
+      row.push(e);
+    }
+    if (row.length < 2 || row.length > 3) return -1;
+    row.sort(function (a, b) { return a.getBoundingClientRect().left - b.getBoundingClientRect().left; });
+    for (i = 0; i < row.length; i++) if (row[i] === el) return i;
+    return -1;
   }
 
   function isEmpty(el, tag) {
@@ -1822,14 +1912,35 @@ function applyResume(D, O) {
           continue;
         }
 
+        /* 「起止时间」这种一行两个框：左边是开始、右边是结束。
+           页面还会在这行底下写一句「无准确的毕业时间可填写预计毕业时间」，
+           标签识别经常被那句提示抢走，导致两个框都被认成毕业时间 —— 这里按左右顺序纠正。 */
+        if (key === 'enrollDate' || key === 'graduateDate') {
+          var ridx = dateRowIdx(el);
+          if (ridx === 0) key = 'enrollDate';
+          else if (ridx === 1) key = 'graduateDate';
+        }
+
         var val = D[key], ok = false;
         /* 开了多段经历模式时，经历类字段交给下面的 exp 逻辑按顺序对位，
            否则表单里三个「工作内容」会全被填成第一段的描述 */
         if (O.exp && /^(exp|prj)\d_/.test(key)) continue;
 
+        /* 手机号、邮箱这些本来就是文本框，只是组件库给外层加了 role=combobox：
+           能写字就照常写字，别当区号下拉点掉 */
+        if (combo && TEXTKEY.test(key)) {
+          var tw0 = (el.getAttribute('type') || '').toLowerCase();
+          if (el.tagName === 'INPUT' && !el.readOnly
+              && /^(text|tel|search|number|email|url|)$/.test(tw0)) {
+            combo = false;
+          } else {
+            RES.failed.push({ l: comboLabel(el, key), r: '这格是下拉（如区号），没替你选' });
+            continue;
+          }
+        }
+
         /* 下拉组件：先登记，等主循环跑完再一个个点开选（弹层是异步渲染的） */
         if (combo) {
-          if (TEXTKEY.test(key)) continue;   /* 手机号前面那种 +86 区号窄下拉，别去碰 */
           /* 日期类：点开是日历，点了也选不中，别浪费一轮 */
           if (/Date$/.test(key) || key === 'birthday') continue;
           /* 组件外层 div 和里面的 input 会同时命中，只留一个，优先留里面的 input（点它最准） */
@@ -1925,7 +2036,9 @@ function applyResume(D, O) {
           if (e2.disabled || e2.readOnly || !shown(e2)) continue;
           if (clean(e2.value)) continue;
           if (['hidden','submit','button','file','password'].indexOf((e2.getAttribute('type') || '').toLowerCase()) >= 0) continue;
-          cands.push({ el: e2, t: ctxText(e2) + ' ' + nearLabel(e2) + ' ' + ctxUp(e2, 2), k: secKind(e2) });
+          /* 标签在控件正上方的排版（字节 Semi），ctxText / ctxUp 都读不到，得补 upLabel */
+          cands.push({ el: e2, t: ctxText(e2) + ' ' + nearLabel(e2) + ' ' + ctxUp(e2, 2)
+            + ' ' + upLabel(e2) + ' ' + labelText(e2), k: secKind(e2) });
         } catch (e) {}
       }
       /* 规则是 [命中正则, 排除正则]，排除正则可能为 null */
