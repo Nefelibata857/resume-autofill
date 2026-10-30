@@ -881,7 +881,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v15';
+  var ENGINE_VER = 'v16';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -1027,33 +1027,56 @@ function applyResume(D, O) {
       }
       return false;
     }
+    function pickerish(e) {
+      try { if (e.closest && e.closest('[class*="datepicker"],[class*="DatePicker"],[class*="calendar"],[class*="picker"]')) return true; } catch (e2) {}
+      var t = (e.getAttribute('placeholder') || '') + ' ' + (e.getAttribute('aria-label') || '');
+      return /(时间|日期|年月|date|month)/i.test(t);
+    }
+    /* 值有没有被组件接住：看框里现在的数字是不是以「年+月」开头。
+       字节那个页面点输入框不弹面板，是打字才弹，所以不能再用「面板开没开」判断类型。 */
+    function okVal() {
+      var n = String(el.value || '').replace(/[^\d]/g, '');
+      return n.indexOf(Y + M) === 0;
+    }
     try { if (el.focus) el.focus(); } catch (e) {}
     tap(el);
     setTimeout(function () {
-      var isMonth = monthPanel(), hasPanel = isMonth || datePanelOpen(el);
-      if (!hasPanel) {
-        /* 点开什么都没有 = 就是个普通文本框，直接写值 */
-        var pv = Y + '-' + M + (D2 ? '-' + D2 : '');
-        put(pv);
-        return cb(String(el.value || '').replace(/[^\d]/g, '').indexOf(Y + M) === 0);
-      }
+      var isMonth = monthPanel();
       cands = isMonth
-        ? [Y + '-' + M, Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '/' + M, Y + '.' + M]
-        : [Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '-' + M, Y + '/' + M + (D2 ? '/' + D2 : ''), Y + '.' + M];
+        ? [Y + '-' + M, Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '/' + M, Y + '.' + M, Y + '年' + M + '月']
+        : [Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '-' + M, Y + '/' + M + (D2 ? '/' + D2 : ''), Y + '.' + M, Y + '年' + M + '月'];
       (function step() {
-        if (k >= cands.length) { press(el, 'Escape'); return cb(false); }
+        if (k >= cands.length) { try { press(el, 'Escape'); } catch (e) {} return cb(false); }
         var v = cands[k++];
         put(v);
         setTimeout(function () {
+          /* 写完弹出面板了才回车 —— 普通文本框里回车会把整个表单提交掉 */
+          var opened = datePanelOpen(el) || monthPanel();
+          if (!opened) {
+            if (okVal()) return cb(true);
+            /* 个别页面面板要点图标才出，但输入框自己认回车；只在日期控件里按，
+               普通文本框里回车会把整个表单提交掉 */
+            if (pickerish(el)) {
+              press(el, 'Enter');
+              return setTimeout(function () {
+                if (okVal()) return cb(true);
+                step();
+              }, 260);
+            }
+            return step();
+          }
           press(el, 'Enter');
           setTimeout(function () {
-            /* 面板关掉了才算真的选上；还开着说明这个格式它不认 */
-            if (!datePanelOpen(el)) return cb(true);
+            /* 回车后值还在 = 组件认了；变空 = 没认，换个格式再来 */
+            if (okVal()) {
+              try { if (datePanelOpen(el)) press(el, 'Escape'); } catch (e) {}
+              return cb(true);
+            }
             step();
-          }, 320);
-        }, 120);
+          }, 300);
+        }, 130);
       })();
-    }, 180);
+    }, 160);
   }
 
   function shown(el) {
@@ -2294,6 +2317,11 @@ function applyResume(D, O) {
             RES.failed.push({ l: labelText(cell), r: '只有年份「' + mv + '」，请手动选月份' });
             return false;
           }
+        }
+        if (kk === 'start' || kk === 'end') {
+          /* 经历里的时间也是日期控件：同步写完会被组件回滚，统一排进日期队列走「打字→回车」 */
+          pushDate(cell, d.key + '_' + kk, mv);
+          return true;
         }
         try {
           protoSet(cell, fmtFor(cell, mv));
