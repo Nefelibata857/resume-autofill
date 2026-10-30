@@ -447,6 +447,11 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
         <button id="btn-paste-clip">读剪贴板</button>
       </div>
 
+      <p style="font-size:12px;color:#8a7a5c;margin:8px 0 0">
+        手边没有简历？<a href="./sample-resume.pdf" download style="color:#b8924a">下载一份示例简历 PDF</a>
+        试试（虚构人物「张小明」，能认出 40 多个字段）
+      </p>
+
       <div id="parse-result"></div>
     </section>
 
@@ -3167,8 +3172,10 @@ const LABEL_WORDS = [
   '绩点', 'GPA', '年级排名', '专业排名', '排名', '名次',
   '求职意向', '应聘岗位', '意向岗位', '期望职位', '目标岗位', '应聘方向',
   '期望城市', '意向城市', '期望工作地', '期望薪资', '期望月薪', '期望年薪', '薪资要求',
-  '到岗时间', '可到岗', '微信号', '微信', 'QQ', '通讯地址', '现居住地', '现居', '紧急联系人',
-  '主修课程', '自我评价', '自我介绍', '专业技能', '获奖情况'
+  '到岗时间', '可到岗', '微信号', '微信', 'QQ', '通讯地址', '联系地址', '详细地址', '家庭地址',
+  '现居住地', '现居', '当前所在地', '常住地', '邮政编码', '邮编', '班级', '学号', '导师', '指导教师',
+  '英文名', '生源所在地', '生源地', '紧急联系人', '紧急联系电话', '紧急联系人电话',
+  '主修课程', '核心课程', '自我评价', '自我介绍', '专业技能', '获奖情况', '作品集', '兴趣爱好', '文体特长'
 ];
 
 const PAD2 = n => String(n).length < 2 ? '0' + n : String(n);
@@ -3363,6 +3370,9 @@ function parseResumeText(raw) {
   /* --- 绩点 / 排名 --- */
   const gm = flat.match(/(?:GPA|绩点)\s*[:：]?\s*([0-9]+(?:\.[0-9]+)?)/i);
   if (gm) push('gpa', gm[1], 'mid');
+  /* 「专业课绩点 3.85」单独一栏，别和总 GPA 混 */
+  const gmp = flat.match(/(?:专业(?:课)?绩点|专业GPA)\s*[:：]?\s*([0-9]+(?:\.[0-9]+)?)/i);
+  if (gmp) push('majorGpa', gmp[1], 'mid');
 
   lines.forEach(ln => {
     if (!/排名|名次/.test(ln)) return;
@@ -3448,11 +3458,17 @@ function parseResumeText(raw) {
       }
       desc.push(lines[j]);
     }
-    exps.push({ head, time, desc: desc.join(' ').slice(0, 300) });
+    /* 简历常写成「某某设计院　建筑设计实习生　2025.07-2025.09」，
+       单位名和岗位挤在一行，拆成两栏更好用 */
+    let comp = head, post = '';
+    const jm = head.match(/^(.{2,40}?)[\s　]+([^\s　]{1,12}(?:实习生|设计师|助理|工程师|主管|专员|经理|负责人|建筑师))$/);
+    if (jm) { comp = jm[1].trim(); post = jm[2].trim(); }
+    exps.push({ head: comp, post: post, time, desc: desc.join(' ').slice(0, 300) });
   }
   exps.forEach((e, i) => {
     const p = i + 1;
     push('exp' + p + '_company', e.head, 'low');
+    if (e.post) push('exp' + p + '_title', e.post, 'low');
     push('exp' + p + '_time', e.time, 'low');
     if (e.desc) push('exp' + p + '_desc', e.desc, 'low');
   });
@@ -3723,36 +3739,58 @@ function applyParsed() {
    ===================================================================== */
 const REQUIRED = ['name','phone','email','school','major','degree','targetJob','targetCity'];
 
-/* 虚构人物，只用来演示每个字段该填什么格式，投简历前必须全部改掉 */
+/* 虚构人物，只用来演示每个字段该填什么格式，投简历前必须全部改掉。
+   目标是点一次「填入示例」就能把每个格子都填上，方便验证书签到底能认多少字段。
+   唯一刻意留空的是「导师」—— 示例人物是本科，本科没有导师。 */
 const SAMPLE = {
   name: '张小明', enName: 'Xiaoming Zhang', gender: '男', birthday: '2002-05-18',
   phone: '13800138000', email: 'xiaoming@example.com',
   wechat: 'xiaoming_zhang', qq: '100200300', mbti: 'INTJ',
-  hometown: '浙江省杭州市', birthPlace: '浙江省杭州市西湖区',
-  currentCity: '浙江-杭州', address: '浙江省杭州市西湖区某路 1 号',
-  ethnicity: '汉族', political: '共青团员', idType: '身份证', idcard: '330106200205180014',
+  hometown: '浙江省杭州市', nationality: '中国', birthPlace: '浙江省杭州市西湖区',
+  currentCity: '浙江-杭州', address: '浙江省杭州市西湖区余杭塘路 866 号',
+  zipcode: '310058', ethnicity: '汉族', political: '共青团员',
+  idType: '身份证', idcard: '330106200205180014',
   height: '175', weight: '62', maritalStatus: '未婚', healthStatus: '健康',
   emergencyName: '张建国', emergencyPhone: '13900139000',
+  jobSource: '学校;公众号;招聘网站;智联招聘',
   school: '浙江大学', college: '建筑工程学院', major: '建筑学', degree: '本科',
   academicDegree: '学士', eduType: '全日制统招', isUpgrade: '否',
-  studentId: '3200100001', className: '建筑学2201班', tutor: '李华',
+  studentId: '3200100001', className: '建筑学2201班', tutor: '',
   enrollDate: '2022-09-01', graduateDate: '2026-06-30',
   gpa: '3.60', majorGpa: '3.85', rank: '前20%', majorRank: '前15%',
   courses: '设计基础、建筑设计、建筑构造、中国建筑史、场地设计',
-  targetJob: '建筑设计师', targetJob2: '空间设计师', targetCity: '杭州',
-  expectSalary: '15-20万/年', jobType: '全职（校园招聘）',
+  targetJob: '建筑设计师', targetJob2: '城市设计师', targetCity: '杭州',
+  expectSalary: '10000-15000元/月;15-20万/年', jobType: '全职（校园招聘）',
   availableDate: '2026年7月毕业后到岗', portfolio: 'https://example.com/portfolio',
-  transferAccept: '是', transferCities: '杭州、上海', tripartite: '是',
-  exp1_company: '某某建筑设计研究院', exp1_title: '滨江片区城市更新方案',
+  transferAccept: '是', transferCities: '杭州、上海、南京', tripartite: '是',
+  exp1_company: '某某建筑设计研究院', exp1_title: '建筑设计实习生',
   exp1_role: '方案设计', exp1_time: '2025.07 - 2025.09',
-  exp1_desc: '负责前期调研与案例拆解，独立完成概念推导、SU 模型与效果图输出，方案进入正式汇报。',
-  exp2_company: '某某建筑事务所', exp2_title: '社区服务中心改造',
+  exp1_desc: '参与滨江片区城市更新投标，负责前期调研与案例拆解，独立完成概念推导、SU 模型与效果图输出，方案进入正式汇报。',
+  exp2_company: '某某建筑事务所', exp2_title: '设计实习生',
   exp2_role: '驻场设计', exp2_time: '2025.10 - 2026.01',
-  exp2_desc: '对接甲方与施工方，输出整改清单与变更记录，把设计意图落到施工细节。',
+  exp2_desc: '跟进社区服务中心改造的施工配合，对接甲方与施工方，输出整改清单与变更记录，把设计意图落到施工细节。',
   exp3_company: '', exp3_title: '', exp3_role: '', exp3_time: '', exp3_desc: '',
+  prj1_title: '老厂区片区城市更新', prj1_org: '城市设计课程设计',
+  prj1_role: '主创设计', prj1_time: '2025.03 - 2025.06',
+  prj1_desc: '6 公顷老厂区转型为混合街区，独立完成功能策划、强排与总图，方案在课程评图中获评第一。',
+  prj2_title: '「城市微更新」全国高校设计竞赛', prj2_org: '三人竞赛团队',
+  prj2_role: '方案主创', prj2_time: '2025.04 - 2025.07',
+  prj2_desc: '负责方案概念与图纸表达，从 800 余组中入围前 30，完成 2 张 A1 展板与 1 分钟汇报视频。',
+  prj3_title: '校园图书馆改扩建', prj3_org: '建筑系课程项目',
+  prj3_role: '独立设计', prj3_time: '2024.09 - 2024.12',
+  prj3_desc: '结合人流模拟重排阅览与藏书分区，完成平立剖与三个节点大样，图纸被选为年级范图。',
+  prj4_title: '滨水空间景观提升', prj4_org: '某区住建局委托项目',
+  prj4_role: '调研与建模', prj4_time: '2026.02 - 2026.04',
+  prj4_desc: '负责 1.2 公里滨水带的现状调研与场地模型搭建，输出 5 个节点方案与效果图，用于向街道汇报。',
+  prj5_title: '参数化立面遮阳研究', prj5_org: '导师课题组',
+  prj5_role: '建模与出图', prj5_time: '2026.03 - 2026.05',
+  prj5_desc: '用 Grasshopper 生成 12 版遮阳构件，比对日照得热与造价，形成结题报告的图表与分析章节。',
+  prj6_title: '渲染表现素材库', prj6_org: '个人独立项目',
+  prj6_role: '产品设计与开发', prj6_time: '2025.11 - 至今',
+  prj6_desc: '独立搭建设计素材库网站，设计分类体系与前端页面，累计整理 300 余条材质、LUT 与渲染案例。',
   selfEval: '一句话说清你能做什么：专业能力 + 解决问题的思路 + 落地经验，别写空话。',
   skills: '设计软件：PS / AI / InDesign；建模制图：SketchUp / Rhino / CAD；渲染表现：D5 / Enscape',
-  awards: '校级优秀学生（2024）；某某竞赛三等奖（2025）',
+  awards: '校级优秀学生（2024）；「城市微更新」竞赛入围奖（2025）',
   coursesFull: '按成绩单原样罗列，网申要求填写"专业课程"长文本时用这一栏。',
   sports: '羽毛球、跑步'
 };
