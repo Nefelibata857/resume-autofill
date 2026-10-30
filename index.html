@@ -11,6 +11,20 @@
 <meta name="theme-color" content="#1a1917">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1917'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h8' stroke='%23b0894f' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
+/* ---------- 公开页：数据来源说明 ---------- */
+#privacy{display:none;background:#f4f1ea;border-bottom:1px solid #e2dcd1;}
+#privacy.on{display:block;}
+#privacy .in{
+  max-width:1440px;margin:0 auto;padding:9px 24px;display:flex;align-items:center;
+  gap:12px;flex-wrap:wrap;font-size:12.5px;color:#6b6558;
+}
+#privacy b{font-weight:600;color:#4a463f;font-size:12.5px;}
+#privacy .x{
+  margin-left:auto;background:none;border:none;color:#8a6a35;font-size:12px;
+  text-decoration:underline;padding:0;cursor:pointer;
+}
+#privacy .x:hover{background:none;border:none;color:#5f4520;}
+
 :root{
   --bg:#f7f5f2; --card:#fff; --ink:#1a1917; --sub:#7d7770; --line:#e8e3db;
   --gold:#b0894f; --gold-soft:#f3ebdd; --ok:#2f7d4f; --warn:#c98a20; --bad:#b8433a;
@@ -395,6 +409,12 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
   <b>数据改过了，书签里还是旧的。</b>
   <span>点右边重新复制，再按 Ctrl+D 覆盖旧书签就行。</span>
   <button id="banner-dl">更新书签</button>
+</div></div>
+
+<div id="privacy"><div class="in">
+  <b id="privacy-ttl">这个页面是空白模板</b>
+  <span id="privacy-txt">文件里没有任何个人信息。你填的内容只保存在这台电脑的浏览器里，换台设备打开还是空的，也不会上传。</span>
+  <button id="privacy-clear" class="x">清除本机保存的数据</button>
 </div></div>
 
 <div id="hello"><div class="in">
@@ -806,7 +826,7 @@ const ENUMS = {
 const PH = {
   name:        '身份证上的真实姓名',
   enName:      'Xiaoming Zhang',
-  birthday:    '2004-08-14',
+  birthday:    '2000-01-01',
   phone:       '11 位手机号',
   email:       'name@example.com',
   wechat:      '微信号',
@@ -2120,6 +2140,11 @@ function applyResume(D, O) {
 const STORE_KEY = 'resume_filler_v1';
 const HASH_KEY  = 'resume_filler_hash';
 
+/* 部署在公开域名上时（github.io / 任何 https 站点），页面要主动说明：
+   文件本身不含任何个人信息，你看到的已填内容来自这台电脑浏览器的本地存储。 */
+const HOSTED = /^https?:$/.test(location.protocol) &&
+  !/^(localhost|127\.0\.0\.1|\[::1\]|192\.168\.|10\.\d)/.test(location.hostname);
+
 /* 每次往 resume-data 写新数据，这个数字 +1。
    页面下次打开会自动换上最新数据，同时保留你手动补过的空字段 */
 const DATA_VERSION = 1;
@@ -2154,6 +2179,34 @@ function loadData() {
   } catch (e) {}
   return Object.assign({}, DEFAULTS);
 }
+
+/* 公开页：说明数据来源，并给一个"清掉本机保存"的出口 */
+(function () {
+  if (!HOSTED) return;
+  const bar = document.getElementById('privacy');
+  const ttl = document.getElementById('privacy-ttl');
+  const txt = document.getElementById('privacy-txt');
+  const btn = document.getElementById('privacy-clear');
+  if (!bar) return;
+  bar.classList.add('on');
+
+  let saved = false;
+  try { saved = !!localStorage.getItem(STORE_KEY); } catch (e) {}
+  if (saved) {
+    ttl.textContent = '下面这些内容是从本机浏览器读出来的';
+    txt.textContent = 'GitHub 上的页面文件里没有你的信息，你看到的已填内容是本机浏览器保存的。点右边可以清掉。';
+  }
+
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    if (!confirm('清除这台电脑浏览器里保存的填表数据？页面会恢复成空白模板，已生成的书签不受影响。')) return;
+    try {
+      localStorage.removeItem(STORE_KEY);
+      localStorage.removeItem(HASH_KEY);
+    } catch (e) {}
+    location.reload();
+  });
+})();
 
 /* v8：紧急联系人一栏当年填成了手机号，清掉，等真实姓名 */
 
