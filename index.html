@@ -876,7 +876,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v11';
+  var ENGINE_VER = 'v12';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -1065,6 +1065,30 @@ function applyResume(D, O) {
       var dx = r.left - pr.right;
       if (dx < -6 || dx > 220) continue;   /* 太远的多半是隔壁那一列的内容 */
       var d = dx + dy * 4;
+      if (d < bd) { bd = d; best = list[i].t; }
+    }
+    return best;
+  }
+
+  /* 标签在控件正上方时（Form.Item / Semi Design 的默认排版），左侧同一行什么都找不到。
+     取上方 40px 内、与控件水平有重叠的最近一行文字。 */
+  function upLabel(el) {
+    var doc = el.ownerDocument || document, list = geoCands(doc);
+    if (!list || !list.length) return '';
+    var r;
+    try { r = el.getBoundingClientRect(); } catch (e) { return ''; }
+    if (!r.width && !r.height) return '';
+    var best = '', bd = 1e9, i;
+    for (i = 0; i < list.length; i++) {
+      var pe = list[i].n.parentElement, pr;
+      if (!pe || !pe.getBoundingClientRect) continue;
+      if (el.contains && el.contains(pe)) continue;
+      pr = pe.getBoundingClientRect();
+      if (!pr.width || !pr.height) continue;
+      var gap = r.top - pr.bottom;              /* 文字底边在控件顶部之上 */
+      if (gap < -6 || gap > 40) continue;
+      if (pr.right < r.left - 24 || pr.left > r.right + 24) continue;
+      var d = Math.abs(gap) * 2 + Math.abs(pr.left - r.left) * 0.2;
       if (d < bd) { bd = d; best = list[i].t; }
     }
     return best;
@@ -1768,10 +1792,16 @@ function applyResume(D, O) {
         /* --- 匹配字段 --- */
         var ctx = ctxText(el);
         var key = matchRule(ctx);
+        /* ctx 什么都读不到时，再用 labelText 兜底（labels / label[for] / closest('label') / nearLabel）。
+           不能直接拼进 ctx：nearLabel 取的是「父容器的上一个兄弟」，row 布局下会读到上一行标签，
+           把「最高学位」的下拉认成「婚姻状况」。 */
+        if (!key) key = matchRule(labelText(el));
         var geo = '';
         /* 版面标签比「往上爬到的整块文字」准：后者常把相邻字段一起带进来。
            所以先按位置找，再退回爬文本。 */
         if (!key) { geo = geoLabel(el); if (geo) key = matchRule(geo); }
+        /* 标签在正上方的排版（字节 / Semi Design 那种），左侧同一行找不到 */
+        if (!key) { var up = upLabel(el); if (up) key = matchRule(up); }
         if (!key) key = matchRule(ctx + ' ' + ctxUp(el, 2));
 
         if (DIAG) {
@@ -1785,8 +1815,10 @@ function applyResume(D, O) {
 
         if (!key) {
           var ul = labelText(el);
-          if (!ul || PH.test(ul.replace(/\s/g, ''))) ul = geo || geoLabel(el) || clean(ctx).slice(0, 30);
-          if (ul && RES.unmatched.length < 60) RES.unmatched.push(ul);
+          if (!ul || PH.test(ul.replace(/\s/g, ''))) ul = geo || upLabel(el) || geoLabel(el) || clean(ctx).slice(0, 30);
+          /* 连标签都读不出来的字段最需要被看见，否则面板上等于没发生 */
+          if (!ul) ul = '(无标签 ' + tag + ' #' + String(el.id || el.name || '?').slice(0, 14) + ')';
+          if (RES.unmatched.length < 60) RES.unmatched.push(ul);
           continue;
         }
 
