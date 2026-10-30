@@ -364,7 +364,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
         <input type="file" id="file-resume" accept=".pdf,.txt,.md" hidden>
       </div>
 
-      <textarea id="resume-text" rows="5" placeholder="把简历内容整段粘贴到这里，自动挑出姓名、电话、学校、专业、经历……&#10;例：张小明　男　2004.08　西安建筑科技大学　城市设计　本科"></textarea>
+      <textarea id="resume-text" rows="5" placeholder="把简历内容整段粘贴到这里，自动挑出姓名、电话、学校、专业、经历……&#10;例：张小明　男　2004.08　某某大学　建筑学　本科"></textarea>
 
       <div class="impacts">
         <button class="primary" id="btn-parse">识别并预览</button>
@@ -517,6 +517,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
   "__custom": "",
   "name": "",
   "enName": "",
+  "nationality": "",
   "gender": "",
   "birthday": "",
   "age": "",
@@ -561,6 +562,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
   "targetJob2": "",
   "targetCity": "",
   "expectSalary": "",
+  "jobSource": "",
   "jobType": "",
   "availableDate": "",
   "portfolio": "",
@@ -599,7 +601,7 @@ const GROUPS = [
   { title: '基本信息', fields: [
     ['name','姓名'], ['enName','英文名'], ['gender','性别'], ['birthday','出生日期'],
     ['age','年龄（按生日自动算）'], ['phone','手机'], ['email','邮箱'], ['wechat','微信号'],
-    ['qq','QQ'], ['mbti','MBTI'], ['hometown','籍贯'], ['birthPlace','生源所在地'],
+    ['qq','QQ'], ['mbti','MBTI'], ['hometown','籍贯'], ['nationality','国籍'], ['jobSource','求职信息来源'], ['birthPlace','生源所在地'],
     ['currentCity','现居城市'], ['address','通讯地址'], ['ethnicity','民族'], ['political','政治面貌'],
     ['idType','证件类型'], ['idcard','身份证号'], ['height','身高(cm)'], ['weight','体重(kg)'],
     ['maritalStatus','婚姻状况'], ['healthStatus','健康状况'],
@@ -766,7 +768,9 @@ function applyResume(D, O) {
     ['awards',        /(获奖情况|奖项荣誉|获奖经历|所获奖励|荣誉奖励|奖惩情况|获奖)/, null],
     ['sports',        /(兴趣爱好|文体特长|个人爱好|特长爱好|爱好)/, null],
     ['coursesFull',   /(专业课程|修读课程|课程名称|主修课程清单)/, null],
-    ['courses',       /(主修课程|核心课程|主要课程)/, null]
+    ['courses',       /(主修课程|核心课程|主要课程)/, null],
+    ['jobSource',     /(求职信息来源|信息来源|信息渠道|获知渠道|获知途径|了解到.{0,4}渠道|渠道来源)/, /(邮箱|电话|姓名)/],
+    ['nationality',   /(国籍|国家\/地区|所属国家|国际\/地区)/, /(民族|籍贯|户口)/]
   ];
 
   var YES = /^(是|有|同意|接受|可以|愿意|true|yes|1)$/i;
@@ -848,6 +852,53 @@ function applyResume(D, O) {
     if (!t) t = el.name || el.id || '';
     t = clean(t).replace(/[:：*＊]\s*$/, '');
     return t.slice(0, 30);
+  }
+
+  /* ---------- 几何兜底 ----------
+     自研组件库常把标签放在独立的一列里，DOM 上跟控件毫无关系（不在同一个父级、
+     不是 label、没有 for），文本关系怎么爬都爬不到。这时直接按版面找：
+     控件左侧同一行、距离最近的可见文字，就是它的标签。 */
+  var GEON = null, GEODOC = null;
+  function geoCands(doc) {
+    if (GEON && GEODOC === doc) return GEON;
+    var list = [], w, n, c = 0;
+    try { w = doc.createTreeWalker(doc.body || doc.documentElement, NodeFilter.SHOW_TEXT, null, false); }
+    catch (e) { return null; }
+    while ((n = w.nextNode()) && c < 8000) {
+      c++;
+      var t = (n.nodeValue || '').replace(/\s+/g, '');
+      if (!t || t.length > 24) continue;
+      if (!/[\u4e00-\u9fa5A-Za-z]/.test(t)) continue;
+      var pe = n.parentElement;
+      if (!pe) continue;
+      var pn = pe.tagName.toLowerCase();
+      if (pn === 'script' || pn === 'style' || pn === 'option' || pn === 'title') continue;
+      list.push({ n: n, t: t });
+    }
+    GEON = list; GEODOC = doc;
+    return list;
+  }
+  function geoLabel(el) {
+    var doc = el.ownerDocument || document, list = geoCands(doc);
+    if (!list || !list.length) return '';
+    var r;
+    try { r = el.getBoundingClientRect(); } catch (e) { return ''; }
+    if (!r.width && !r.height) return '';
+    var cy = r.top + r.height / 2, best = '', bd = 1e9, i;
+    for (i = 0; i < list.length; i++) {
+      var pe = list[i].n.parentElement, pr;
+      if (!pe || !pe.getBoundingClientRect) continue;
+      if (el.contains && el.contains(pe)) continue;
+      pr = pe.getBoundingClientRect();
+      if (!pr.width || !pr.height) continue;
+      var dy = Math.abs(pr.top + pr.height / 2 - cy);
+      if (dy > Math.max(16, r.height * 0.75)) continue;
+      var dx = r.left - pr.right;
+      if (dx < -6 || dx > 220) continue;   /* 太远的多半是隔壁那一列的内容 */
+      var d = dx + dy * 4;
+      if (d < bd) { bd = d; best = list[i].t; }
+    }
+    return best;
   }
 
   function ctxText(el) {
@@ -1067,6 +1118,34 @@ function applyResume(D, O) {
     }
     return out;
   }
+  /* 自家组件库的弹层没有统一类名：兜底找「挂在绝对定位浮层里的叶子文字」，
+     再用它跟值比对。浮层必须离控件不远，避免把页面正文的标题当成选项。 */
+  function looseOpts(el) {
+    var doc = el.ownerDocument || document, out = [], all, i, tr;
+    try { tr = el.getBoundingClientRect(); } catch (e) { return out; }
+    try { all = doc.querySelectorAll('div,li,span,a,p,dd'); } catch (e) { return out; }
+    for (i = 0; i < all.length && i < 5000; i++) {
+      var e = all[i];
+      if (e.children && e.children.length) continue;      /* 只要叶子，父容器会连坐 */
+      if (!shown(e)) continue;
+      var t = clean(e.innerText || '');
+      if (!t || t.length > 30) continue;
+      var p = e.parentElement, pos = '', hops = 0;
+      while (p && hops < 6) {
+        try { pos = p.ownerDocument.defaultView.getComputedStyle(p).position || ''; }
+        catch (e2) { pos = ''; }
+        if (pos === 'absolute' || pos === 'fixed') break;
+        p = p.parentElement; hops++;
+      }
+      if (!p || hops >= 6) continue;
+      var r;
+      try { r = p.getBoundingClientRect(); } catch (e3) { continue; }
+      if (!r.width && !r.height) continue;
+      if (r.bottom < tr.top - 500 || r.top > tr.bottom + 700) continue;
+      out.push({ el: e, t: t });
+    }
+    return out;
+  }
   /* 归一：去空白 + 去掉尾部括号补充（「本科（学士）」→「本科」） */
   function normBare(v) {
     return String(v == null ? '' : v).replace(/\s/g, '')
@@ -1082,7 +1161,7 @@ function applyResume(D, O) {
       if (t.length >= 2 && t.indexOf(vv) >= 0 && t.length > bl) { best = list[i]; bl = t.length; }
     }
     if (best) return best;
-    /* 反向包含只在选项占值的大部分时才认，否则「陕西省汉中市」会被「陕西省」截胡，
+    /* 反向包含只在选项占值的大部分时才认，否则「某省某市」会被「某省」截胡，
        连省市区联动都走不到 */
     for (i = 0; i < list.length; i++) {
       t = normBare(list[i].t);
@@ -1092,7 +1171,7 @@ function applyResume(D, O) {
     }
     return best;
   }
-  /* 「陕西省汉中市洋县」「陕西-汉中-洋县」→ 三级片段，用于省市区联动。
+  /* 「某省某市某县」「某省-某市-某县」→ 三级片段，用于省市区联动。
      只拆看着像地址的值，否则「10-20万/年」这种会被拆成 10 / 20万 / 年 */
   function segsOf(v) {
     var s = String(v == null ? '' : v).replace(/\s/g, '').replace(/[、，,;；/|]/g, '-');
@@ -1124,8 +1203,18 @@ function applyResume(D, O) {
     '否': ['不接受', '不同意', '没有']
   };
   function candOf(v) {
-    var out = [v], a = SYN[normBare(v)];
-    if (a) for (var i = 0; i < a.length; i++) out.push(a[i]);
+    var out = [], a, i;
+    /* 值里用 ; 分隔表示「按优先级依次尝试」，比如求职信息来源：
+       学校 → 官网 → 公众号 → 招聘网站。哪个选项存在就用哪个 */
+    var parts = String(v == null ? '' : v).split(';');
+    for (i = 0; i < parts.length; i++) {
+      var p = parts[i].replace(/^\s+|\s+$/g, '');
+      if (!p) continue;
+      out.push(p);
+      a = SYN[normBare(p)];
+      if (a) for (var j = 0; j < a.length; j++) out.push(a[j]);
+    }
+    if (!out.length) out.push(v);
     return out;
   }
   function waitOpts(d, cb) {
@@ -1135,6 +1224,89 @@ function applyResume(D, O) {
       if (L.length || n >= 16) { cb(L); return; }
       n++; setTimeout(tick, 40);
     })();
+  }
+  /* 有些下拉点开的是「弹窗选取器」：里面一个搜索框 + 一堆勾选项 + 确定按钮。
+     地区选择（生源地/户口所在地/期望城市）基本都是这种。 */
+  function press(el, k) {
+    var w = W(el);
+    try {
+      el.dispatchEvent(new w.KeyboardEvent('keydown', { key: k, code: k, keyCode: k === 'Enter' ? 13 : 27, which: k === 'Enter' ? 13 : 27, bubbles: true }));
+      el.dispatchEvent(new w.KeyboardEvent('keyup', { key: k, code: k, keyCode: k === 'Enter' ? 13 : 27, which: k === 'Enter' ? 13 : 27, bubbles: true }));
+    } catch (e) {}
+  }
+  function btnOf(root, re) {
+    var bs, i;
+    try { bs = root.querySelectorAll('button,[role="button"],a,span,div'); } catch (e) { return null; }
+    for (i = 0; i < bs.length; i++) {
+      var b = bs[i];
+      if (!shown(b)) continue;
+      var t = clean(b.innerText || '').replace(/\s/g, '');
+      if (!re.test(t)) continue;
+      /* 只认最里层那个，外层容器也算「确定」会点错 */
+      if (b.querySelector('button,[role="button"]')) continue;
+      return b;
+    }
+    return null;
+  }
+  function pickerBox(doc) {
+    var ins, i, d = 0, b, btn;
+    try { ins = doc.querySelectorAll('input'); } catch (e) { return null; }
+    for (i = 0; i < ins.length; i++) {
+      var ph = ins[i].getAttribute('placeholder') || '';
+      if (!/^(搜索|请输入搜索|search)/i.test(ph)) continue;
+      if (!shown(ins[i])) continue;
+      b = ins[i].parentElement; d = 0;
+      while (b && d < 8) {
+        btn = btnOf(b, /^(确定|确认|完成|选好了)$/);
+        if (btn) return { input: ins[i], btn: btn, box: b };
+        b = b.parentElement; d++;
+      }
+    }
+    return null;
+  }
+  /* 在弹窗里搜地名，点中结果，再点确定 */
+  function usePicker(pk, val, cb) {
+    var doc = pk.input.ownerDocument || document;
+    var segs = segsOf(val), tries = [], i;
+    for (i = segs.length - 1; i >= 0; i--) tries.push(segs[i]);
+    if (!tries.length) tries.push(val);
+    var idx = 0;
+    function hits(q) {
+      var out = [], all, j, k, ch, deeper, qq = normBare(q);
+      try { all = pk.box.querySelectorAll('*'); } catch (e) { return out; }
+      for (j = 0; j < all.length; j++) {
+        var e = all[j];
+        if (!shown(e)) continue;
+        if (normBare(e.innerText || '') !== qq) continue;
+        deeper = false; ch = e.children;
+        for (k = 0; k < ch.length; k++) {
+          if (normBare(ch[k].innerText || '') === qq) { deeper = true; break; }
+        }
+        if (deeper) continue;          /* 只留最里层，否则会点到整块容器 */
+        out.push({ el: e, t: qq });
+      }
+      return out;
+    }
+    function attempt() {
+      if (idx >= tries.length) { cb(''); return; }
+      var q = tries[idx++];
+      try { pk.input.focus(); } catch (e) {}
+      protoSet(pk.input, q);
+      fire(pk.input);
+      setTimeout(function () {
+        press(pk.input, 'Enter');
+        setTimeout(function () {
+          var hs = hits(q);
+          if (!hs.length) { attempt(); return; }
+          tap(hs[0].el);
+          setTimeout(function () {
+            tap(pk.btn);
+            setTimeout(function () { cb(q); }, 80);
+          }, 150);
+        }, 420);
+      }, 120);
+    }
+    attempt();
   }
   function closeCombo(el) {
     var w = W(el), d = el.ownerDocument || document;
@@ -1149,7 +1321,7 @@ function applyResume(D, O) {
   }
   function chooseCombo(el, val, cb) {
     var doc = el.ownerDocument || document, done = false, got = '';
-    function fin(ok, part) { if (done) return; done = true; closeCombo(el); cb(ok, part); }
+    function fin(ok, part, picked) { if (done) return; done = true; closeCombo(el); cb(ok, part, picked); }
     function step(sg, idx) {
       var p = pickOpt(visibleOpts(doc), sg[idx]);
       if (!p) { fin(idx > 0, got); return; }
@@ -1168,7 +1340,7 @@ function applyResume(D, O) {
       var cs = candOf(val), i;
       for (i = 0; i < cs.length; i++) {
         var p = pickOpt(L, cs[i]);
-        if (p) { tap(p.el); fin(true, ''); return; }
+        if (p) { tap(p.el); fin(true, '', p.t); return; }
       }
       var sg = segsOf(val);
       if (sg.length > 1) { step(sg, 0); return; }
@@ -1180,7 +1352,18 @@ function applyResume(D, O) {
       /* 有的组件点 input 不弹，得点外壳再试一次 */
       tap(comboTarget(el));
       waitOpts(doc, function (L2) {
-        if (L2.length) go(L2); else fin(false);
+        if (L2.length) { go(L2); return; }
+        /* 自家组件的弹层没有标准类名：按「浮层里的叶子文字」再试一次 */
+        var L3 = looseOpts(el), cs3 = candOf(val), hit = null, i3;
+        for (i3 = 0; i3 < cs3.length; i3++) { hit = pickOpt(L3, cs3[i3]); if (hit) break; }
+        if (hit) { tap(hit.el); fin(true, '', hit.t); return; }
+        /* 兜底：弹窗选取器（搜索 + 勾选 + 确定） */
+        var pk = pickerBox(doc);
+        if (pk) {
+          usePicker(pk, val, function (got) { fin(!!got, ''); });
+          return;
+        }
+        fin(false);
       });
     });
   }
@@ -1200,9 +1383,9 @@ function applyResume(D, O) {
     (function next() {
       if (i >= ASYNC.length) { RES.busy = 0; cb(); return; }
       var it = ASYNC[i++];
-      chooseCombo(it.el, it.val, function (ok, part) {
+      chooseCombo(it.el, it.val, function (ok, part, picked) {
         if (ok) {
-          RES.filled.push({ k: it.k, l: it.l, v: String(it.val).slice(0, 40) });
+          RES.filled.push({ k: it.k, l: it.l, v: String(picked || it.val).slice(0, 40) });
           if (part) RES.failed.push({ l: it.l, r: '只填到「' + part + '」，下一级请手动选' });
         } else {
           RES.failed.push({ l: it.l, r: '下拉里没有「' + it.val + '」这一项' });
@@ -1224,7 +1407,7 @@ function applyResume(D, O) {
       if (PH.test(tb)) continue;
       if (ov === vv || tb === vb) { best = o; break; }
       if (!loose && tb.indexOf(vb) >= 0) loose = o;
-      /* 反向包含只在选项占值的大部分时才认，避免「陕西省汉中市」被「陕西省」截胡 */
+      /* 反向包含只在选项占值的大部分时才认，避免「某省某市」被「某省」截胡 */
       if (tb.length >= 2 && vb.indexOf(tb) >= 0 && tb.length * 10 >= vb.length * 6
           && (!rev || tb.length > rev.n)) {
         rev = { o: o, n: tb.length };
@@ -1346,13 +1529,15 @@ function applyResume(D, O) {
         var type = (el.getAttribute('type') || '').toLowerCase();
 
         if (tag === 'input' && ['hidden','submit','button','reset','file','image','password'].indexOf(type) >= 0) continue;
-        /* readonly 的 input 两类：日期控件（跳过）和下拉组件（点开才能选，单独放行）。
-           也兼容纯 div 做的下拉（role=combobox，里面没有 input）。 */
+        /* readonly 的 input 两种：日期控件（点开是日历，填不了）和下拉组件（点开才出选项）。
+           自家写的组件库往往没有任何 select/combobox 特征类名，只能靠「只读」这个特征放行，
+           真点开发现是日历的话后面会自己放弃，不会乱填。 */
         var combo = false, ro = !!el.readOnly;
         var role = (el.getAttribute('role') || '').toLowerCase();
         if (tag !== 'select' && type !== 'radio' && type !== 'checkbox') {
           var shell = SHELL_CLS.test(clsOf(el));
           if (isCombo(el) && (ro || role === 'combobox' || shell)) combo = true;
+          else if (ro && type !== 'date' && type !== 'month') combo = true;
           else if (ro) continue;
         }
         if (!shown(el)) continue;
@@ -1385,6 +1570,11 @@ function applyResume(D, O) {
 
           var gctx = groupCtx(doc, g);
           var gkey = matchRule(gctx + ' ' + g);
+          if (!gkey && grp[0]) {
+            /* 题目文字可能压根不在 DOM 关系里，按版面找左边那行字 */
+            var gl0 = geoLabel(grp[0]);
+            if (gl0) gkey = matchRule(gl0 + ' ' + g);
+          }
           if (DIAG) { RES.diag.push({ l: clean(gctx).slice(0, 30), v: '', k: gkey || '' }); continue; }
           if (!gkey) continue;
 
@@ -1403,6 +1593,10 @@ function applyResume(D, O) {
         /* --- 匹配字段 --- */
         var ctx = ctxText(el);
         var key = matchRule(ctx);
+        var geo = '';
+        /* 版面标签比「往上爬到的整块文字」准：后者常把相邻字段一起带进来。
+           所以先按位置找，再退回爬文本。 */
+        if (!key) { geo = geoLabel(el); if (geo) key = matchRule(geo); }
         if (!key) key = matchRule(ctx + ' ' + ctxUp(el, 2));
 
         if (DIAG) {
@@ -1415,7 +1609,8 @@ function applyResume(D, O) {
         }
 
         if (!key) {
-          var ul = labelText(el) || clean(ctx).slice(0, 30);
+          var ul = labelText(el);
+          if (!ul || PH.test(ul.replace(/\s/g, ''))) ul = geo || geoLabel(el) || clean(ctx).slice(0, 30);
           if (ul && RES.unmatched.length < 60) RES.unmatched.push(ul);
           continue;
         }
@@ -1428,6 +1623,8 @@ function applyResume(D, O) {
         /* 下拉组件：先登记，等主循环跑完再一个个点开选（弹层是异步渲染的） */
         if (combo) {
           if (TEXTKEY.test(key)) continue;   /* 手机号前面那种 +86 区号窄下拉，别去碰 */
+          /* 日期类：点开是日历，点了也选不中，别浪费一轮 */
+          if (/Date$/.test(key) || key === 'birthday') continue;
           /* 组件外层 div 和里面的 input 会同时命中，只留一个，优先留里面的 input（点它最准） */
           var dup = false;
           for (var z = 0; z < ASYNC.length; z++) {
@@ -1441,7 +1638,7 @@ function applyResume(D, O) {
           if (!dup) ASYNC.push({ el: el, k: key, val: val, l: comboLabel(el, key) });
           continue;
         }
-        /* 省 / 市 / 区 几个 select 联动时，按顺序取「陕西省汉中市洋县」里对应的那一段 */
+        /* 省 / 市 / 区 几个 select 联动时，按顺序取「某省某市某县」里对应的那一段 */
         if (tag === 'select') {
           seenK[key] = (seenK[key] || 0) + 1;
           var hit = seenK[key] - 1, sgv = segsOf(val);
@@ -2483,7 +2680,7 @@ const LABEL_WORDS = [
 const PAD2 = n => String(n).length < 2 ? '0' + n : String(n);
 
 /* 值后面如果又跟了下一个字段名，切在那里：靠「前面是空白或标点」判断，
-   否则「西安建筑科技大学建筑学院」里的「学院」会被误切 */
+   否则「某某大学建筑学院」里的「学院」会被误切 */
 function cutLabel(s) {
   let cut = s.length;
   LABEL_WORDS.forEach(w => {
@@ -2497,7 +2694,7 @@ function cutLabel(s) {
 }
 
 /* 在「标签：值」结构里取值，容忍一行里有多个字段。
-   标签必须出现在行首、或前面是空白/标点才算 —— 否则「西安建筑科技大学 建筑学院」
+   标签必须出现在行首、或前面是空白/标点才算 —— 否则「某某大学 建筑学院」
    里的「学院」会被当成标签，把后面的内容全吃进去。 */
 function pickField(lines, names) {
   for (let i = 0; i < lines.length; i++) {
@@ -2650,7 +2847,7 @@ function parseResumeText(raw) {
   let mj = pickField(lines, ['所学专业', '专业名称', '主修专业', '就读专业', '专业']);
   if (/排名|课程|技能|方向|知识/.test(mj)) mj = '';
   if (!mj) {
-    /* 简历常写成「城市设计专业｜本科」，没有「专业：」这种冒号结构 */
+    /* 简历常写成「建筑学专业｜本科」，没有「专业：」这种冒号结构 */
     const m = flat.match(/([\u4e00-\u9fa5]{2,10})专业(?!排名|课程|课|技能|方向|知识|成绩)/);
     if (m && !/所学|主修|就读|相关/.test(m[1])) mj = m[1];
   }
@@ -3046,7 +3243,7 @@ const SAMPLE = {
   studentId: '3200100001', className: '建筑学2201班', tutor: '李华',
   enrollDate: '2022-09-01', graduateDate: '2026-06-30',
   gpa: '3.60', majorGpa: '3.85', rank: '前20%', majorRank: '前15%',
-  courses: '设计基础、建筑设计、建筑构造、中国建筑史、城市设计、场地设计',
+  courses: '设计基础、建筑设计、建筑构造、中国建筑史、场地设计',
   targetJob: '建筑设计师', targetJob2: '空间设计师', targetCity: '杭州',
   expectSalary: '15-20万/年', jobType: '全职（校园招聘）',
   availableDate: '2026年7月毕业后到岗', portfolio: 'https://example.com/portfolio',
