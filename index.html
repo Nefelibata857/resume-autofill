@@ -709,7 +709,8 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0 };
+  var ENGINE_VER = 'v11';
+  var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
   var RULES = [
@@ -1794,7 +1795,8 @@ function applyResume(D, O) {
         if (RES.skipped) stat.push('跳过 ' + RES.skipped);
       }
       if (RES.cross) stat.push('跨域 iframe ' + RES.cross + ' 个');
-      body.appendChild(mk('div', 'font-size:12px;color:rgba(255,255,255,.62);padding:2px 0 8px;', stat.join(' · ')));
+      body.appendChild(mk('div', 'font-size:12px;color:rgba(255,255,255,.62);padding:2px 0 8px;',
+        '引擎 ' + (RES.ver || '?') + ' · ' + stat.join(' · ')));
 
       function listBlock(title, arr, fmt) {
         if (!arr.length) return;
