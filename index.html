@@ -676,6 +676,9 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
   "tutor": "",
   "enrollDate": "",
   "graduateDate": "",
+  "certName": "",
+  "language": "",
+  "languageLevel": "",
   "gpa": "",
   "majorGpa": "",
   "rank": "",
@@ -796,6 +799,9 @@ const GROUPS = [
     ['prj6_role','项目6 · 角色'], ['prj6_time','项目6 · 时间'],
     ['prj6_desc','项目6 · 描述']
   ]},
+  { title: '证书与语言', fields: [
+    ['certName','证书名称'], ['language','语言'], ['languageLevel','精通程度']
+  ]},
   { title: '长文本', fields: [
     ['selfEval','自我评价 / 自我介绍'], ['skills','专业技能'], ['awards','奖项荣誉'],
     ['coursesFull','主修课程（完整清单）'], ['sports','文体特长']
@@ -824,7 +830,9 @@ const ENUMS = {
   healthStatus:    ['健康', '良好', '一般'],
   transferAccept:  ['是', '否'],
   tripartite:      ['是', '否'],
-  jobType:         ['全职（校园招聘）', '实习', '兼职', '社会招聘']
+  jobType:         ['全职（校园招聘）', '实习', '兼职', '社会招聘'],
+  language:        ['英语', '日语', '韩语', '德语', '法语'],
+  languageLevel:   ['精通', '熟练', '良好', '一般']
 };
 
 /* 关键字段的格式示例，直接写在占位符里，比事后报错强 */
@@ -881,7 +889,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v16';
+  var ENGINE_VER = 'v23';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -937,6 +945,10 @@ function applyResume(D, O) {
     ['tripartite',    /(三方协议)/, null],
     ['availableDate', /(到岗时间|可到岗|可入职时间)/, /(经历|工作经历)/],
     ['portfolio',     /(作品集|个人主页|作品链接|portfolio|github)/i, /(文件|上传|附件)/],
+    /* 字节这类页面把「证书」「语言能力」单独成块：一个名称/语言下拉 + 一个等级或描述 */
+    ['certName',      /(证书名称|资格证书|执业资格|技能证书|证书(?!编号|日期|时间|照片|扫描|上传|描述|类型))/, /(描述|编号|说明|时间|日期)/],
+    ['languageLevel', /(精通程度|熟练程度|掌握程度|语言水平|外语水平|语言等级|语言能力等级)/, null],
+    ['language',      /(外语|语言(?!编程))/, /(精通|熟练|掌握|程度|等级|水平|编程|开发|种类|字符)/],
     ['exp1_desc',     /(工作内容|工作描述|实习内容|职责描述|主要职责|业绩描述|项目描述)/, null],
     ['selfEval',      /(自我评价|自我介绍|个人简介|个人优势|个人陈述|自我描述|个人评价|个人特长)/, null],
     ['skills',        /(专业技能|技能特长|掌握技能|技能水平)/, null],
@@ -990,12 +1002,18 @@ function applyResume(D, O) {
   /* 日期 / 月份控件（Semi、AntD、Element 一个脾气）：
      点开面板 → 等渲染 → 写值 → 回车 → 看「面板有没有关」来判定到底有没有提交。
      只看输入框里的字会被骗：组件会把不合法的串原样留在框里，实际没认。 */
+  /* 注意：.semi-datepicker 是控件本身的容器（永远包着 input），不是面板。
+     以前把它当面板判，等于恒为 true —— 于是「面板开着」永远成立，写值后必按回车、
+     失败又必 Escape，最后把已经填好的值抹掉。这里只认真正的浮层，且必须不含 el。 */
+  var PANEL_SEL = '.semi-datepicker-panel,.semi-datepicker-month,.ant-picker-dropdown,.ant-calendar,.el-picker-panel,.el-date-picker,.el-date-range-picker,.ivu-date-picker,.ivu-picker-panel,.t-date-picker__panel,.layui-laydate,[class*="datepicker-popup"],[class*="datePickerPopup"],[class*="picker-popover"],[class*="picker-dropdown"],[class*="picker-panel"]';
   function datePanelOpen(el) {
     var doc = el.ownerDocument || document, all, i;
-    try { all = doc.querySelectorAll('.semi-datepicker,.ant-picker-dropdown,.ant-calendar,.el-picker-panel,.el-date-picker,.ivu-date-picker,.t-date-picker,.layui-laydate'); } catch (e) { return false; }
+    try { all = doc.querySelectorAll(PANEL_SEL); } catch (e) { return false; }
     for (i = 0; i < all.length; i++) {
-      var r;
-      try { r = all[i].getBoundingClientRect(); } catch (e2) { continue; }
+      var n = all[i], r;
+      /* 控件自己的外壳会被命中，跳过；面板是挂在 body 下的兄弟节点 */
+      try { if (n === el || (n.contains && n.contains(el))) continue; } catch (e0) {}
+      try { r = n.getBoundingClientRect(); } catch (e2) { continue; }
       if (r.width > 2 && r.height > 2) return true;
     }
     return false;
@@ -1007,12 +1025,22 @@ function applyResume(D, O) {
     var Y = m[1], M = m[2].length === 1 ? '0' + m[2] : m[2];
     var D2 = m[3] ? (m[3].length === 1 ? '0' + m[3] : m[3]) : '';
     var w = W(el), k = 0, cands;
+    /* 直接 el.value = v 会被 React 受控组件当成「没变过」直接回滚，只有真输入才认。
+       execCommand('insertText') 会派发真正的 beforeinput/input，最接近手打。 */
     function put(v) {
-      var P = null, d = null;
-      try { P = w.HTMLInputElement && w.HTMLInputElement.prototype; if (P) d = Object.getOwnPropertyDescriptor(P, 'value'); } catch (e) {}
-      try { if (d && d.set) d.set.call(el, v); else el.value = v; } catch (e2) { el.value = v; }
-      try { el.dispatchEvent(new w.Event('input', { bubbles: true })); } catch (e3) {}
-      try { el.dispatchEvent(new w.Event('change', { bubbles: true })); } catch (e4) {}
+      var doc = el.ownerDocument || document, ins = false;
+      try { if (el.focus) el.focus(); } catch (e0) {}
+      try {
+        try { el.select(); } catch (e1) {}
+        ins = doc.execCommand('insertText', false, String(v));
+      } catch (e2) { ins = false; }
+      if (!ins || String(el.value || '') !== String(v)) {
+        var P = null, d = null;
+        try { P = w.HTMLInputElement && w.HTMLInputElement.prototype; if (P) d = Object.getOwnPropertyDescriptor(P, 'value'); } catch (e) {}
+        try { if (d && d.set) d.set.call(el, v); else el.value = v; } catch (e3) { el.value = v; }
+        try { el.dispatchEvent(new w.Event('input', { bubbles: true })); } catch (e4) {}
+        try { el.dispatchEvent(new w.Event('change', { bubbles: true })); } catch (e5) {}
+      }
     }
     function monthPanel() {
       var doc = el.ownerDocument || document, all, i;
@@ -1021,6 +1049,7 @@ function applyResume(D, O) {
         var e = all[i];
         if (e.children && e.children.length) continue;
         if (!/^\d{1,2}\s*月$/.test((e.textContent || '').trim())) continue;
+        try { if (e.contains && e.contains(el)) continue; } catch (e9) {}
         var r;
         try { r = e.getBoundingClientRect(); } catch (e2) { continue; }
         if (r.width > 2 && r.height > 2) return true;
@@ -1046,35 +1075,30 @@ function applyResume(D, O) {
         ? [Y + '-' + M, Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '/' + M, Y + '.' + M, Y + '年' + M + '月']
         : [Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '-' + M, Y + '/' + M + (D2 ? '/' + D2 : ''), Y + '.' + M, Y + '年' + M + '月'];
       (function step() {
-        if (k >= cands.length) { try { press(el, 'Escape'); } catch (e) {} return cb(false); }
+        /* 所有格式都试完还没成 —— 但绝不按 Escape：它会把「其实已经写进去、只是判晚了一步」
+           的值一起抹掉，这正是之前两个时间框一直空着的直接原因。 */
+        if (k >= cands.length) { try { if (el.blur) el.blur(); } catch (e) {} return cb(okVal()); }
         var v = cands[k++];
         put(v);
         setTimeout(function () {
-          /* 写完弹出面板了才回车 —— 普通文本框里回车会把整个表单提交掉 */
+          /* 值根本没进去（受控组件把 value 回滚了）→ 换个格式再写 */
+          if (!okVal()) return step();
+          /* 值进了框里，还得让组件「认」下来：日期控件基本都是回车确认。
+             普通文本框里回车可能提交表单，所以只对日期控件按。 */
           var opened = datePanelOpen(el) || monthPanel();
-          if (!opened) {
-            if (okVal()) return cb(true);
-            /* 个别页面面板要点图标才出，但输入框自己认回车；只在日期控件里按，
-               普通文本框里回车会把整个表单提交掉 */
-            if (pickerish(el)) {
-              press(el, 'Enter');
-              return setTimeout(function () {
-                if (okVal()) return cb(true);
-                step();
-              }, 260);
-            }
-            return step();
+          if (opened || pickerish(el)) {
+            press(el, 'Enter');
+            return setTimeout(function () {
+              if (okVal()) {
+                /* 收工。关面板点空白处，别用 Escape —— 万一回车没提交，Escape 会回滚 */
+                try { tap(el.ownerDocument.body); } catch (e) {}
+                return cb(true);
+              }
+              step();
+            }, 300);
           }
-          press(el, 'Enter');
-          setTimeout(function () {
-            /* 回车后值还在 = 组件认了；变空 = 没认，换个格式再来 */
-            if (okVal()) {
-              try { if (datePanelOpen(el)) press(el, 'Escape'); } catch (e) {}
-              return cb(true);
-            }
-            step();
-          }, 300);
-        }, 130);
+          cb(true);
+        }, 150);
       })();
     }, 160);
   }
@@ -1735,12 +1759,17 @@ function applyResume(D, O) {
       }
       optTap(p.el, function () { setTimeout(function () { step(sg, idx + 1); }, 150); });
     }
-    function go(L) {
+    function go(L, rc) {
       var cs = candOf(val), i;
       for (i = 0; i < cs.length; i++) {
         var p = pickOpt(L, cs[i]);
         if (p) { optTap(p.el, function () { fin(true, '', p.t); }); return; }
       }
+      /* 上一个下拉的面板还在做淡出动画时，这里拿到的往往是「别人的选项」，
+         自己的选项要晚一帧才挂上去。以前这里直接判失败，于是紧挨着的两个下拉
+         （期望工作地点 → 学历类型）里后一个常常选不上。再等几拍重取。 */
+      rc = rc || 0;
+      if (rc < 3) { return setTimeout(function () { go(visibleOpts(doc), rc + 1); }, 110); }
       var sg = segsOf(val);
       if (sg.length > 1) { step(sg, 0); return; }
       fin(false);
@@ -1756,6 +1785,7 @@ function applyResume(D, O) {
       return true;
     }
     var before = leafSnap(doc);
+    function openSelf() {
     tap(el);
     waitOpts(doc, function (L) {
       if (L.length) { go(L); return; }
@@ -1778,6 +1808,15 @@ function applyResume(D, O) {
         fin(false);
       });
     });
+    }
+    /* 上一个控件的面板还在淡出时，waitOpts 会立刻拿着「别人的选项」返回，
+       于是紧挨着的下一个下拉被判「没有这一项」。先点空白把旧面板关掉再开自己的。 */
+    if (visibleOpts(doc).length) {
+      try { tap(doc.body); } catch (e) {}
+      setTimeout(openSelf, 130);
+    } else {
+      openSelf();
+    }
   }
   /* 组件内的 input 往往只能拿到「请选择」这种占位符，得回到组件外层取真标签 */
   function comboLabel(el, key) {
@@ -1827,11 +1866,27 @@ function applyResume(D, O) {
       if (i >= ASYNC.length) { RES.busy = 0; cb(); return; }
       var it = ASYNC[i++];
       chooseCombo(it.el, it.val, function (ok, part, picked) {
+        if (!ok) {
+          /* 同一个控件的内外两层会各进一次队列：外层已经填上了，内层再填一遍就找不到选项，
+             于是报一条假的「下拉里没有」。失败时先看一眼控件现在的值是不是已经对了。 */
+          var now = '';
+          try { now = clean(comboValue(comboBox(it.el) || it.el) || ''); } catch (e) {}
+          var csx = candOf(it.val), jx;
+          for (jx = 0; jx < csx.length; jx++) {
+            if (now && now.indexOf(String(csx[jx]).replace(/\s/g, '')) >= 0) { ok = true; picked = csx[jx]; break; }
+          }
+        }
         if (ok) {
           RES.filled.push({ k: it.k, l: it.l, v: String(picked || it.val).slice(0, 40) });
           if (part) RES.failed.push({ l: it.l, r: '只填到「' + part + '」，下一级请手动选' });
         } else {
-          RES.failed.push({ l: it.l, r: '下拉里没有「' + it.val + '」这一项' });
+          /* 一个下拉在 DOM 里可能是好几层（外层容器 + 内层 selection/input），
+             上层已经填成功时，下层再填一遍必然找不到选项。同一字段已经成功过就不再报。 */
+          var already = false;
+          for (var q = 0; q < RES.filled.length; q++) {
+            if (RES.filled[q].k === it.k) { already = true; break; }
+          }
+          if (!already) RES.failed.push({ l: it.l, r: '下拉里没有「' + it.val + '」这一项' });
         }
         setTimeout(next, 120);
       });
@@ -2153,11 +2208,17 @@ function applyResume(D, O) {
           /* 日期类：点开是日历或月份滚轮，得单独处理 */
           if (isDateKey(key)) { pushDate(el, key, val); continue; }
           /* 组件外层 div 和里面的 input 会同时命中，只留一个，优先留里面的 input（点它最准） */
-          var dup = false;
+          var dup = false, cid = null;
+          try { cid = comboBox(el); } catch (e) {}
           for (var z = 0; z < ASYNC.length; z++) {
-            var pe = ASYNC[z].el;
+            var pe = ASYNC[z].el, pid = null;
+            try { pid = comboBox(pe); } catch (e) {}
             try {
               if (pe === el) { dup = true; break; }
+              /* 同一个下拉的内外层未必是祖先/后代（Semi 里是兄弟节点），
+                 按「它们各自归属的组件容器」判断才准，否则一个控件会进两次队列，
+                 第一遍填上、第二遍报一条假的「没有这一项」 */
+              if (cid && pid && cid === pid) { dup = true; break; }
               if (pe.contains(el)) { ASYNC[z].el = el; dup = true; break; }
               if (el.contains(pe)) { dup = true; break; }
             } catch (e) {}
@@ -4043,6 +4104,7 @@ const SAMPLE = {
   academicDegree: '学士', eduType: '全日制统招', isUpgrade: '否',
   studentId: '3200100001', className: '建筑学2201班', tutor: '',
   enrollDate: '2022-09-01', graduateDate: '2026-06-30',
+  certName: '普通话二级甲等', language: '英语', languageLevel: 'CET-6',
   gpa: '3.60', majorGpa: '3.85', rank: '前20%', majorRank: '前15%',
   courses: '设计基础、建筑设计、建筑构造、中国建筑史、场地设计',
   targetJob: '建筑设计师', targetJob2: '城市设计师', targetCity: '杭州',
