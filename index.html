@@ -889,7 +889,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v23';
+  var ENGINE_VER = 'v25';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -917,7 +917,7 @@ function applyResume(D, O) {
     ['ethnicity',     /(民族)/, /(要求)/],
     ['political',     /(政治面貌)/, null],
     ['idType',        /(证件号码类型|证件类型|身份证件类型)/, null],
-    ['idcard',        /(公民身份号码|身份证号码|身份证号|身份证|证件号码|证件号)/, /(类型|有效期|照片|扫描|上传|正面|反面)/],
+    ['idcard',        /(公民身份号码|身份证号码|身份证号|身份证|证件号码|证件号|个人证件|证件信息)/, /(类型|有效期|照片|扫描|上传|正面|反面)/],
     ['mbti',          /(mbti)/i, null],
     ['school',        /(毕业院校|就读院校|学校名称|毕业学校|院校名称|就读学校|所在院校)/, /(专业|高中|中学|小学|公司|单位|院系)/],
     ['college',       /(学院|院系|系别)/, /(学校|大学名称)/],
@@ -1067,6 +1067,61 @@ function applyResume(D, O) {
       var n = String(el.value || '').replace(/[^\d]/g, '');
       return n.indexOf(Y + M) === 0;
     }
+    /* ---- 点选路径 ----
+       字节这类月份面板是「年份下拉 + 12 个月格子」：打字进去它不认（受控组件会回滚），
+       点两下反而稳：先点标题里的年份，再点目标月份。 */
+    function pad2(x) { return String(x).length < 2 ? '0' + String(x) : String(x); }
+    function sameEl(n) { try { return n === el || el.contains(n); } catch (e) { return false; } }
+    function leaves(re, skip) {
+      var doc = el.ownerDocument || document, out = [], all, i;
+      try { all = doc.querySelectorAll('div,span,li,a,td'); } catch (e) { return out; }
+      for (i = 0; i < all.length && i < 6000; i++) {
+        var n = all[i];
+        if (n.children && n.children.length) continue;
+        var t = (n.textContent || '').trim();
+        if (!t || t.length > 8 || !re.test(t)) continue;
+        if (skip && skip(n)) continue;
+        var r; try { r = n.getBoundingClientRect(); } catch (e2) { continue; }
+        if (r.width < 2 || r.height < 2) continue;
+        out.push(n);
+      }
+      return out;
+    }
+    function dateByClick(cb2) {
+      var done = false;
+      function fin(ok) { if (done) return; done = true; cb2(ok); }
+      function pickM() {
+        var ms = leaves(/^\d{1,2}\s*月$/, sameEl);
+        var want = pad2(M) + '月', want2 = String(parseInt(M, 10)) + '月', tgt = null;
+        for (var i = 0; i < ms.length; i++) {
+          var t = String(ms[i].textContent).replace(/\s/g, '');
+          if (t === want || t === want2) { tgt = ms[i]; break; }
+        }
+        if (!tgt) return fin(false);
+        tap(tgt);
+        setTimeout(function () { fin(okVal()); }, 400);
+      }
+      tap(el);
+      setTimeout(function () {
+        var ys = leaves(/^\d{4}\s*年$/, sameEl);
+        var trig = ys.length ? ys[0] : null;
+        if (!trig) return fin(false);
+        var cur = parseInt(String(trig.textContent).replace(/\D/g, ''), 10);
+        if (String(cur) === String(Y)) return pickM();
+        tap(trig);
+        setTimeout(function () {
+          var list = leaves(/^\d{4}$/), tgt = null;
+          for (var j = 0; j < list.length; j++) {
+            if (String(list[j].textContent).trim() === String(Y)) { tgt = list[j]; break; }
+          }
+          if (!tgt) { try { tap(trig); } catch (e) {} return fin(false); }
+          tap(tgt);
+          setTimeout(pickM, 300);
+        }, 300);
+      }, 340);
+    }
+    function typePath() {
+    k = 0;
     try { if (el.focus) el.focus(); } catch (e) {}
     tap(el);
     setTimeout(function () {
@@ -1101,6 +1156,13 @@ function applyResume(D, O) {
         }, 150);
       })();
     }, 160);
+    }
+    /* 先试点选，点不成再退回「打字 + 回车」 */
+    dateByClick(function (ok) {
+      if (ok) return cb(true);
+      try { tap(el.ownerDocument.body); } catch (e) {}
+      setTimeout(typePath, 260);
+    });
   }
 
   function shown(el) {
