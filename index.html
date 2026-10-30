@@ -881,7 +881,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v13';
+  var ENGINE_VER = 'v15';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -914,14 +914,15 @@ function applyResume(D, O) {
     ['school',        /(毕业院校|就读院校|学校名称|毕业学校|院校名称|就读学校|所在院校)/, /(专业|高中|中学|小学|公司|单位|院系)/],
     ['college',       /(学院|院系|系别)/, /(学校|大学名称)/],
     ['major',         /(所学专业|专业名称|主修专业|就读专业|专业(?!排名|课程|课|技能|方向|知识|素养|成绩|类别|代码|技术))/, /(方向|排名|技能|辅修)/],
-    ['degree',        /(最高学历|学历|培养层次)/, /(学位|证书编号|毕业院校)/],
+    /* 「学历类型」是培养形式（统招全日制…），别被下面的「学历」抢走，所以放前面 */
+    ['eduType',       /(受教育类型|培养方式|学习形式|教育形式|招生类型|学历类型)/, /(学位)/],
+    ['degree',        /(最高学历|学历|培养层次)/, /(学位|证书编号|毕业院校|类型|形式|方式)/],
     ['academicDegree',/(学位)/, /(学历|证书编号)/],
-    ['eduType',       /(受教育类型|培养方式|学习形式|教育形式|招生类型|学历类型)/, null],
     ['isUpgrade',     /(是否专升本|专升本)/, null],
     ['studentId',     /(学号)/, null],
     ['className',     /(班级)/, null],
     ['tutor',         /(导师|指导教师)/, /(推荐人|联系人)/],
-    ['enrollDate',    /(入学时间|入学年月|入学日期)/, null],
+    ['enrollDate',    /(入学时间|入学年月|入学日期|起止时间|起止年月|就读时间|在校时间|起止日期)/, /(项目|实习|工作|公司|单位)/],
     ['graduateDate',  /(毕业时间|毕业年月|毕业日期|预计毕业)/, /(入学)/],
     ['gpa',           /(gpa|绩点)/i, /(排名|专业课)/],
     ['majorGpa',      /(专业课.*(绩点|gpa)|(绩点|gpa).*专业课)/i, null],
@@ -985,6 +986,76 @@ function applyResume(D, O) {
     catch (e) { el.value = val; }
     fire(el);
   }
+  function isDateKey(k) { return /(Date|Month)$/.test(k) || k === 'birthday'; }
+  /* 日期 / 月份控件（Semi、AntD、Element 一个脾气）：
+     点开面板 → 等渲染 → 写值 → 回车 → 看「面板有没有关」来判定到底有没有提交。
+     只看输入框里的字会被骗：组件会把不合法的串原样留在框里，实际没认。 */
+  function datePanelOpen(el) {
+    var doc = el.ownerDocument || document, all, i;
+    try { all = doc.querySelectorAll('.semi-datepicker,.ant-picker-dropdown,.ant-calendar,.el-picker-panel,.el-date-picker,.ivu-date-picker,.t-date-picker,.layui-laydate'); } catch (e) { return false; }
+    for (i = 0; i < all.length; i++) {
+      var r;
+      try { r = all[i].getBoundingClientRect(); } catch (e2) { continue; }
+      if (r.width > 2 && r.height > 2) return true;
+    }
+    return false;
+  }
+  function fillDate(el, val, cb) {
+    var s = String(val == null ? '' : val).replace(/[年月日./]/g, '-').replace(/-+/g, '-');
+    var m = /^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/.exec(s);
+    if (!m) return cb(false);
+    var Y = m[1], M = m[2].length === 1 ? '0' + m[2] : m[2];
+    var D2 = m[3] ? (m[3].length === 1 ? '0' + m[3] : m[3]) : '';
+    var w = W(el), k = 0, cands;
+    function put(v) {
+      var P = null, d = null;
+      try { P = w.HTMLInputElement && w.HTMLInputElement.prototype; if (P) d = Object.getOwnPropertyDescriptor(P, 'value'); } catch (e) {}
+      try { if (d && d.set) d.set.call(el, v); else el.value = v; } catch (e2) { el.value = v; }
+      try { el.dispatchEvent(new w.Event('input', { bubbles: true })); } catch (e3) {}
+      try { el.dispatchEvent(new w.Event('change', { bubbles: true })); } catch (e4) {}
+    }
+    function monthPanel() {
+      var doc = el.ownerDocument || document, all, i;
+      try { all = doc.querySelectorAll('li,div,span'); } catch (e) { return false; }
+      for (i = 0; i < all.length && i < 4000; i++) {
+        var e = all[i];
+        if (e.children && e.children.length) continue;
+        if (!/^\d{1,2}\s*月$/.test((e.textContent || '').trim())) continue;
+        var r;
+        try { r = e.getBoundingClientRect(); } catch (e2) { continue; }
+        if (r.width > 2 && r.height > 2) return true;
+      }
+      return false;
+    }
+    try { if (el.focus) el.focus(); } catch (e) {}
+    tap(el);
+    setTimeout(function () {
+      var isMonth = monthPanel(), hasPanel = isMonth || datePanelOpen(el);
+      if (!hasPanel) {
+        /* 点开什么都没有 = 就是个普通文本框，直接写值 */
+        var pv = Y + '-' + M + (D2 ? '-' + D2 : '');
+        put(pv);
+        return cb(String(el.value || '').replace(/[^\d]/g, '').indexOf(Y + M) === 0);
+      }
+      cands = isMonth
+        ? [Y + '-' + M, Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '/' + M, Y + '.' + M]
+        : [Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '-' + M, Y + '/' + M + (D2 ? '/' + D2 : ''), Y + '.' + M];
+      (function step() {
+        if (k >= cands.length) { press(el, 'Escape'); return cb(false); }
+        var v = cands[k++];
+        put(v);
+        setTimeout(function () {
+          press(el, 'Enter');
+          setTimeout(function () {
+            /* 面板关掉了才算真的选上；还开着说明这个格式它不认 */
+            if (!datePanelOpen(el)) return cb(true);
+            step();
+          }, 320);
+        }, 120);
+      })();
+    }, 180);
+  }
+
   function shown(el) {
     try { var r = el.getBoundingClientRect(); return r.width > 2 && r.height > 2; }
     catch (e) { return false; }
@@ -1077,6 +1148,16 @@ function applyResume(D, O) {
 
   /* 标签在控件正上方时（Form.Item / Semi Design 的默认排版），左侧同一行什么都找不到。
      取上方 40px 内、与控件水平有重叠的最近一行文字。 */
+  /* 标签下面常有一句说明（「无准确的毕业时间可填写预计毕业时间」），
+     它比标签更靠近控件，会被当成标签，把字段认到别人头上。这类句子直接跳过。 */
+  function looksHint(t) {
+    if (!t) return false;
+    if (/[，。；：,;]/.test(t)) return true;
+    if (t.length > 12) return true;
+    if (/^(请|无|如|若|仅|注|例|示例|提示|说明)/.test(t)) return true;
+    if (/(可填写|可填|如无|若无|暂无|没有的|选填|必填)/.test(t)) return true;
+    return false;
+  }
   function upLabel(el) {
     var doc = el.ownerDocument || document, list = geoCands(doc);
     if (!list || !list.length) return '';
@@ -1093,6 +1174,7 @@ function applyResume(D, O) {
       var gap = r.top - pr.bottom;              /* 文字底边在控件顶部之上 */
       if (gap < -6 || gap > 40) continue;
       if (pr.right < r.left - 24 || pr.left > r.right + 24) continue;
+      if (looksHint(list[i].t)) continue;
       var d = Math.abs(gap) * 2 + Math.abs(pr.left - r.left) * 0.2;
       if (d < bd) { bd = d; best = list[i].t; }
     }
@@ -1220,6 +1302,7 @@ function applyResume(D, O) {
      直接改 value 页面不认，必须点开 → 等弹层 → 点选项，所以单独走一条异步队列。
      主循环只负责把待办登记到 ASYNC，循环跑完再一个个处理。 */
   var ASYNC = [];
+  var DATES = [];       /* 日期 / 月份控件单独一队：要点开面板或回车提交，跟下拉不是一路 */
   var TEXTKEY = /^(name|enName|phone|emergencyPhone|email|idcard|wechat|qq|studentId|portfolio|gpa|majorGpa|height|weight|className|tutor)$/;
   var COMBO_CLS = /(^|[\s_-])(ant-select|ant-cascader|el-select|el-cascader|ivu-select|ivu-cascader|n-select|n-cascader|arco-select|layui-form-select|select2|chosen-container|vue-treeselect|react-select|semi-select|semi-cascader|semi-tree-select|semi-datepicker)/;
   /* 这几种是「点击目标本身就是个壳」，里面没有 input，原生 select 被 display:none 藏了 */
@@ -1348,6 +1431,34 @@ function applyResume(D, O) {
     try { if (W(el).PointerEvent) { mouseIn(el, 'pointerdown'); mouseIn(el, 'pointerup'); } } catch (e) {}
     mouseIn(el, 'mousedown'); mouseIn(el, 'mouseup'); mouseIn(el, 'click');
   }
+  /* 按坐标点：先算出元素中心那一像素上「真正被点到」的最里层节点，再往那儿发事件。
+     字节 Semi 的下拉选项、日历格子都只认这种点法，直接往文字节点上派事件是不响应的。 */
+  function tapHit(el) {
+    if (!el) return;
+    var d = el.ownerDocument || document, r = null, t = el, x = 0, y = 0;
+    try { r = el.getBoundingClientRect(); } catch (e) {}
+    if (r && r.width > 1 && r.height > 1) {
+      x = Math.round(r.left + r.width / 2);
+      y = Math.round(r.top + r.height / 2);
+      try {
+        var hit = d.elementFromPoint(x, y);
+        if (hit && hit.nodeType === 1) t = hit;
+      } catch (e2) {}
+    }
+    try { if (el.focus) el.focus(); } catch (e3) {}
+    var w = W(t);
+    function me(type) {
+      var o = { bubbles: true, cancelable: true, view: w, clientX: x, clientY: y };
+      try { t.dispatchEvent(new w.MouseEvent(type, o)); } catch (e4) {}
+    }
+    try {
+      if (w.PointerEvent) {
+        t.dispatchEvent(new w.PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+        t.dispatchEvent(new w.PointerEvent('pointerup', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+      }
+    } catch (e5) {}
+    me('mousedown'); me('mouseup'); me('click');
+  }
   function optText(o) {
     var t = clean(o.innerText || o.textContent || '');
     if (!t) { try { t = clean(o.getAttribute('title') || o.getAttribute('data-value') || ''); } catch (e) {} }
@@ -1358,9 +1469,11 @@ function applyResume(D, O) {
     d = d || document;
     var out = [], nodes, i;
     try { nodes = d.querySelectorAll(OPT_SEL); } catch (e) { nodes = []; }
+    var DATE_PANEL = '.semi-datepicker,.ant-picker-dropdown,.ant-calendar,.el-picker-panel,.el-date-picker,.el-date-range-picker,.ivu-date-picker,.t-date-picker,.layui-laydate';
     for (i = 0; i < nodes.length; i++) {
       var n = nodes[i], g = '';
       if (!shown(n)) continue;
+      try { if (n.closest && n.closest(DATE_PANEL)) continue; } catch (e) {}
       try { g = n.getAttribute('aria-disabled') || ''; } catch (e) { g = ''; }
       if (g === 'true') continue;
       if (/(^|\s)(is-disabled|ant-select-item-option-disabled|disabled)(\s|$)/.test(clsOf(n))) continue;
@@ -1408,9 +1521,11 @@ function applyResume(D, O) {
     var vv = normBare(val), i, best = null, bl = 0, t;
     if (!vv || !list || !list.length) return null;
     for (i = 0; i < list.length; i++) if (normBare(list[i].t) === vv) return list[i];
+    /* 正向包含（选项比值长）：取「最接近」的那个，多出来的字最少。
+       以前取最长，结果「全日制」会选中「统招非全日制」而不是「统招全日制」。 */
     for (i = 0; i < list.length; i++) {
       t = normBare(list[i].t);
-      if (t.length >= 2 && t.indexOf(vv) >= 0 && t.length > bl) { best = list[i]; bl = t.length; }
+      if (t.length >= 2 && t.indexOf(vv) >= 0 && (!best || t.length < bl)) { best = list[i]; bl = t.length; }
     }
     if (best) return best;
     /* 反向包含只在选项占值的大部分时才认，否则「某省某市」会被「某省」截胡，
@@ -1437,7 +1552,7 @@ function applyResume(D, O) {
   }
   /* 枚举值的同义写法：主值选不中时按顺序再试这几个 */
   var SYN = {
-    '全日制统招': ['全日制', '统招', '普通全日制', '全日制普通高校', '普通高校全日制'],
+    '全日制统招': ['全日制', '统招', '统招全日制', '普通全日制', '全日制普通高校', '普通高校全日制'],
     '本科': ['大学本科', '本科生', '本科教育'],
     '硕士': ['硕士研究生'],
     '学士': ['学士学位'],
@@ -1476,7 +1591,7 @@ function applyResume(D, O) {
     var n = 0;
     (function tick() {
       var L = visibleOpts(d);
-      if (L.length || n >= 16) { cb(L); return; }
+      if (L.length || n >= 30) { cb(L); return; }
       n++; setTimeout(tick, 40);
     })();
   }
@@ -1576,26 +1691,32 @@ function applyResume(D, O) {
   }
   function chooseCombo(el, val, cb) {
     var doc = el.ownerDocument || document, done = false, got = '';
+    var box = null;
+    try { box = comboBox(el) || el; } catch (e) { box = el; }
     function fin(ok, part, picked) { if (done) return; done = true; closeCombo(el); cb(ok, part, picked); }
+    function shownVal() { try { return clean(comboValue(box) || ''); } catch (e) { return ''; } }
+    /* 点选项。先按元素气泡派事件（多数组件认这个）；一点反应都没有时，
+       再按屏幕坐标点一次（有些组件只认真实坐标命中的最里层节点）。
+       两次之间看「控件显示的值有没有变」，变了就不再点，避免多选被点成反选。 */
+    function optTap(node, next) { tap(node); setTimeout(next, 90); }
     function step(sg, idx) {
       var p = pickOpt(visibleOpts(doc), sg[idx]);
       if (!p) { fin(idx > 0, got); return; }
       got = sg[idx];
-      tap(p.el);
       if (idx + 1 >= sg.length) {
-        setTimeout(function () {
+        optTap(p.el, function () {
           /* 点完最后一段菜单还开着，说明下面还有一级（省/市/区），得让人手选 */
           fin(true, visibleOpts(doc).length ? got : '');
-        }, 70);
+        });
         return;
       }
-      setTimeout(function () { step(sg, idx + 1); }, 150);
+      optTap(p.el, function () { setTimeout(function () { step(sg, idx + 1); }, 150); });
     }
     function go(L) {
       var cs = candOf(val), i;
       for (i = 0; i < cs.length; i++) {
         var p = pickOpt(L, cs[i]);
-        if (p) { tap(p.el); fin(true, '', p.t); return; }
+        if (p) { optTap(p.el, function () { fin(true, '', p.t); }); return; }
       }
       var sg = segsOf(val);
       if (sg.length > 1) { step(sg, 0); return; }
@@ -1608,8 +1729,7 @@ function applyResume(D, O) {
       for (iN = 0; iN < csN.length; iN++) { hN = pickOpt(LN, csN[iN]); if (hN) break; }
       if (!hN) return false;
       /* 多选组件点完还开着，属正常，别当成没选中 */
-      tap(hN.el);
-      fin(true, '', hN.t);
+      optTap(hN.el, function () { fin(true, '', hN.t); });
       return true;
     }
     var before = leafSnap(doc);
@@ -1625,11 +1745,11 @@ function applyResume(D, O) {
         /* 自家组件的弹层没有标准类名：按「浮层里的叶子文字」再试一次 */
         var L3 = looseOpts(el), cs3 = candOf(val), hit = null, i3;
         for (i3 = 0; i3 < cs3.length; i3++) { hit = pickOpt(L3, cs3[i3]); if (hit) break; }
-        if (hit) { tap(hit.el); fin(true, '', hit.t); return; }
+        if (hit) { optTap(hit.el, function () { fin(true, '', hit.t); }); return; }
         /* 兜底：弹窗选取器（搜索 + 勾选 + 确定） */
         var pk = pickerBox(doc);
         if (pk) {
-          usePicker(pk, val, function (got) { fin(!!got, ''); });
+          usePicker(pk, val, function (got2) { fin(!!got2, ''); });
           return;
         }
         fin(false);
@@ -1647,6 +1767,37 @@ function applyResume(D, O) {
     } catch (e) {}
     return clean(ctxText(el)).slice(0, 24) || LABELOF(key);
   }
+  function pushDate(el, key, val) {
+    for (var q = 0; q < DATES.length; q++) {
+      var qe = DATES[q].el;
+      try {
+        if (qe === el) return;
+        /* 外壳 div 先入队时算不准左右序号，内层 input 后到，键值要一起更新 */
+        if (qe.contains(el)) { DATES[q].el = el; DATES[q].k = key; DATES[q].val = val; DATES[q].l = comboLabel(el, key); return; }
+        if (el.contains(qe)) return;
+      } catch (e) {}
+    }
+    DATES.push({ el: el, k: key, val: val, l: comboLabel(el, key) });
+  }
+
+  function runDates(cb) {
+    var i = 0;
+    (function next() {
+      if (i >= DATES.length) { cb(); return; }
+      var it = DATES[i++];
+      var ok = false;
+      var dm = /(\d{4})-(\d{1,2})/.exec(String(it.val || ''));
+      var have = String(it.el.value || '').replace(/[^\d]/g, '');
+      function after(ok) {
+        if (ok) RES.filled.push({ k: it.k, l: it.l, v: String(it.val).slice(0, 40) });
+        else RES.failed.push({ l: it.l, r: '日期框没写进去「' + it.val + '」' });
+        setTimeout(next, 180);
+      }
+      if (dm && have.indexOf(dm[1] + (dm[2].length === 1 ? '0' + dm[2] : dm[2])) === 0) { after(true); return; }
+      try { fillDate(it.el, it.val, after); } catch (e) { after(false); }
+    })();
+  }
+
   function runCombo(cb) {
     var i = 0;
     (function next() {
@@ -1659,7 +1810,7 @@ function applyResume(D, O) {
         } else {
           RES.failed.push({ l: it.l, r: '下拉里没有「' + it.val + '」这一项' });
         }
-        setTimeout(next, 70);
+        setTimeout(next, 120);
       });
     })();
   }
@@ -1760,6 +1911,31 @@ function applyResume(D, O) {
   }
 
   /* 同一行里若有 2~3 个输入框，返回 el 是从左数第几个（0 起）；不是这种结构返回 -1 */
+  /* 控件所在区块：往上找一个最近的小标题（教育 / 实习 / 项目）。
+     「起止时间」这种标签在教育区是「入学-毕业」，在经历区是项目时间，不能混。 */
+  function secOf(el) {
+    var doc = (el && el.ownerDocument) || document, wk, tn, kind = '';
+    try {
+      wk = doc.createTreeWalker(doc.body || doc.documentElement, 4, null, false);
+      while ((tn = wk.nextNode())) {
+        var t = (tn.nodeValue || '').replace(/\s/g, '');
+        if (!t || t.length > 12) continue;
+        var k = '';
+        if (/(教育经历|教育背景|教育信息|教育情况|学历信息|教育及培训)/.test(t)) k = 'edu';
+        else if (/(实习经历|工作经历|实践经历|职业经历|工作经验|实习经验)/.test(t)) k = 'intern';
+        else if (/(项目经历|项目经验|项目实践|主要项目|科研项目|代表项目)/.test(t)) k = 'project';
+        if (!k) continue;
+        var pe = tn.parentNode;
+        if (!pe) continue;
+        try { if (!shown(pe)) continue; } catch (e) { continue; }
+        var r = 0;
+        try { r = pe.compareDocumentPosition(el); } catch (e2) { continue; }
+        if (r & 4) kind = k;         /* 标题在控件之前，取最后一个 = 最近的那个 */
+      }
+    } catch (e3) {}
+    return kind;
+  }
+
   function dateRowIdx(el) {
     var doc = el.ownerDocument || document, all, i, row = [], r0;
     try { r0 = el.getBoundingClientRect(); } catch (e) { return -1; }
@@ -1921,12 +2097,17 @@ function applyResume(D, O) {
            页面还会在这行底下写一句「无准确的毕业时间可填写预计毕业时间」，
            标签识别经常被那句提示抢走，导致两个框都被认成毕业时间 —— 这里按左右顺序纠正。 */
         if (key === 'enrollDate' || key === 'graduateDate') {
+          var secNow = secOf(el);
+          /* 经历区块里的「起止时间」是多段经历的时间，别拿入学日期去填 */
+          if (secNow && secNow !== 'edu') continue;
           var ridx = dateRowIdx(el);
           if (ridx === 0) key = 'enrollDate';
           else if (ridx === 1) key = 'graduateDate';
         }
 
         var val = D[key], ok = false;
+        /* 日期控件一律排到日期队列：要异步点开面板再回车，同步写完会被回滚 */
+        if (isDateKey(key) && tag === 'input' && key !== 'birthday') { pushDate(el, key, val); continue; }
         /* 开了多段经历模式时，经历类字段交给下面的 exp 逻辑按顺序对位，
            否则表单里三个「工作内容」会全被填成第一段的描述 */
         if (O.exp && /^(exp|prj)\d_/.test(key)) continue;
@@ -1946,8 +2127,8 @@ function applyResume(D, O) {
 
         /* 下拉组件：先登记，等主循环跑完再一个个点开选（弹层是异步渲染的） */
         if (combo) {
-          /* 日期类：点开是日历，点了也选不中，别浪费一轮 */
-          if (/Date$/.test(key) || key === 'birthday') continue;
+          /* 日期类：点开是日历或月份滚轮，得单独处理 */
+          if (isDateKey(key)) { pushDate(el, key, val); continue; }
           /* 组件外层 div 和里面的 input 会同时命中，只留一个，优先留里面的 input（点它最准） */
           var dup = false;
           for (var z = 0; z < ASYNC.length; z++) {
@@ -2104,6 +2285,87 @@ function applyResume(D, O) {
       }
       var INTERN = pack('exp', 4), PROJ = pack('prj', 6);
 
+      /* 写一个格子：时间框只认年月日，其余原样写。块对位与全局排队共用这一段 */
+      function putCell(cell, d, kk, mv) {
+        if (!cell || !mv) return false;
+        if (kk === 'start' || kk === 'end') {
+          var ct = (cell.getAttribute('type') || '').toLowerCase();
+          if ((ct === 'date' || ct === 'month') && !/^\d{4}-\d{2}(-\d{2})?$/.test(mv)) {
+            RES.failed.push({ l: labelText(cell), r: '只有年份「' + mv + '」，请手动选月份' });
+            return false;
+          }
+        }
+        try {
+          protoSet(cell, fmtFor(cell, mv));
+          RES.filled.push({ k: d.key + '_' + kk, l: labelText(cell), v: String(mv).slice(0, 40) });
+          return true;
+        } catch (e) {}
+        return false;
+      }
+
+      /* ---------- 块优先 ----------
+         按类型全局排队有个硬伤：某一段少认出一个字段（比如「项目名称」没标签），
+         后面每一段都会整体串一位 —— 第一段的描述会写进第二段的「单位」里。
+         所以先把页面切成一块块重复容器，块内各认各的类型：缺哪种都不连累别的段。 */
+      function nearText(el) {
+        var t = '';
+        try { t = labelText(el) || ''; } catch (e) {}
+        if (!t) { try { t = upLabel(el) || ''; } catch (e) {} }
+        if (!t) { try { t = ctxUp(el, 1) || ''; } catch (e) {} }
+        return t;
+      }
+      /* 最近的一个「正好含一个描述框」的祖先 = 一段经历 */
+      function cntIn(A) {
+        var c = 0;
+        for (var i = 0; i < cands.length; i++) {
+          try { if (A.contains(cands[i].el)) c++; } catch (e) {}
+        }
+        return c;
+      }
+      function blockOf(el) {
+        var p = el.parentNode, hop = 0;
+        while (p && p.nodeType === 1 && hop < 8) {
+          /* 描述框自己的父级只有它一个字段，得往上找到「一段经历」那一层：
+             至少要含两个候选字段，且只含一个描述框 */
+          try {
+            if (p.querySelectorAll('textarea').length === 1 && cntIn(p) >= 2) return p;
+          } catch (e) {}
+          p = p.parentNode; hop++;
+        }
+        return null;
+      }
+      var BLKS = [];
+      try {
+        for (var bi = 0; bi < cands.length; bi++) {
+          var cel = cands[bi].el, host = blockOf(cel);
+          if (!host) continue;
+          var rec = null;
+          for (var bj = 0; bj < BLKS.length; bj++) if (BLKS[bj].host === host) { rec = BLKS[bj]; break; }
+          if (!rec) { rec = { host: host, kind: cands[bi].k || secKind(host) || '', f: {} }; BLKS.push(rec); }
+          var ty = fieldOf(nearText(cel));
+          if (ty && !rec.f[ty]) rec.f[ty] = cel;
+        }
+        /* 连单位/名称都认不出的块不可信，退回全局排队 */
+        var keepB = [];
+        for (var bk = 0; bk < BLKS.length; bk++) if (BLKS[bk].f.org || BLKS[bk].f.title) keepB.push(BLKS[bk]);
+        BLKS = keepB;
+      } catch (e) { BLKS = []; }
+
+      function fillByBlock() {
+        var done = 0;
+        for (var n = 0; n < BLKS.length; n++) {
+          var b = BLKS[n], kd = b.kind || '', ni = 0;
+          for (var q = 0; q < n; q++) if ((BLKS[q].kind || '') === kd) ni++;
+          var list = kd === 'intern' ? INTERN : (kd === 'project' ? PROJ : INTERN.concat(PROJ));
+          var d = list[ni];
+          if (!d) continue;
+          var map = { org: d.org, title: d.title, role: d.role, start: d.start, end: d.end, desc: d.desc };
+          for (var kk in map) putCell(b.f[kk], d, kk, map[kk]);
+          done++;
+        }
+        return done;
+      }
+
       function fill(kd, list) {
         var P = POOL[kd], hasAny = false;
         if (!P || !list.length) return;
@@ -2114,29 +2376,22 @@ function applyResume(D, O) {
           var map = { org: d.org, title: d.title, role: d.role, start: d.start, end: d.end, span: d.span, desc: d.desc };
           for (var kk in map) {
             if (!map[kk] || !P[kk] || !P[kk][n]) continue;
-            var cell = P[kk][n], mv = map[kk];
-            /* 时间框只要年月日；「2026 - 至今」这种只有年份的，别硬塞，报出来让人手选 */
-            if (kk === 'start' || kk === 'end') {
-              var ct = (cell.getAttribute('type') || '').toLowerCase();
-              if ((ct === 'date' || ct === 'month') && !/^\d{4}-\d{2}(-\d{2})?$/.test(mv)) {
-                RES.failed.push({ l: labelText(cell), r: '只有年份「' + mv + '」，请手动选月份' });
-                continue;
-              }
-            }
-            try {
-              protoSet(cell, fmtFor(cell, mv));
-              RES.filled.push({ k: d.key + '_' + kk, l: labelText(cell), v: String(mv).slice(0, 40) });
-            } catch (e) {}
+            putCell(P[kk][n], d, kk, map[kk]);
           }
         }
       }
 
-      if (HEADS.length) {
-        fill('intern', INTERN);
-        fill('project', PROJ);
-      } else {
-        /* 没分节：实习在前、项目在后，按顺序对位到同一批块 */
-        fill('none', INTERN.concat(PROJ));
+      /* 页面上是一块一块的重复容器时，先按块对位；对上了就别再走全局排队（会重复写一遍） */
+      var byBlk = 0;
+      try { if (BLKS.length) byBlk = fillByBlock(); } catch (e) { byBlk = 0; }
+      if (!byBlk) {
+        if (HEADS.length) {
+          fill('intern', INTERN);
+          fill('project', PROJ);
+        } else {
+          /* 没分节：实习在前、项目在后，按顺序对位到同一批块 */
+          fill('none', INTERN.concat(PROJ));
+        }
       }
     })();
   }
@@ -2273,14 +2528,17 @@ function applyResume(D, O) {
   }
 
   /* 有下拉组件待填：先亮个面板，再一个个点开选，全填完刷新一次结果 */
-  if (ASYNC.length && !DIAG) {
+  if ((ASYNC.length || DATES.length) && !DIAG) {
     RES.busy = 1;
     panel();
-    runCombo(function () { try { panel(); } catch (e) {} });
+    runCombo(function () {
+      runDates(function () { try { panel(); } catch (e) {} });
+    });
   } else {
     panel();
   }
   try { RES.data = D; } catch (e) {}
+  try { if (typeof window !== 'undefined') window.__RZ = RES; } catch (e) {}
   return RES;
 }
 
