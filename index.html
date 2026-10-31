@@ -889,7 +889,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v28';
+  var ENGINE_VER = 'v29';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -1128,6 +1128,76 @@ function applyResume(D, O) {
       }
       return uniq;
     }
+    /* AntD 这类「年 月 + 日」日历（智联就是这一种）：
+       数据只有年月时选当月 1 日；用「上个月/下个月」按钮直接翻到目标年月，
+       再点带 YYYY-MM-DD title 的日期格，避开上月/下月补位的同号格子。 */
+    function dayByClick(cb3) {
+      var done = false, guard = 0;
+      function fin(ok) { if (done) return; done = true; cb3(ok); }
+      function state() {
+        var ys = leaves(/^\d{4}\s*年$/, sameEl);
+        var ms = leaves(/^\d{1,2}\s*月$/, sameEl);
+        var ds = leaves(/^\d{1,2}$/, sameEl);
+        if (!ys.length || !ms.length || ds.length < 20) return null;
+        var yy = parseInt(String(ys[0].textContent).replace(/\D/g, ''), 10);
+        var mm = parseInt(String(ms[0].textContent).replace(/\D/g, ''), 10);
+        if (!yy || !mm || mm > 12) return null;
+        return { y: yy, m: mm };
+      }
+      function nav(next) {
+        var doc = el.ownerDocument || document, all, i;
+        var re = next ? /(下个月|下一月|next month)/i : /(上个月|上一月|previous month|prev month)/i;
+        try { all = doc.querySelectorAll('button,[role="button"],[aria-label]'); } catch (e) { return null; }
+        for (i = 0; i < all.length; i++) {
+          var n = all[i], a = String(n.getAttribute('aria-label') || '');
+          if (!re.test(a)) continue;
+          try { if (sameEl(n) || !shown(n)) continue; } catch (e2) { continue; }
+          return n;
+        }
+        return null;
+      }
+      function pickDay() {
+        var doc = el.ownerDocument || document, day = D2 || '01';
+        var full = Y + '-' + M + '-' + day, all = [], i, tgt = null;
+        try { all = doc.querySelectorAll('[title]'); } catch (e) {}
+        for (i = 0; i < all.length; i++) {
+          var ti = String(all[i].getAttribute('title') || '').replace(/[./]/g, '-');
+          if (ti !== full) continue;
+          try { if (sameEl(all[i]) || !shown(all[i])) continue; } catch (e2) { continue; }
+          tgt = all[i]; break;
+        }
+        /* 无 title 的自研日历：优先当前月（in-view）的那一枚，别点补位灰字 */
+        if (!tgt) {
+          var ds = leaves(/^\d{1,2}$/, sameEl), fallback = null;
+          for (i = 0; i < ds.length; i++) {
+            if (parseInt(String(ds[i].textContent).trim(), 10) !== parseInt(day, 10)) continue;
+            var p = ds[i];
+            try { if (p.closest) p = p.closest('td') || p; } catch (e3) {}
+            var cc = '';
+            try { cc = clsOf(p) + ' ' + clsOf(ds[i]); } catch (e4) {}
+            if (/(out-of-view|outview|disabled)/i.test(cc)) continue;
+            if (/(in-view|inview|current)/i.test(cc)) { tgt = ds[i]; break; }
+            if (!fallback) fallback = ds[i];
+          }
+          tgt = tgt || fallback;
+        }
+        if (!tgt) return fin(false);
+        tapHit(tgt);
+        setTimeout(function () { fin(okVal()); }, 460);
+      }
+      function step() {
+        if (guard++ > 120) return fin(false);
+        var st = state();
+        if (!st) return fin(false);
+        var diff = (parseInt(Y, 10) * 12 + parseInt(M, 10) - 1) - (st.y * 12 + st.m - 1);
+        if (!diff) return pickDay();
+        var btn = nav(diff > 0);
+        if (!btn) return fin(false);
+        tapHit(btn);
+        setTimeout(step, 150);
+      }
+      step();
+    }
     function dateByClick(cb2) {
       var done = false, guard = 0, dir = 0;
       function fin(ok) { if (done) return; done = true; cb2(ok); }
@@ -1225,12 +1295,19 @@ function applyResume(D, O) {
       })();
     }, 160);
     }
-    /* 先试点选，点不成再退回「打字 + 回车」 */
-    dateByClick(function (ok) {
-      if (ok) return cb(true);
-      try { tap(el.ownerDocument.body); } catch (e) {}
-      setTimeout(typePath, 260);
-    });
+    /* 先试点选：AntD 日历按「年月导航 + 点日期」，Semi/字节按「翻年 + 点月份」；
+       两种都点不成再退回「打字 + 回车」。 */
+    tap(el);
+    setTimeout(function () {
+      dayByClick(function (ok0) {
+        if (ok0) return cb(true);
+        dateByClick(function (ok) {
+          if (ok) return cb(true);
+          try { tap(el.ownerDocument.body); } catch (e) {}
+          setTimeout(typePath, 260);
+        });
+      });
+    }, 380);
   }
 
   function shown(el) {
@@ -2564,12 +2641,17 @@ function applyResume(D, O) {
       for (var a = 0; a < all.length; a++) {
         var e2 = all[a];
         try {
-          if (e2.disabled || e2.readOnly || !shown(e2)) continue;
+          if (e2.disabled || !shown(e2)) continue;
           if (clean(e2.value)) continue;
           if (['hidden','submit','button','file','password'].indexOf((e2.getAttribute('type') || '').toLowerCase()) >= 0) continue;
           /* 标签在控件正上方的排版（字节 Semi），ctxText / ctxUp 都读不到，得补 upLabel */
-          cands.push({ el: e2, t: ctxText(e2) + ' ' + nearLabel(e2) + ' ' + ctxUp(e2, 2)
-            + ' ' + upLabel(e2) + ' ' + labelText(e2), k: secKind(e2) });
+          var ct2 = ctxText(e2) + ' ' + nearLabel(e2) + ' ' + ctxUp(e2, 2)
+            + ' ' + upLabel(e2) + ' ' + labelText(e2);
+          /* 智联、字节的「开始/结束时间」都是 readonly：只能点开日历选。
+             以前在这里把所有只读框一刀切掉，导致它们根本进不了 DATES 队列。
+             只读框仅放行明确是经历时间的，其余只读下拉仍不混进经历对位。 */
+          if (e2.readOnly && !/(开始时间|起始时间|入职时间|开始日期|项目开始|结束时间|离职时间|截止时间|结束日期|项目结束|项目时间|项目起止|起止时间|时间区间|起止日期)/.test(ct2)) continue;
+          cands.push({ el: e2, t: ct2, k: secKind(e2) });
         } catch (e) {}
       }
       /* 规则是 [命中正则, 排除正则]，排除正则可能为 null */
