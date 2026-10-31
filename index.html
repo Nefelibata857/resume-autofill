@@ -889,7 +889,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v34';
+  var ENGINE_VER = 'v35';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -1669,10 +1669,51 @@ function applyResume(D, O) {
     }
     return out.join('、');
   }
+  /* 类名兜底：chip 的类名各家一直在换（semi-tag / ufc-tag / …），清单永远追不完。
+     这里不认类名，只看「控件容器里除输入框外还有没有非占位符的可见文字」——
+     选中的「杭州」chip 不管套什么类名，文字总在容器里。 */
+  /* 边界要自己找，不能复用 comboBox()：它对没有内部 input 的 div 型下拉
+     会兜底到 parentElement，那是整个 form-item 行，会把外面的 label
+     （「最高学位」）圈进来，整个下拉就被误判成「已填」而永远不填。
+     这里从父层开始找最近一层真正的下拉容器，找不到就以控件自身为界。 */
+  function comboOwnBox(el) {
+    var p = el.parentElement, i;
+    for (i = 0; i < 6 && p && p.nodeType === 1; i++, p = p.parentElement) {
+      var c = '', ro = '';
+      try { c = String(p.className || ''); ro = String(p.getAttribute('role') || ''); } catch (e0) {}
+      if (COMBO_CLS.test(c) || ro === 'combobox' || ro === 'listbox') return p;
+    }
+    return el;
+  }
+  function comboTextLoose(el) {
+    var b = comboOwnBox(el), out = [], nodes = null, i;
+    try { nodes = b.querySelectorAll('span,div'); } catch (e) { return ''; }
+    for (i = 0; nodes && i < nodes.length && i < 60; i++) {
+      var n = nodes[i], s = '';
+      try {
+        if (n.querySelector && n.querySelector('input,textarea,select')) continue; /* 外壳层 */
+        if (!shown(n)) continue;
+        s = clean(n.innerText || '');
+      } catch (e2) { continue; }
+      if (!s || s.length > 24) continue;
+      if (PH.test(s.replace(/\s/g, ''))) continue;
+      /* 下拉框里的箭头「⌄」、必填星号「*」也是叶子文本，纯符号不算内容 */
+      if (!/[0-9A-Za-z\u4e00-\u9fff]/.test(s)) continue;
+      /* 只认叶子文本：子元素里还有字的都是包装层，会重复计还容易带上别的东西 */
+      var kids = n.children, leafWrap = false, c;
+      for (c = 0; kids && c < kids.length; c++) {
+        if (clean(kids[c].innerText || '')) { leafWrap = true; break; }
+      }
+      if (leafWrap) continue;
+      out.push(s);
+    }
+    return out.join('、');
+  }
   /* 这个下拉/选择控件里是不是已经有内容了（单选文本值或多选标签都算） */
   function comboFilled(el) {
     try { if (clean(comboValue(el))) return true; } catch (e) {}
     try { if (clean(comboTagText(el))) return true; } catch (e2) {}
+    try { if (clean(comboTextLoose(el))) return true; } catch (e3) {}
     return false;
   }
   /* ---------- 认「普通 div 列表」型的选项 ----------
@@ -3973,6 +4014,16 @@ document.getElementById('btn-diag').addEventListener('click', () => {
 });
 
 /* ---------- 安装书签：一下复制，三步装好 ---------- */
+/* 版本号直接印在按钮/弹窗上：书签是「装了就一直用」的东西，
+   老版本会在浏览器里一直跑到天荒地老 —— 得让用户在复制前就知道拿到的是哪版，
+   装完跑一次面板上也会显示同款版本号，两处对得上才算升级成功。 */
+var UI_VER = (String(applyResume).match(/ENGINE_VER\s*=\s*'(v\d+)'/) || [0, '?'])[1];
+(function () {
+  var b = document.getElementById('btn-install');
+  if (b) b.textContent = '安装填表书签 · ' + UI_VER;
+  var t = document.getElementById('install-title');
+  if (t) t.textContent = '安装填表书签 · ' + UI_VER;
+})();
 const installEl = document.getElementById('install');
 function openInstall() {
   installEl.classList.add('on');
