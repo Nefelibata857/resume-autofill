@@ -889,7 +889,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v32';
+  var ENGINE_VER = 'v33';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -1026,6 +1026,24 @@ function applyResume(D, O) {
     var D2 = m[3] ? (m[3].length === 1 ? '0' + m[3] : m[3]) : '';
     var doc = el.ownerDocument || document;
     var w = W(el), k = 0, cands;
+    /* 原生 <input type=month|date>：浏览器自己管格式，直接写值就成。
+       这类框去点它只会弹出原生选择器（点不到、也翻不了年），纯属浪费几秒。 */
+    var natType = '';
+    try { natType = (el.getAttribute('type') || '').toLowerCase(); } catch (eT) {}
+    function okVal0() {
+      var n = String(el.value || '').replace(/[^\d]/g, '');
+      return n.indexOf(Y + M) === 0;
+    }
+    if (natType === 'month' || natType === 'date') {
+      var nv = natType === 'date' ? (Y + '-' + M + '-' + (D2 || '01')) : (Y + '-' + M);
+      try { el.focus(); } catch (eF) {}
+      put(nv);
+      setTimeout(function () { cb(okVal0()); }, 80);
+      return;
+    }
+    /* 先滚到视野中间再点：面板是按输入框定位的，字段在屏幕外时点开的位置、
+       以及后续按 getBoundingClientRect 找年份/月份格子的判断都会偏。 */
+    try { if (el.scrollIntoView) el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (eSc) {}
     /* 直接 el.value = v 会被 React 受控组件当成「没变过」直接回滚，只有真输入才认。
        execCommand('insertText') 会派发真正的 beforeinput/input，最接近手打。 */
     function put(v) {
@@ -1632,6 +1650,29 @@ function applyResume(D, O) {
     if (PH.test(t.replace(/\s/g, ''))) t = '';
     return t;
   }
+  /* 多选下拉（「期望工作地点」这类）选中的是 chip 标签，文本不在 input.value 里，
+     comboValue 会以为它是空的。第二遍点书签时于是又去点同一个城市 ——
+     而多选的点击是 toggle，正好把已经选好的取消掉。
+     这里把 chip 的文本单独读出来，只要有就把这个控件当成「已经有内容」。 */
+  function comboTagText(el) {
+    var b = comboBox(el), out = [], nodes = null, i;
+    try {
+      nodes = b.querySelectorAll('.semi-tag,.ant-select-selection-item,.ant-select-selection-overflow-item,'
+        + '.el-tag,.ivu-tag,.n-tag,.arco-tag,.arco-select-view-tag,.van-tag,'
+        + '[class*="selection-item"],[class*="selection-overflow-item"],[class*="select-tag"]');
+    } catch (e) { nodes = null; }
+    for (i = 0; nodes && i < nodes.length && i < 40; i++) {
+      var s = clean(nodes[i].innerText || '');
+      if (s && !PH.test(s.replace(/\s/g, ''))) out.push(s);
+    }
+    return out.join('、');
+  }
+  /* 这个下拉/选择控件里是不是已经有内容了（单选文本值或多选标签都算） */
+  function comboFilled(el) {
+    try { if (clean(comboValue(el))) return true; } catch (e) {}
+    try { if (clean(comboTagText(el))) return true; } catch (e2) {}
+    return false;
+  }
   /* ---------- 认「普通 div 列表」型的选项 ----------
      有些组件库（字节 Semi）的下拉不是浮层，也不是 role="option"：
      选项就是紧贴控件下方、正常排布的一串 div。类名靠不住，只能靠「点完多出来的字」。 */
@@ -2180,41 +2221,72 @@ function applyResume(D, O) {
 
   function runDates(cb) {
     var i = 0;
-    (function next() {
+    /* 按「入队时记下的位置序号」把失效的旧节点换回页面上的新节点。
+       第一遍填空白表单时，前面写公司名/职位会触发 React 重建经历块，
+       日期框被换成新节点；队列里存的旧引用已经脱离文档，点它等于点空气。
+       序号对不上时再按标签文字找，最后才退到「文档里第一个还是空的日期框」。 */
+    function resolveEl(it) {
+      var e = it.el, alive = false;
+      try {
+        alive = !!e && shown(e) && (e.isConnected === true ||
+          !!(e.ownerDocument && e.ownerDocument.documentElement.contains(e)));
+      } catch (e0) {}
+      if (alive) return e;
+      var pool = liveFields((e && e.ownerDocument) || document), cand = null, j;
+      if (it.ord >= 0 && pool[it.ord]) cand = pool[it.ord];
+      if (!cand) {
+        var want = clean(it.l || '');
+        for (j = 0; j < pool.length; j++) {
+          if (want && clean(labelText(pool[j])) === want) { cand = pool[j]; break; }
+        }
+      }
+      /* 再退一步：字节那两个框读不到独立标签，只能靠「还是空的 + 标签里有时间/日期」认，
+         取离原序号最近的那个，避免开始/结束互串。 */
+      if (!cand) {
+        var best = null, bd = 1e9;
+        for (j = 0; j < pool.length; j++) {
+          var p = pool[j];
+          if (clean(p.value || '')) continue;
+          var t = '';
+          try { t = ctxText(p) + ' ' + upLabel(p) + ' ' + labelText(p); } catch (e5) { t = ''; }
+          if (!/(时间|日期|起止)/.test(t)) continue;
+          var used = false;
+          for (var u = 0; u < DATES.length; u++) { if (DATES[u] !== it && DATES[u].el === p) { used = true; break; } }
+          if (used) continue;
+          var d = Math.abs(j - (it.ord >= 0 ? it.ord : j));
+          if (d < bd) { bd = d; best = p; }
+        }
+        cand = best;
+      }
+      if (cand) it.el = cand;
+      return it.el;
+    }
+    function done(it, ok) {
+      if (ok) RES.filled.push({ k: it.k, l: it.l, v: String(it.val).slice(0, 40), el: it.el });
+      else RES.failed.push({ l: it.l, r: '日期框没写进去「' + it.val + '」' });
+      setTimeout(next, 180);
+    }
+    var next = function () {
       if (i >= DATES.length) { cb(); return; }
       var it = DATES[i++];
-      /* 第一遍填空白表单时，前面写公司名/职位会触发 React 重建经历块，
-         日期框被换成新节点；队列里存的旧引用已经脱离文档，点它等于点空气，
-         所以第一遍日期全空、第二遍（页面不再重建）反而正常。
-         处理每个日期前先确认节点还活着，否则按入队时记下的位置序号找回新节点。 */
-      (function revive() {
-        var e = it.el, alive = false;
-        try {
-          alive = !!e && shown(e) && (e.isConnected === true ||
-            !!(e.ownerDocument && e.ownerDocument.documentElement.contains(e)));
-        } catch (e0) {}
-        if (alive) return;
-        var pool = liveFields((e && e.ownerDocument) || document), cand = null, j;
-        if (it.ord >= 0 && pool[it.ord]) cand = pool[it.ord];
-        if (!cand) {
-          var want = clean(it.l || '');
-          for (j = 0; j < pool.length; j++) {
-            if (want && clean(labelText(pool[j])) === want) { cand = pool[j]; break; }
-          }
-        }
-        if (cand) it.el = cand;
-      })();
-      var ok = false;
-      var dm = /(\d{4})-(\d{1,2})/.exec(String(it.val || ''));
-      var have = String(it.el && it.el.value || '').replace(/[^\d]/g, '');
-      function after(ok) {
-        if (ok) RES.filled.push({ k: it.k, l: it.l, v: String(it.val).slice(0, 40), el: it.el });
-        else RES.failed.push({ l: it.l, r: '日期框没写进去「' + it.val + '」' });
-        setTimeout(next, 180);
-      }
-      if (dm && have.indexOf(dm[1] + (dm[2].length === 1 ? '0' + dm[2] : dm[2])) === 0) { after(true); return; }
-      try { fillDate(it.el, it.val, after); } catch (e) { after(false); }
-    })();
+      var tries = 0;
+      var attempt = function () {
+        resolveEl(it);
+        var dm = /(\d{4})-(\d{1,2})/.exec(String(it.val || ''));
+        var have = String(it.el && it.el.value || '').replace(/[^\d]/g, '');
+        var want = dm ? dm[1] + (dm[2].length === 1 ? '0' + dm[2] : dm[2]) : '';
+        if (want && have.indexOf(want) === 0) { done(it, true); return; }
+        var fin = function (ok) {
+          /* 落空就再来一次：第一遍填表的当下，整个经历区块往往还在重建/重排，
+             点开面板的那一下会正好落在中间态上。等它安定下来再走一遍通常就过了。 */
+          if (!ok && tries++ < 1) { setTimeout(attempt, 460); return; }
+          done(it, ok);
+        };
+        try { fillDate(it.el, it.val, fin); } catch (e) { fin(false); }
+      };
+      attempt();
+    };
+    next();
   }
 
   function runCombo(cb) {
@@ -2222,6 +2294,10 @@ function applyResume(D, O) {
     (function next() {
       if (i >= ASYNC.length) { RES.busy = 0; cb(); return; }
       var it = ASYNC[i++];
+      /* 轮到它时控件里已经有内容了（用户先填过，或刚被同一个组件的上一项填好）——
+         不要再点。多选下拉的点击是 toggle，点一下就把已选的取消掉，
+         这正是「第二遍点书签，期望工作地点反而没了」的原因。 */
+      if (!it.sg && comboFilled(it.el)) { RES.skipped++; setTimeout(next, 60); return; }
       var run1 = it.sg
         ? function (cb2) { suggestChoose(it.el, it.val, cb2); }
         : function (cb2) { chooseCombo(it.el, it.val, cb2); };
@@ -2292,6 +2368,8 @@ function applyResume(D, O) {
       if (!t) t = r.value || '';
       t = t.replace(/\s/g, '');
       if (t.indexOf(v) >= 0 || r.value === v) {
+        /* 已经是选中状态就别再点一次：有些组件把 click 做成 toggle */
+        if (r.checked) return true;
         try { r.click(); } catch (e) {}
         if (!r.checked) { r.checked = true; fire(r); }
         return true;
@@ -2596,6 +2674,10 @@ function applyResume(D, O) {
         if (combo) {
           /* 日期类：点开是日历或月份滚轮，得单独处理 */
           if (isDateKey(key)) { pushDate(el, key, val); continue; }
+          /* 已经有内容就不动它。多选下拉（期望工作地点）的已选项是 chip 标签，
+             不写在 input.value 里，扫描阶段看不出「已填」，
+             等到真的去点才把已选的城市 toggle 掉 —— 用户要的就是「有内容就别碰」。 */
+          if (comboFilled(el)) { RES.skipped++; continue; }
           /* 组件外层 div 和里面的 input 会同时命中，只留一个，优先留里面的 input（点它最准） */
           var dup = false, cid = null;
           try { cid = comboBox(el); } catch (e) {}
