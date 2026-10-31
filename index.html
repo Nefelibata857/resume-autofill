@@ -404,8 +404,8 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #tut .vstage.playing::after{opacity:0;}
 #tut .vplay{
   position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;
-  width:58px;height:58px;border-radius:50%;border:none;padding:0 0 0 4px;
-  background:rgba(26,25,23,.84);color:#fff;font-size:15px;line-height:1;
+  width:52px;height:52px;border-radius:50%;border:none;padding:0 0 0 3px;
+  background:rgba(26,25,23,.84);color:#fff;font-size:14px;line-height:1;
   display:flex;align-items:center;justify-content:center;
   box-shadow:0 6px 22px rgba(0,0,0,.42),0 0 0 1px rgba(255,255,255,.3);transition:.18s;
 }
@@ -416,7 +416,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
   font-variant-numeric:tabular-nums;
 }
 #tut video{width:100%;height:100%;display:block;background:#000;}
-#tut .vtip{font-size:12px;color:var(--sub);text-align:center;margin-top:11px;line-height:1.7;}
+#tut .vtip{font-size:12px;color:var(--sub);margin-top:10px;line-height:1.75;}
 #tut .vtip b{font-weight:600;color:#5f4520;}
 </style>
 </head>
@@ -462,20 +462,6 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 <div class="wrap">
   <div class="main">
     <div id="health"></div>
-
-    <section class="card" id="tut">
-      <h2>视频教程<span class="sub">29 秒：怎么装书签，装完能填成什么样</span></h2>
-
-      <div class="vstage" id="vstage" role="button" tabindex="0" aria-label="播放视频教程">
-        <img src="assets/tutorial-poster.jpg" alt="视频教程封面：简历填表助手页面与自动填表效果" loading="lazy" decoding="async">
-        <span class="vplay" aria-hidden="true">▶</span>
-        <span class="vdur">00:29</span>
-      </div>
-
-      <p class="vtip">
-        点封面播放，建议<b>全屏</b>看。演示两件事：<b>①</b> 把书签指到「网址」框的那三下键；<b>②</b> 在字节跳动招聘页点一下书签，整页自动填完（含起止时间、下拉、多选）。
-      </p>
-    </section>
 
     <section class="card" id="importer">
       <h2>识别简历<span class="sub">把简历丢进来，自动提取字段填到下面</span></h2>
@@ -541,6 +527,18 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
         <div style="margin-top:8px"><button class="linkbtn" id="btn-diag">下载诊断书签 →</button></div>
       </div>
     </div>
+
+    <section class="card" id="tut">
+      <h2>视频教程<span class="sub">29 秒</span></h2>
+
+      <div class="vstage" id="vstage" role="button" tabindex="0" aria-label="播放视频教程">
+        <img src="assets/tutorial-poster.jpg" alt="视频教程封面：简历填表助手页面与自动填表效果" loading="lazy" decoding="async">
+        <span class="vplay" aria-hidden="true">▶</span>
+        <span class="vdur">00:29</span>
+      </div>
+
+      <p class="vtip">点封面播放，建议<b>全屏</b>看：怎么装书签，以及装完在招聘网站上自动填完整页。</p>
+    </section>
 
     <div class="card">
       <h2>控制台脚本</h2>
