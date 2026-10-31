@@ -889,7 +889,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v27';
+  var ENGINE_VER = 'v28';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -1715,9 +1715,13 @@ function applyResume(D, O) {
       var up = /(\d+(?:\.\d+)?)以上/.exec(s);
       if (up) { a = parseFloat(up[1]); b = 1e9; }
       else {
-        var one = /^(\d+(?:\.\d+)?)/.exec(s);
-        if (!one) return null;
-        a = parseFloat(one[1]); b = a;
+        var dn = /(\d+(?:\.\d+)?)(及以下|以下|以内)/.exec(s);
+        if (dn) { a = 0; b = parseFloat(dn[1]); }
+        else {
+          var one = /^(\d+(?:\.\d+)?)/.exec(s);
+          if (!one) return null;
+          a = parseFloat(one[1]); b = a;
+        }
       }
     }
     if (wan) { a *= 10000; b *= 10000; }
@@ -2278,6 +2282,28 @@ function applyResume(D, O) {
     } catch (e) { RES.cross++; }
   }
 
+  /* ---------- 折叠区块清点 ----------
+     不少网申把「教育经历 / 实习经历」整块收起来，控件还在 DOM 里但尺寸为 0，
+     扫描会整段跳过 —— 用户看到的是「这块怎么没填」，其实只是没展开。
+     这里只清点、绝不点：猜「哪个是展开按钮」风险太大（点错一次可能是提交或跳页），
+     所以把数字摆给用户，让他展开后再点一次。 */
+  var hiddenReq = 0;
+  for (var hi = 0; hi < docs.length; hi++) {
+    var hEls;
+    try { hEls = docs[hi].querySelectorAll('input,textarea,select'); } catch (e) { continue; }
+    for (var hj = 0; hj < hEls.length && hj < 1500; hj++) {
+      var he = hEls[hj];
+      if (he.disabled) continue;
+      var hty = (he.getAttribute('type') || '').toLowerCase();
+      if (hty === 'hidden' || hty === 'file' || hty === 'submit' || hty === 'button'
+          || hty === 'image' || hty === 'reset' || hty === 'radio' || hty === 'checkbox') continue;
+      if (shown(he)) continue;
+      if (!(he.getAttribute('required') != null || he.getAttribute('aria-required') === 'true')) continue;
+      hiddenReq++;
+    }
+  }
+  if (hiddenReq >= 2) RES.hiddenReq = hiddenReq;
+
   /* ---------- 主循环 ---------- */
   var seenK = {};
   for (var di = 0; di < docs.length; di++) {
@@ -2296,6 +2322,13 @@ function applyResume(D, O) {
         var type = (el.getAttribute('type') || '').toLowerCase();
 
         if (tag === 'input' && ['hidden','submit','button','reset','file','image','password'].indexOf(type) >= 0) continue;
+        /* 反爬蜜罐：给机器人准备的假输入框，人看不见也填不了，填了反而被标记成爬虫。
+           两种典型长相：tabindex=-1 挪出键盘焦点链、name 带 hp_/honeypot/trap。 */
+        if (tag === 'input' && type !== 'radio' && type !== 'checkbox') {
+          var hpName = String(el.getAttribute('name') || '') + ' ' + String(el.id || '');
+          if (/hp[_-]|honeypot|_trap|trap_/i.test(hpName)) continue;
+          if (el.getAttribute('tabindex') === '-1' && !isCombo(el)) continue;
+        }
         /* readonly 的 input 两种：日期控件（点开是日历，填不了）和下拉组件（点开才出选项）。
            自家写的组件库往往没有任何 select/combobox 特征类名，只能靠「只读」这个特征放行，
            真点开发现是日历的话后面会自己放弃，不会乱填。 */
@@ -2786,6 +2819,11 @@ function applyResume(D, O) {
       if (RES.cross) stat.push('跨域 iframe ' + RES.cross + ' 个');
       body.appendChild(mk('div', 'font-size:12px;color:rgba(255,255,255,.62);padding:2px 0 8px;',
         '引擎 ' + (RES.ver || '?') + ' · ' + stat.join(' · ')));
+      /* 折叠区块里的必填框扫不到，用户只会觉得「这块没填」，得说清楚是没展开而不是没认出来 */
+      if (!DIAG && RES.hiddenReq) {
+        body.appendChild(mk('div', 'font-size:12px;color:#ffcf7a;line-height:1.6;padding:2px 0 6px;',
+          '还有 ' + RES.hiddenReq + ' 个必填框收在折叠区块里（看不见就没法填），把上面那些区块展开后再点一次书签。'));
+      }
 
       function listBlock(title, arr, fmt) {
         if (!arr.length) return;
