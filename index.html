@@ -889,7 +889,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v31';
+  var ENGINE_VER = 'v32';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -2138,17 +2138,44 @@ function applyResume(D, O) {
     } catch (e) {}
     return clean(ctxText(el)).slice(0, 24) || LABELOF(key);
   }
+  /* 页面上当前可见的输入控件，按文档顺序排列。
+     用来给日期队列记一个「位置序号」：React 重建经历块时元素会被换成新节点，
+     旧引用随之失效，但同一位置的序号不变，处理日期前可以按序号找回新节点。 */
+  function liveFields(doc) {
+    var out = [], all, i;
+    try { all = (doc || document).querySelectorAll('input,textarea'); } catch (e) { return out; }
+    for (i = 0; i < all.length && i < 2500; i++) {
+      try {
+        var t = (all[i].getAttribute('type') || '').toLowerCase();
+        if (all[i].disabled) continue;
+        if (['hidden','submit','button','reset','file','image','password'].indexOf(t) >= 0) continue;
+        if (!shown(all[i])) continue;
+        out.push(all[i]);
+      } catch (e2) {}
+    }
+    return out;
+  }
   function pushDate(el, key, val) {
+    /* 经历块里的日期元素可能在入队前就已经被 React 换掉；收集候选时记下的
+       __rzOrd 是旧节点仍能提供的位置信息，优先用它，其次才现场查。 */
+    var ord = (typeof el.__rzOrd === 'number') ? el.__rzOrd : -1;
+    if (ord < 0) {
+      try { ord = liveFields(el.ownerDocument || document).indexOf(el); } catch (eOrd) {}
+    }
     for (var q = 0; q < DATES.length; q++) {
       var qe = DATES[q].el;
       try {
         if (qe === el) return;
         /* 外壳 div 先入队时算不准左右序号，内层 input 后到，键值要一起更新 */
-        if (qe.contains(el)) { DATES[q].el = el; DATES[q].k = key; DATES[q].val = val; DATES[q].l = comboLabel(el, key); return; }
+        if (qe.contains(el)) {
+          DATES[q].el = el; DATES[q].k = key; DATES[q].val = val;
+          DATES[q].l = comboLabel(el, key); DATES[q].ord = ord;
+          return;
+        }
         if (el.contains(qe)) return;
       } catch (e) {}
     }
-    DATES.push({ el: el, k: key, val: val, l: comboLabel(el, key) });
+    DATES.push({ el: el, k: key, val: val, l: comboLabel(el, key), ord: ord });
   }
 
   function runDates(cb) {
@@ -2156,9 +2183,30 @@ function applyResume(D, O) {
     (function next() {
       if (i >= DATES.length) { cb(); return; }
       var it = DATES[i++];
+      /* 第一遍填空白表单时，前面写公司名/职位会触发 React 重建经历块，
+         日期框被换成新节点；队列里存的旧引用已经脱离文档，点它等于点空气，
+         所以第一遍日期全空、第二遍（页面不再重建）反而正常。
+         处理每个日期前先确认节点还活着，否则按入队时记下的位置序号找回新节点。 */
+      (function revive() {
+        var e = it.el, alive = false;
+        try {
+          alive = !!e && shown(e) && (e.isConnected === true ||
+            !!(e.ownerDocument && e.ownerDocument.documentElement.contains(e)));
+        } catch (e0) {}
+        if (alive) return;
+        var pool = liveFields((e && e.ownerDocument) || document), cand = null, j;
+        if (it.ord >= 0 && pool[it.ord]) cand = pool[it.ord];
+        if (!cand) {
+          var want = clean(it.l || '');
+          for (j = 0; j < pool.length; j++) {
+            if (want && clean(labelText(pool[j])) === want) { cand = pool[j]; break; }
+          }
+        }
+        if (cand) it.el = cand;
+      })();
       var ok = false;
       var dm = /(\d{4})-(\d{1,2})/.exec(String(it.val || ''));
-      var have = String(it.el.value || '').replace(/[^\d]/g, '');
+      var have = String(it.el && it.el.value || '').replace(/[^\d]/g, '');
       function after(ok) {
         if (ok) RES.filled.push({ k: it.k, l: it.l, v: String(it.val).slice(0, 40), el: it.el });
         else RES.failed.push({ l: it.l, r: '日期框没写进去「' + it.val + '」' });
@@ -2650,6 +2698,9 @@ function applyResume(D, O) {
 
       var cands = [];
       var all = document.querySelectorAll('input,textarea');
+      /* 记下每个候选在「当前可见控件」里的位置。之后填公司名/职位会触发 React
+         重建经历块，旧节点虽然脱离文档，但这个序号仍可用来找回同一位置的新节点。 */
+      var liveBefore = liveFields(document);
       for (var a = 0; a < all.length; a++) {
         var e2 = all[a];
         try {
@@ -2663,6 +2714,7 @@ function applyResume(D, O) {
              以前在这里把所有只读框一刀切掉，导致它们根本进不了 DATES 队列。
              只读框仅放行明确是经历时间的，其余只读下拉仍不混进经历对位。 */
           if (e2.readOnly && !/(开始时间|起始时间|入职时间|开始日期|项目开始|结束时间|离职时间|截止时间|结束日期|项目结束|项目时间|项目起止|起止时间|时间区间|起止日期)/.test(ct2)) continue;
+          try { e2.__rzOrd = liveBefore.indexOf(e2); } catch (eOrd) {}
           cands.push({ el: e2, t: ct2, k: secKind(e2) });
         } catch (e) {}
       }
