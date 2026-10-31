@@ -889,7 +889,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v29';
+  var ENGINE_VER = 'v30';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -2668,6 +2668,75 @@ function applyResume(D, O) {
         if (hit(R_START, t)) return 'start';
         return '';
       }
+      /* 字节的实习/项目经历只在两个框上方写一个「起止时间」，左右两框没有各自的标签。
+         原来两个都被认成 span，于是左框被塞进「2025.07 - 2026.01」整串、右框被塞下一段经历，
+         组件立刻回退。这里按「同一行、同一标签」配成一对，左边是开始、右边是结束。 */
+      function rowPairOf(cel) {
+        var r0, cy0, out = [], i;
+        try { r0 = cel.getBoundingClientRect(); } catch (e) { return out; }
+        if (!r0 || r0.height < 2) return out;
+        cy0 = r0.top + r0.height / 2;
+        for (i = 0; i < cands.length; i++) {
+          var o = cands[i].el;
+          if (o === cel) continue;
+          /* 只找「同样是时间区间」的同伴：右框的标签常常读不到（标签只在左侧第一格上方），
+             所以不能要求两边文本相等，按类型 + 同一行配对即可。 */
+          if (fieldOf(nearText(o)) !== 'span') continue;
+          var r;
+          try { r = o.getBoundingClientRect(); } catch (e2) { continue; }
+          if (!r || r.width < 2 || r.height < 2) continue;
+          if (Math.abs((r.top + r.height / 2) - cy0) > 12) continue;
+          out.push(o);
+        }
+        return out;
+      }
+      function pairKind(cel, ty) {
+        try { if (cel.__rzPair && (ty === '' || ty === 'span')) return cel.__rzPair; } catch (e0) {}
+        if (ty !== 'span') return ty;
+        var row = rowPairOf(cel);
+        if (row.length !== 1) return ty;      /* 只有正好两个框才是一对起止 */
+        var arr = row.concat([cel]), a, b;
+        try {
+          a = arr[0].getBoundingClientRect(); b = arr[1].getBoundingClientRect();
+        } catch (e) { return ty; }
+        if (!a || !b) return ty;
+        return a.left <= b.left ? (arr[0] === cel ? 'start' : 'end')
+                                : (arr[1] === cel ? 'start' : 'end');
+      }
+      /* 先在所有候选里统一配对，再回填时查表。
+         逐个元素现场找同伴会有偏差（右框常读不到标签，两侧判断不对称），
+         这里只按「同为区间类型 + 同一行」一次扫完，左右排序后标记 start/end。 */
+      function markSpanPairs() {
+        var prim = [], i, j;
+        for (i = 0; i < cands.length; i++) {
+          if (fieldOf(cands[i].t) === 'span') prim.push(cands[i].el);
+        }
+        function cy(e) {
+          try { var r = e.getBoundingClientRect(); return r.top + r.height / 2; } catch (e2) { return -9999; }
+        }
+        for (i = 0; i < prim.length; i++) {
+          var cel = prim[i];
+          if (cel.__rzPair) continue;
+          var group = [cel], y0 = cy(cel);
+          for (j = 0; j < cands.length; j++) {
+            var o = cands[j].el;
+            if (o === cel || o.__rzPair) continue;
+            /* 右框经常读不到标签（标签只在左框上方），fieldOf 为空也要收进来；
+               同一行的其他正常字段（职位/公司等）类型明确，不会被误配。 */
+            var ot = fieldOf(cands[j].t);
+            if (ot && ot !== 'span') continue;
+            if (Math.abs(cy(o) - y0) > 12) continue;
+            group.push(o);
+          }
+          if (group.length !== 2) continue;
+          group.sort(function (a, b) {
+            try { return a.getBoundingClientRect().left - b.getBoundingClientRect().left; } catch (e3) { return 0; }
+          });
+          try { group[0].__rzPair = 'start'; group[1].__rzPair = 'end'; } catch (e4) {}
+        }
+      }
+
+      try { markSpanPairs(); } catch (e) {}
 
       var POOL = { intern: {}, project: {}, none: {} };
       function add(kd, f, el) { (POOL[kd][f] = POOL[kd][f] || []).push(el); }
@@ -2682,7 +2751,7 @@ function applyResume(D, O) {
          没分节的必须排在某个描述框之前，否则「公司名称」这种问你现在在哪上班的字段也会被当成实习单位 */
       for (var c2 = 0; c2 < cands.length; c2++) {
         if (cands[c2].used) continue;
-        var f2 = fieldOf(cands[c2].t);
+        var f2 = pairKind(cands[c2].el, fieldOf(cands[c2].t));
         if (!f2) continue;
         var k2 = cands[c2].k;
         if (k2) { add(k2, f2, cands[c2].el); continue; }
@@ -2774,7 +2843,7 @@ function applyResume(D, O) {
           var rec = null;
           for (var bj = 0; bj < BLKS.length; bj++) if (BLKS[bj].host === host) { rec = BLKS[bj]; break; }
           if (!rec) { rec = { host: host, kind: cands[bi].k || secKind(host) || '', f: {} }; BLKS.push(rec); }
-          var ty = fieldOf(nearText(cel));
+          var ty = pairKind(cel, fieldOf(nearText(cel)));
           if (ty && !rec.f[ty]) rec.f[ty] = cel;
         }
         /* 连单位/名称都认不出的块不可信，退回全局排队 */
