@@ -461,8 +461,6 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 
 <div class="wrap">
   <div class="main">
-    <div id="health"></div>
-
     <section class="card" id="importer">
       <h2>识别简历<span class="sub">把简历丢进来，自动提取字段填到下面</span></h2>
 
@@ -3517,7 +3515,12 @@ function healthCheck() {
 }
 
 function renderHealth() {
-  const box = document.getElementById('health');
+  let box = document.getElementById('health');
+  if (!box) {
+    /* 进度卡片还没建，先建它（自检区就在这张卡片里） */
+    if (typeof renderProgress === 'function') renderProgress();
+    box = document.getElementById('health');
+  }
   if (!box) return;
   const blank = GROUPS.every(g => g.fields.every(f =>
     f[0] === 'age' || !String(DATA[f[0]] || '').trim()));
@@ -3527,11 +3530,9 @@ function renderHealth() {
   const todos = list.filter(x => x.lv === 'todo').length;
 
   box.innerHTML = '';
-  const card = document.createElement('section');
-  card.className = 'card';
   const h = document.createElement('h2');
   h.textContent = '数据自检';
-  card.appendChild(h);
+  box.appendChild(h);
 
   const sum = document.createElement('div');
   if (blank) {
@@ -3544,7 +3545,7 @@ function renderHealth() {
       : '必填项齐全，格式校验通过';
     if (todos) sum.textContent += ` · ${todos} 项待补充`;
   }
-  card.appendChild(sum);
+  box.appendChild(sum);
 
   if (list.length) {
     const ul = document.createElement('ul');
@@ -3555,9 +3556,8 @@ function renderHealth() {
       li.textContent = it.t;
       ul.appendChild(li);
     });
-    card.appendChild(ul);
+    box.appendChild(ul);
   }
-  box.appendChild(card);
 
   const ver = document.getElementById('ver');
   if (ver) ver.textContent = (errs ? `${errs} 项待修` : '');
@@ -4903,8 +4903,18 @@ function renderProgress() {
     tip.textContent = '最少填完 8 个必填项就能生成可用书签，其余按网申要求补。'
       + '填完的区块点标题可以收起，看着清爽些。';
     box.appendChild(tip);
-    const anchor = document.getElementById('health');
-    anchor.parentNode.insertBefore(box, anchor);
+
+    /* 数据自检并进同一张卡片，中间一条分隔线 */
+    const sep = document.createElement('div');
+    sep.className = 'sep';
+    box.appendChild(sep);
+
+    const hb = document.createElement('div');
+    hb.id = 'health';
+    box.appendChild(hb);
+
+    const main = document.querySelector('.main');
+    if (main) main.insertBefore(box, main.firstElementChild);
   }
   const keys = allKeys();
   const total = keys.length;
