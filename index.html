@@ -889,7 +889,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v26';
+  var ENGINE_VER = 'v27';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -1693,27 +1693,74 @@ function applyResume(D, O) {
     return String(v == null ? '' : v).replace(/\s/g, '')
       .replace(/[（(\[【][^）)\]】]*[）)\]】]/g, '');
   }
-  /* 在候选里挑最像的那个：完全等 → 选项含值 → 值含选项 */
+  /* 选项比对的归一：在全角/半角、前后缀、标点上再宽一档，
+     否则「请选择学历」和「学历」、「（学士）本科」这种永远对不上。 */
+  function normOpt(v) {
+    var s = String(v == null ? '' : v);
+    try { s = s.normalize('NFKC'); } catch (e) {}
+    return s.replace(/[（(\[【「『][^）)\]】」』]*[）)\]】」』]/g, '')
+      .toLowerCase()
+      .replace(/^(请输入|请填写|请选择|输入|填写|请)/, '')
+      .replace(/[\s*＊:：()\[\]『』《》\-_—/、，,.。!！?？"'“”‘’|]/g, '')
+      .trim();
+  }
+  /* 从文本里解析数值区间：「10000-15000元/月」「10-15万」「3年以上」。
+     必须先在原文上解析再去归一 —— 先把连字符去掉的话「3-5年」会变成「35年」。 */
+  function rangeOf(t) {
+    var s = String(t == null ? '' : t).replace(/[－—–~～至到]/g, '-').replace(/[,，\s]/g, '');
+    var wan = /万/.test(s), a, b, m;
+    m = /(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)/.exec(s);
+    if (m) { a = parseFloat(m[1]); b = parseFloat(m[2]); }
+    else {
+      var up = /(\d+(?:\.\d+)?)以上/.exec(s);
+      if (up) { a = parseFloat(up[1]); b = 1e9; }
+      else {
+        var one = /^(\d+(?:\.\d+)?)/.exec(s);
+        if (!one) return null;
+        a = parseFloat(one[1]); b = a;
+      }
+    }
+    if (wan) { a *= 10000; b *= 10000; }
+    if (!isFinite(a) || !isFinite(b)) return null;
+    return a <= b ? [a, b] : [b, a];
+  }
+  /* 在候选里挑最像的那个：完全等 → 选项含值 → 值含选项 → 数值区间重叠 */
   function pickOpt(list, val) {
-    var vv = normBare(val), i, best = null, bl = 0, t;
+    var vv = normOpt(val), i, best = null, bl = 0, t, rng;
     if (!vv || !list || !list.length) return null;
-    for (i = 0; i < list.length; i++) if (normBare(list[i].t) === vv) return list[i];
+    for (i = 0; i < list.length; i++) if (normOpt(list[i].t) === vv) return list[i];
     /* 正向包含（选项比值长）：取「最接近」的那个，多出来的字最少。
        以前取最长，结果「全日制」会选中「统招非全日制」而不是「统招全日制」。 */
     for (i = 0; i < list.length; i++) {
-      t = normBare(list[i].t);
+      t = normOpt(list[i].t);
       if (t.length >= 2 && t.indexOf(vv) >= 0 && (!best || t.length < bl)) { best = list[i]; bl = t.length; }
     }
     if (best) return best;
     /* 反向包含只在选项占值的大部分时才认，否则「某省某市」会被「某省」截胡，
        连省市区联动都走不到 */
     for (i = 0; i < list.length; i++) {
-      t = normBare(list[i].t);
+      t = normOpt(list[i].t);
       if (t.length >= 2 && vv.indexOf(t) >= 0 && t.length * 10 >= vv.length * 6 && t.length > bl) {
         best = list[i]; bl = t.length;
       }
     }
-    return best;
+    if (best) return best;
+    /* 金额 / 年限这类选项写的是区间：「10-15万」对「10000-15000元/月」，
+       字符串怎么比都比不上，但语义是一回事。完整包住期望区间的优先，其次是重叠多的。 */
+    rng = rangeOf(val);
+    if (rng) {
+      var bsc = -1, bp = null, or2, ov, sc;
+      for (i = 0; i < list.length; i++) {
+        or2 = rangeOf(list[i].t);
+        if (!or2) continue;
+        ov = Math.min(rng[1], or2[1]) - Math.max(rng[0], or2[0]);
+        if (ov < 0) continue;
+        sc = (or2[0] <= rng[0] && or2[1] >= rng[1] ? 1e9 : 0) + ov;
+        if (sc > bsc) { bsc = sc; bp = list[i]; }
+      }
+      if (bp) return bp;
+    }
+    return null;
   }
   /* 「某省某市某县」「某省-某市-某县」→ 三级片段，用于省市区联动。
      只拆看着像地址的值，否则「10-20万/年」这种会被拆成 10 / 20万 / 年 */
@@ -2020,7 +2067,7 @@ function applyResume(D, O) {
       var dm = /(\d{4})-(\d{1,2})/.exec(String(it.val || ''));
       var have = String(it.el.value || '').replace(/[^\d]/g, '');
       function after(ok) {
-        if (ok) RES.filled.push({ k: it.k, l: it.l, v: String(it.val).slice(0, 40) });
+        if (ok) RES.filled.push({ k: it.k, l: it.l, v: String(it.val).slice(0, 40), el: it.el });
         else RES.failed.push({ l: it.l, r: '日期框没写进去「' + it.val + '」' });
         setTimeout(next, 180);
       }
@@ -2049,7 +2096,7 @@ function applyResume(D, O) {
           }
         }
         if (ok) {
-          RES.filled.push({ k: it.k, l: it.l, v: String(picked || it.val).slice(0, 40) });
+          RES.filled.push({ k: it.k, l: it.l, v: String(picked || it.val).slice(0, 40), el: it.el });
           if (part) RES.failed.push({ l: it.l, r: '只填到「' + part + '」，下一级请手动选' });
         } else {
           /* 一个下拉在 DOM 里可能是好几层（外层容器 + 内层 selection/input），
@@ -2424,7 +2471,7 @@ function applyResume(D, O) {
           }
         }
 
-        if (ok) RES.filled.push({ k: key, l: labelText(el) || LABELOF(key), v: String(val).slice(0, 40) });
+        if (ok) RES.filled.push({ k: key, l: labelText(el) || LABELOF(key), v: String(val).slice(0, 40), el: el });
         else if (!sugQ) RES.failed.push({ l: labelText(el) || LABELOF(key), r: '下拉里没有「' + val + '」这一项' });
       } catch (e) {}
     }
@@ -2666,6 +2713,30 @@ function applyResume(D, O) {
     })();
   }
 
+  /* 收尾回读核对：写完 ≠ 填上。
+     受控组件会把值回滚成空、或者只接受「从下拉/日历里点」的值，
+     以前这些照算「已填」，用户以为填好了、提交时才发现是空的。
+     这里统一读回来一遍，把虚的从「已填」挪到「失败」里说清楚。 */
+  function verifyFilled() {
+    var i, keep = [], bad = [];
+    for (i = 0; i < RES.filled.length; i++) {
+      var f = RES.filled[i], el = f.el, tag = '', ty = '';
+      if (!el || !el.tagName) { keep.push(f); continue; }
+      tag = el.tagName;
+      if (tag !== 'INPUT' && tag !== 'TEXTAREA') { keep.push(f); continue; }
+      ty = String(el.getAttribute('type') || 'text').toLowerCase();
+      if (ty === 'checkbox' || ty === 'radio' || ty === 'file' || ty === 'hidden') { keep.push(f); continue; }
+      try { if (!shown(el)) { keep.push(f); continue; } } catch (e) { keep.push(f); continue; }
+      if (!String(el.value || '').trim()) { bad.push(f); continue; }
+      keep.push(f);
+    }
+    if (!bad.length) return;
+    RES.filled = keep;
+    for (i = 0; i < bad.length && RES.failed.length < 40; i++) {
+      RES.failed.push({ l: bad[i].l, r: '写进去了，但控件又把值清空了（这类得手动点选）' });
+    }
+  }
+
   /* ---------- 结果清单（右下角面板） ---------- */
   function panel() {
     if (O.quiet) return;
@@ -2802,9 +2873,13 @@ function applyResume(D, O) {
     RES.busy = 1;
     panel();
     runCombo(function () {
-      runDates(function () { try { panel(); } catch (e) {} });
+      runDates(function () {
+        try { verifyFilled(); } catch (e) {}
+        try { panel(); } catch (e) {}
+      });
     });
   } else {
+    try { verifyFilled(); } catch (e) {}
     panel();
   }
   try { RES.data = D; } catch (e) {}
