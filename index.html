@@ -538,7 +538,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
       <p class="vtip">点封面播放，建议<b>全屏</b>看：怎么装书签，以及装完在招聘网站上自动填完整页。</p>
     </section>
 
-    <div class="card">
+    <div class="card" id="card-script">
       <h2>控制台脚本</h2>
       <div class="tip">书签被网站 CSP 拦下时用这个：点下面按钮复制，粘贴到网页 Console 回车。</div>
       <pre class="script" id="script-preview">生成中…</pre>
@@ -4054,6 +4054,28 @@ document.getElementById('btn-reset').addEventListener('click', () => {
     if (tut) tut.scrollIntoView({ behavior: 'smooth', block: 'center' });
     setTimeout(playVideo, 280);
   });
+
+  /* 窄屏是单列：侧栏整块排在主栏之后，视频就跟着沉到页面最底部（实测要滚 1 万多像素）。
+     所以窄屏把视频卡临时挪进主栏、跟在进度卡后面；宽屏再挪回侧栏原本的位置。 */
+  function placeTut() {
+    var tut = document.getElementById('tut');
+    var main = document.querySelector('.main');
+    var side = document.querySelector('.side');
+    if (!tut || !main || !side) return;
+    var narrow = window.matchMedia('(max-width:1180px)').matches;
+    if (narrow) {
+      if (tut.parentElement !== main) {
+        var pg = document.getElementById('progress');
+        main.insertBefore(tut, pg ? pg.nextElementSibling : main.firstElementChild);
+      }
+    } else if (tut.parentElement !== side) {
+      var sc = document.getElementById('card-script');
+      side.insertBefore(tut, sc || null);
+    }
+  }
+  placeTut();
+  window.addEventListener('load', placeTut);
+  window.addEventListener('resize', placeTut);
 })();
 
 document.getElementById('btn-copyscript').addEventListener('click', async () => {
