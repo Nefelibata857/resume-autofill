@@ -889,7 +889,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v30';
+  var ENGINE_VER = 'v31';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -1024,6 +1024,7 @@ function applyResume(D, O) {
     if (!m) return cb(false);
     var Y = m[1], M = m[2].length === 1 ? '0' + m[2] : m[2];
     var D2 = m[3] ? (m[3].length === 1 ? '0' + m[3] : m[3]) : '';
+    var doc = el.ownerDocument || document;
     var w = W(el), k = 0, cands;
     /* 直接 el.value = v 会被 React 受控组件当成「没变过」直接回滚，只有真输入才认。
        execCommand('insertText') 会派发真正的 beforeinput/input，最接近手打。 */
@@ -1255,13 +1256,24 @@ function applyResume(D, O) {
           step();
         }, 200);
       }
-      tap(el);
-      setTimeout(step, 380);
+      /* 调用方刚 tap 过一次输入框，面板通常已经打开。字节 Semi 的输入框点击是 toggle，
+         这里再无条件 tap 会把面板关掉，后面自然一个年份/月份都找不到。
+         先检查月份格子是否已经在页面上；确实没开才补点一次。 */
+      function ensureMonthPanel(cb3) {
+        if (monthPanel()) return cb3(true);
+        tap(el);
+        setTimeout(function () { cb3(monthPanel()); }, 380);
+      }
+      ensureMonthPanel(function (open) {
+        if (!open) return fin(false);
+        step();
+      });
     }
     function typePath() {
     k = 0;
     try { if (el.focus) el.focus(); } catch (e) {}
-    tap(el);
+    /* 面板可能仍开着；此时再 tap 是关面板。只有确认没开时才补点。 */
+    if (!monthPanel()) tap(el);
     setTimeout(function () {
       var isMonth = monthPanel();
       cands = isMonth
