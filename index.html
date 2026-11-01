@@ -1004,8 +1004,15 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v37';
+  var ENGINE_VER = 'v38';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
+  /* 轻量轨迹：出问题时不用开 DevTools，面板/控制台里看 __RZ.trace 就知道
+     卡在哪一步（下拉点了不开、看门狗判失败、日期队列有没有轮到）。 */
+  var TRACE = [];
+  RES.trace = TRACE;
+  function tr(s) {
+    try { if (TRACE.length < 300) TRACE.push((Date.now() % 1000000) + ' ' + s); } catch (e0) {}
+  }
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
   var RULES = [
@@ -1414,9 +1421,11 @@ function applyResume(D, O) {
     if (!monthPanel()) tap(el);
     function begin() {
       var isMonth = monthPanel();
+      /* 月份格式一律排第一：真机把「2023-09-01」塞进纯月控件会被判非法、先显示再清空，
+         而「2023-09」两种控件都认。省掉的这一轮正是时间框反复变空的地方。 */
       cands = isMonth
         ? [Y + '-' + M, Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '/' + M, Y + '.' + M, Y + '年' + M + '月']
-        : [Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '-' + M, Y + '/' + M + (D2 ? '/' + D2 : ''), Y + '.' + M, Y + '年' + M + '月'];
+        : [Y + '-' + M, Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '/' + M + (D2 ? '/' + D2 : ''), Y + '.' + M, Y + '年' + M + '月'];
       (function step() {
         /* 所有格式都试完还没成 —— 但绝不按 Escape：它会把「其实已经写进去、只是判晚了一步」
            的值一起抹掉，这正是之前两个时间框一直空着的直接原因。 */
@@ -2438,21 +2447,29 @@ function applyResume(D, O) {
       setTimeout(next, 180);
     }
     var next = function () {
-      if (i >= DATES.length) { cb(); return; }
+      if (i >= DATES.length) { tr('dates-end'); cb(); return; }
       var it = DATES[i++];
       var tries = 0;
+      tr('date:' + it.k);
       var attempt = function () {
         resolveEl(it);
         var dm = /(\d{4})-(\d{1,2})/.exec(String(it.val || ''));
         var have = String(it.el && it.el.value || '').replace(/[^\d]/g, '');
         var want = dm ? dm[1] + (dm[2].length === 1 ? '0' + dm[2] : dm[2]) : '';
         if (want && have.indexOf(want) === 0) { done(it, true); return; }
+        /* 同一个道理：日期控件也可能「点了没反应、回调不来」，
+           卡住就把这一项判失败，别把后面那几对时间一起拖死。 */
+        var finDone = false, wdD = null;
         var fin = function (ok) {
+          if (finDone) return;
+          finDone = true;
+          try { clearTimeout(wdD); } catch (e0) {}
           /* 落空就再来一次：第一遍填表的当下，整个经历区块往往还在重建/重排，
              点开面板的那一下会正好落在中间态上。等它安定下来再走一遍通常就过了。 */
           if (!ok && tries++ < 1) { setTimeout(attempt, 460); return; }
           done(it, ok);
         };
+        wdD = setTimeout(function () { fin(false); }, 9000);
         try { fillDate(it.el, it.val, fin); } catch (e) { fin(false); }
       };
       attempt();
@@ -2469,10 +2486,20 @@ function applyResume(D, O) {
          不要再点。多选下拉的点击是 toggle，点一下就把已选的取消掉，
          这正是「第二遍点书签，期望工作地点反而没了」的原因。 */
       if (!it.sg && comboFilled(it.el)) { RES.skipped++; setTimeout(next, 60); return; }
+      tr('combo:' + it.k);
       var run1 = it.sg
         ? function (cb2) { suggestChoose(it.el, it.val, cb2); }
         : function (cb2) { chooseCombo(it.el, it.val, cb2); };
-      run1(function (ok, part, picked) {
+      /* 看门狗：自研「下拉」偶尔点开后不给选项、回调永远不回来。
+         一个卡住，后面排队的日期框就全被堵死 —— 字节教育经历起止时间一直空着，
+         根因就在这里：队列停在某个下拉上，日期那一批根本没轮到。
+         宁可判这一项失败，也必须让队列继续往下走。 */
+      var settled = false;
+      var wd = setTimeout(function () { tr('combo-timeout:' + it.k); handle(false); }, 7000);
+      function handle(ok, part, picked) {
+        if (settled) return;
+        settled = true;
+        try { clearTimeout(wd); } catch (e0) {}
         if (!ok) {
           /* 同一个控件的内外两层会各进一次队列：外层已经填上了，内层再填一遍就找不到选项，
              于是报一条假的「下拉里没有」。失败时先看一眼控件现在的值是不是已经对了。 */
@@ -2496,7 +2523,8 @@ function applyResume(D, O) {
           if (!already) RES.failed.push({ l: it.l, r: '下拉里没有「' + it.val + '」这一项' });
         }
         setTimeout(next, 120);
-      });
+      }
+      run1(function (ok, part, picked) { handle(ok, part, picked); });
     })();
   }
 
@@ -3390,6 +3418,14 @@ function applyResume(D, O) {
   }
   try { RES.data = D; } catch (e) {}
   try { if (typeof window !== 'undefined') window.__RZ = RES; } catch (e) {}
+  /* 控制台留一行诊断摘要：出问题时用户复制这一行发回来，
+     就能看到引擎跑到哪一步、哪些字段没认出来、哪些写不进去。 */
+  try {
+    console.log('[填表助手] ' + ENGINE_VER + ' ' + JSON.stringify({
+      trace: TRACE.slice(-24),
+      unmatched: RES.unmatched, failed: RES.failed
+    }));
+  } catch (e1) {}
   return RES;
 }
 
