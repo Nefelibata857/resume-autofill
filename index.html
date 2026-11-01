@@ -418,7 +418,6 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #tut video{width:100%;height:100%;display:block;background:#000;}
 #tut .vtip{font-size:12px;color:var(--sub);margin-top:10px;line-height:1.75;}
 #tut .vtip b{font-weight:600;color:#5f4520;}
-button:disabled{opacity:.55;cursor:not-allowed;}
 </style>
 </head>
 <body>
@@ -495,10 +494,8 @@ button:disabled{opacity:.55;cursor:not-allowed;}
     <div class="card">
       <h2>一键填表</h2>
 
-      <button class="primary installbtn" id="btn-ghlogin" style="display:none">🔑 登录 GitHub 解锁安装</button>
       <button class="primary installbtn" id="btn-install">安装填表书签</button>
       <div class="status" id="bm-status">点一下，代码进剪贴板，再按 3 下键就好</div>
-      <div style="text-align:right;margin-top:2px"><button class="linkbtn" id="gh-logout" style="display:none">退出 GitHub 登录</button></div>
 
       <div class="minsteps">
         <div class="ms"><i>1</i><div>点上面按钮 → <b>代码已复制</b></div></div>
@@ -4998,80 +4995,11 @@ document.getElementById('btn-example').addEventListener('click', () => {
   toast('示例已填入，照着改成你自己的就行');
 });
 
-/* ---------- GitHub 登录门（OAuth 隐式流，仅读用户名） ---------- */
-var GH_AUTH_KEY = 'rz_gh_auth_v1';
-var GH_CLIENT = 'Ov23li7TDJXKaxFNgIxd';
-function ghAuth(){ try { return JSON.parse(localStorage.getItem(GH_AUTH_KEY) || 'null'); } catch(e){ return null; } }
-function ghSave(a){ try { localStorage.setItem(GH_AUTH_KEY, JSON.stringify(a)); } catch(e){} }
-function ghClear(){ try { localStorage.removeItem(GH_AUTH_KEY); } catch(e){} }
-
-function ghParseHash(){          // OAuth 回调：#access_token=...&state=...
-  if (location.hash.indexOf('access_token') < 0) return;
-  var kv = {}, parts = location.hash.slice(1).split('&');
-  parts.forEach(function(p){ var i = p.indexOf('='); if (i > 0) kv[p.slice(0,i)] = decodeURIComponent(p.slice(i+1)); });
-  var st = null;
-  try { st = sessionStorage.getItem('rz_gh_state'); } catch(e){}
-  history.replaceState(null, '', location.pathname + location.search);
-  if (kv.access_token && (!st || st === kv.state)) {
-    ghSave({ t: kv.access_token, login: '', at: Date.now() });
-    ghWho();
-  }
-}
-
-async function ghWho(){          // 用 token 换用户名；失效则清掉
-  var a = ghAuth(); if (!a || !a.t) { ghUI(); return; }
-  try {
-    var r = await fetch('https://api.github.com/user', { headers: { 'Authorization': 'Bearer ' + a.t, 'Accept': 'application/vnd.github+json' } });
-    if (r.status === 401) { ghClear(); ghUI(); return; }
-    var j = await r.json();
-    if (j && j.login) { a.login = j.login; ghSave(a); }
-  } catch(e){}
-  ghUI();
-}
-
-function ghLogin(){
-  var st = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  try { sessionStorage.setItem('rz_gh_state', st); } catch(e){}
-  location.href = 'https://github.com/login/oauth/authorize?client_id=' + GH_CLIENT
-    + '&redirect_uri=' + encodeURIComponent(location.origin + location.pathname)
-    + '&response_type=token&scope=&state=' + st;
-}
-
-function ghUI(){
-  var a = ghAuth(), on = !!(a && a.t);
-  var inst = document.getElementById('btn-install');
-  var lg   = document.getElementById('btn-ghlogin');
-  var cs   = document.getElementById('btn-copyscript');
-  var s    = document.getElementById('bm-status');
-  var lo   = document.getElementById('gh-logout');
-  if (on) {
-    if (inst) inst.style.display = '';
-    if (lg)   lg.style.display = 'none';
-    if (cs)  { cs.disabled = false; cs.textContent = '复制填表脚本'; }
-    if (s)    s.textContent = (a.login ? '已以 GitHub 账号 ' + a.login + ' 登录' : 'GitHub 已登录') + ' · 点上面按钮安装书签';
-    if (lo)   lo.style.display = '';
-  } else {
-    if (inst) inst.style.display = 'none';
-    if (lg)   lg.style.display = '';
-    if (cs)  { cs.disabled = true; cs.textContent = '登录 GitHub 后解锁'; }
-    if (s)    s.textContent = '安装需登录 GitHub（只读用户名，不申请任何资料权限）';
-    if (lo)   lo.style.display = 'none';
-  }
-}
-window.ghAuth = ghAuth; window.ghSave = ghSave; window.ghClear = ghClear;
-window.ghParseHash = ghParseHash; window.ghWho = ghWho; window.ghLogin = ghLogin; window.ghUI = ghUI;
-
 /* ---------- 启动 ---------- */
 render();
 renderHealth();
 refreshBookmarks();
 syncBanner();
-
-document.getElementById('btn-ghlogin').addEventListener('click', ghLogin);
-document.getElementById('gh-logout').addEventListener('click', () => { ghClear(); ghUI(); toast('已退出 GitHub 登录'); });
-ghParseHash();
-ghUI();
-if (ghAuth()) ghWho();
 </script>
 </body>
 </html>
