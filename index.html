@@ -418,18 +418,8 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #tut video{width:100%;height:100%;display:block;background:#000;}
 #tut .vtip{font-size:12px;color:var(--sub);margin-top:10px;line-height:1.75;}
 #tut .vtip b{font-weight:600;color:#5f4520;}
-/* 登录没成时的排查条：把该填的回调地址直接摆出来 */
-#gh-help{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:120;width:min(760px,94vw);
-  background:#fffdf6;border:1px solid #e6d6b4;border-radius:14px;padding:14px 16px;
-  box-shadow:0 14px 38px rgba(90,64,20,.18);font-size:13px;line-height:1.85;color:#3d3a34;}
-#gh-help b{display:block;font-size:13.5px;color:#8a5a12;margin-bottom:2px;}
-#gh-help code{display:block;margin:7px 0 0;padding:9px 11px;background:#f6f0e0;border:1px solid #ecdcbc;
-  border-radius:9px;word-break:break-all;font-size:12px;color:#2f2b24;user-select:all;}
-#gh-help .gh-row{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;}
-#gh-help .gh-row button{font:inherit;font-size:12.5px;padding:5px 12px;border-radius:999px;cursor:pointer;
-  border:1px solid #e0cda6;background:#fff;color:#5f4520;}
-#gh-help .gh-row button:hover{background:#fbf3e0;}
-#gh-help .gh-row a{font-size:12.5px;color:#8a5a12;}
+/* 未解锁时下载按钮弱化一点，解锁后恢复常态 */
+#btn-dl.locked{opacity:.85;}
 </style>
 <script>
 /* ---------------- 访问统计（Umami，只看访问量，不使用 cookie、不采集个人信息） ----------------
@@ -466,25 +456,13 @@ window.trackEvent = function (name, data) {
       <button id="btn-video" class="ghost">看视频教程</button>
       <button id="btn-help" class="ghost">使用说明</button>
       <button id="btn-copyall">复制全部为文本</button>
-      <button id="btn-dl" class="ghost">🔒 登录 GitHub 下载</button>
-      <button id="btn-ghout" class="ghost" hidden>退出登录</button>
+      <button id="btn-dl" class="ghost locked">🔗 去 GitHub 看项目</button>
       <button id="btn-example">填入示例</button>
       <button id="btn-reset">清空全部</button>
     </div>
   </div>
   <nav id="tabs"></nav>
 </header>
-
-<div id="gh-help" hidden>
-  <b>GitHub 登录还差一步</b>
-  <span id="gh-help-msg"></span>
-  <code id="gh-help-url"></code>
-  <div class="gh-row">
-    <button id="gh-help-cp">复制这个地址</button>
-    <a href="https://github.com/settings/developers" target="_blank" rel="noopener">打开 OAuth App 设置 →</a>
-    <button id="gh-help-x">知道了</button>
-  </div>
-</div>
 
 <div id="banner"><div class="in">
   <b>数据改过了，书签里还是旧的。</b>
@@ -691,7 +669,10 @@ window.trackEvent = function (name, data) {
         </dd>
 
         <dt>换电脑 / 换浏览器</dt>
-        <dd>数据保存在浏览器本地；点顶栏「⬇ 下载表单助手」可把整个工具连数据存成一个文件，换电脑直接打开。</dd>
+        <dd>
+          数据只保存在浏览器本地；点顶栏「🔗 去 GitHub 看项目」会开一个新标签，回到本页按钮就变成
+          「⬇ 下载表单助手」，点一下能把整个工具连数据存成一个文件，换电脑直接打开。
+        </dd>
 
         <dt>手机上能用吗</dt>
         <dd>填写和预览可以，但手机浏览器装不了书签栏脚本，<b>自动填表请用电脑</b>。</dd>
@@ -4018,9 +3999,9 @@ function offlinePatch(html) {
     + '}catch(e){}'
     + 'document.documentElement.setAttribute("data-offline","1");'
     + '})();';
-  /* 离线用不上的东西藏掉：教程视频要联网、GitHub 登录在本地文件里没法走 */
-  var add = '<style id="offline-css">html[data-offline] #tut,html[data-offline] #btn-dl,'
-    + 'html[data-offline] #btn-ghout,html[data-offline] #gh-help{display:none!important}</style>'
+  /* 离线用不上的东西藏掉：教程视频要联网、下载入口在本地文件里也没有意义 */
+  var add = '<style id="offline-css">html[data-offline] #tut,html[data-offline] #btn-dl'
+    + '{display:none!important}</style>'
     + '<script id="offline-boot">' + boot + '<\/script>\n';
   var at = html.search(/<\/head>/i);
   if (at < 0) return '';
@@ -5034,101 +5015,72 @@ document.getElementById('btn-example').addEventListener('click', () => {
   toast('示例已填入，照着改成你自己的就行');
 });
 
-/* ---------- GitHub 登录（登录后解锁「下载表单助手」，OAuth 隐式流只读用户名） ----------
-   排错要点：登录回来仍锁着 = 没拿到 token。最常见是 OAuth App 的
-   Authorization callback URL 和下面 ghCallback() 差一个斜杠，GitHub 会直接报错不回来。
-   所以这里把回调地址明着显示出来，让人能对照着改。 */
-var GH_AUTH_KEY = 'rz_gh_auth_v1';
-var GH_PENDING_KEY = 'rz_gh_pending';
-var GH_CLIENT = 'Ov23li7TDJXKaxFNgIxd';
-function ghAuth(){ try { return JSON.parse(localStorage.getItem(GH_AUTH_KEY) || 'null'); } catch(e){ return null; } }
-function ghSave(a){ try { localStorage.setItem(GH_AUTH_KEY, JSON.stringify(a)); } catch(e){} }
-function ghClear(){ try { localStorage.removeItem(GH_AUTH_KEY); } catch(e){} }
-function ghCallback(){
-  /* 回调地址统一成「目录」形式：从 /resume-autofill/index.html 和 /resume-autofill/ 进来算同一个，
-     免得 OAuth App 里登记的地址跟地址栏差一个 index.html 就授权失败。 */
-  var p = location.pathname.replace(/index\.html$/i, '');
-  if (!/\/$/.test(p)) p += '/';
-  return location.origin + p;
+/* ---------- 下载解锁（不依赖 GitHub 登录） ----------
+   原来用 GitHub OAuth 登录来解锁「下载表单助手」，实际跑下来行不通：
+   国内网络下 github.com 经常直接连不上（实测页面能开、github.com 超时），
+   点登录就死在跳转上，回来还是锁的，等于谁都下载不了。
+   现在改成：点按钮 → 新标签打开项目页（曝光目的照样达到）→ 回到本页自动解锁。
+   不做任何联网校验，任何网络环境下都不会把人挡在门外。 */
+var REPO_URL = 'https://github.com/Nefelibata857/resume-autofill';
+var UNLOCK_KEY = 'rz_unlock_v1';
+var VISIT_KEY = 'rz_visit_pending';
+var UNLOCK_DAYS = 30;
+
+function isUnlocked(){
+  try {
+    var u = JSON.parse(localStorage.getItem(UNLOCK_KEY) || 'null');
+    return !!(u && u.at && Date.now() - u.at < UNLOCK_DAYS * 864e5);
+  } catch(e){ return false; }
+}
+function pendingAt(){ try { return Number(localStorage.getItem(VISIT_KEY) || 0); } catch(e){ return 0; } }
+
+/* 刷新下载按钮的状态与文案 */
+function uiDl(){
+  var dl = document.getElementById('btn-dl');
+  if (!dl) return;
+  var on = isUnlocked();
+  dl.textContent = on ? '⬇ 下载表单助手' : '🔗 去 GitHub 看项目';
+  dl.title = on
+    ? '把这个工具整份存到本地（单个 HTML 文件，含你已填的数据，双击就能打开）'
+    : '在新标签打开作者在 GitHub 上的项目页，回到本页就解锁下载';
+  dl.classList.toggle('locked', !on);
 }
 
-/* 同时读 #hash 和 ?query —— 正常授权走 hash，出错时 GitHub 也可能把 error 放在 query */
-function ghParams(){
-  var out = {};
-  [location.hash.slice(1), location.search.slice(1)].forEach(function(s){
-    if (!s) return;
-    s.split('&').forEach(function(p){
-      var i = p.indexOf('='); if (i <= 0) return;
-      var k = p.slice(0, i), v = p.slice(i + 1).replace(/\+/g, ' ');
-      try { out[decodeURIComponent(k)] = decodeURIComponent(v); } catch(e){ out[k] = v; }
-    });
-  });
-  return out;
+/* 真正解锁：记下时间，之后 30 天内都直接可下载 */
+function unlockDl(quiet){
+  try { localStorage.setItem(UNLOCK_KEY, JSON.stringify({ at: Date.now() })); } catch(e){}
+  try { localStorage.removeItem(VISIT_KEY); } catch(e){}
+  uiDl();
+  if (!quiet) toast('下载已解锁，再点一次「⬇ 下载表单助手」就存到本地');
 }
 
-function ghParseHash(){
-  var kv = ghParams();
-  if (!kv.access_token && !kv.error) return;
-  try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
-  try { sessionStorage.removeItem(GH_PENDING_KEY); } catch(e){}
-  if (kv.access_token) {
-    /* state 只防 CSRF，这里无服务端、无敏感权限；校验不过也不该让登录白跑一趟 */
-    ghSave({ t: kv.access_token, login: '', at: Date.now() });
-    ghWho();
+/* 点未解锁的按钮：开项目页 + 留个「去过了」的记号 */
+function goRepo(){
+  try { localStorage.setItem(VISIT_KEY, String(Date.now())); } catch(e){}
+  var w = null;
+  try { w = window.open(REPO_URL, '_blank'); } catch(e){}
+  if (!w) {                       // 新窗口被拦：不能因此卡住人，直接解锁
+    unlockDl();
+    toast('新窗口被浏览器拦了，下载已直接解锁');
     return;
   }
-  ghHelp('GitHub 报了「' + (kv.error_description || kv.error || '未知原因') + '」——通常是回调地址没对上。'
-    + '把下面这个地址原样粘进 OAuth App 的 Authorization callback URL，保存后再点一次登录。');
+  toast('已在 GitHub 打开项目，回到本页就自动解锁下载');
+  /* 有的浏览器把新标签开在后台、不会触发 visibilitychange，兜个底 */
+  setTimeout(function(){ if (!isUnlocked()) unlockDl(); }, 10000);
 }
 
-/* 登录没成时把「该填什么回调地址」直接摆出来 */
-function ghHelp(msg){
-  var box = document.getElementById('gh-help');
-  if (!box) { toast(msg); return; }
-  var m = document.getElementById('gh-help-msg');
-  var u = document.getElementById('gh-help-url');
-  if (m) m.textContent = msg || '';
-  if (u) u.textContent = ghCallback();
-  box.hidden = false;
+/* 从 GitHub 那个标签切回来 —— 这就是「来过了」的证据 */
+function checkBack(){
+  var p = pendingAt();
+  if (!p) return;
+  if (document.visibilityState === 'visible' && Date.now() - p > 800) unlockDl();
 }
+document.addEventListener('visibilitychange', checkBack);
+window.addEventListener('focus', checkBack);
 
-async function ghWho(){          // 用 token 换用户名；已失效就清掉并说明原因
-  var a = ghAuth(); if (!a || !a.t) { ghUI(); return; }
-  try {
-    var r = await fetch('https://api.github.com/user', { headers: { 'Authorization': 'Bearer ' + a.t, 'Accept': 'application/vnd.github+json' } });
-    if (r.status === 401) {
-      ghClear(); ghUI();
-      ghHelp('GitHub 说这个登录凭证已失效（可能过期或被撤销），请再登录一次。');
-      return;
-    }
-    var j = await r.json();
-    if (j && j.login) { a.login = j.login; ghSave(a); }
-  } catch(e){ /* 网络问题：token 仍留在本地，按钮保持解锁，不影响下载 */ }
-  ghUI();
-}
-
-function ghLogin(){
-  try { sessionStorage.setItem(GH_PENDING_KEY, String(Date.now())); } catch(e){}
-  location.href = 'https://github.com/login/oauth/authorize?client_id=' + GH_CLIENT
-    + '&redirect_uri=' + encodeURIComponent(ghCallback())
-    + '&response_type=token&scope=&state=' + Math.random().toString(36).slice(2);
-}
-
-function ghUI(){
-  var a = ghAuth(), on = !!(a && a.t);
-  var dl = document.getElementById('btn-dl');
-  if (dl) {
-    dl.textContent = on ? '⬇ 下载表单助手' : '🔒 登录 GitHub 下载';
-    dl.title = on ? '把这个工具整份存到本地（单个 HTML 文件，含你已填的数据，双击就能打开）'
-                  : '登录 GitHub 后解锁下载（只读用户名，不申请任何资料权限）';
-  }
-  var out = document.getElementById('btn-ghout');
-  if (out) out.hidden = !on;
-}
-window.ghAuth = ghAuth; window.ghSave = ghSave; window.ghClear = ghClear;
 window.dlTool = dlTool; window.offlinePatch = offlinePatch;
-window.ghParams = ghParams; window.ghCallback = ghCallback; window.ghHelp = ghHelp;
-window.ghParseHash = ghParseHash; window.ghWho = ghWho; window.ghLogin = ghLogin; window.ghUI = ghUI;
+window.isUnlocked = isUnlocked; window.unlockDl = unlockDl;
+window.uiDl = uiDl; window.goRepo = goRepo;
 
 /* ---------- 启动 ---------- */
 render();
@@ -5136,31 +5088,12 @@ renderHealth();
 refreshBookmarks();
 syncBanner();
 
-document.getElementById('btn-dl').addEventListener('click', () => { ghAuth() ? dlTool() : ghLogin(); });
-(function () {
-  var out = document.getElementById('btn-ghout');
-  if (out) out.addEventListener('click', () => { ghClear(); ghUI(); toast('已退出 GitHub 登录'); });
-  var cp = document.getElementById('gh-help-cp');
-  if (cp) cp.addEventListener('click', async () => {
-    if (await copyText(ghCallback())) toast('已复制回调地址');
-  });
-  var x = document.getElementById('gh-help-x');
-  if (x) x.addEventListener('click', () => { document.getElementById('gh-help').hidden = true; });
-})();
-ghParseHash();
-ghUI();
-if (ghAuth()) ghWho();
-/* 刚从 GitHub 回来却没 token：把回调地址摆出来，别让人干等着 */
-(function () {
-  var p = null;
-  try { p = sessionStorage.getItem(GH_PENDING_KEY); } catch(e){}
-  if (!p) return;
-  try { sessionStorage.removeItem(GH_PENDING_KEY); } catch(e){}
-  if (ghAuth()) return;
-  if (Date.now() - Number(p) < 180000)
-    ghHelp('授权回来了，但登录凭证没传回来——你的 OAuth App 里登记的「回调地址」和这个页面对不上。'
-      + '点「打开 OAuth App 设置」，把下面这个地址原样粘到 Authorization callback URL，保存后再点一次登录就好了。');
-})();
+document.getElementById('btn-dl').addEventListener('click', () => {
+  isUnlocked() ? dlTool() : goRepo();
+});
+uiDl();
+/* 上次点过「去 GitHub」但没回来触发过解锁（比如直接关了标签）→ 打开页面时补一次 */
+if (pendingAt() && Date.now() - pendingAt() > 1500) unlockDl(true);
 </script>
 </body>
 </html>
