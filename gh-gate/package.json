@@ -1,0 +1,16 @@
+{
+  "name": "resume-autofill-gate",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GitHub 授权码换用户名的小后端（client_secret 只存服务端）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

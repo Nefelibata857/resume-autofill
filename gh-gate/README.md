@@ -17,36 +17,41 @@ GitHub 已经下线了 OAuth 隐式流（`response_type=token` 不再返回 `#ac
 
 | 文件 | 用途 |
 |---|---|
-| `worker.js` | Cloudflare Worker 版（推荐：免费、无冷启动、全球边缘） |
-| `server.js` | Node / Express 版（Render、Railway、Fly.io、自己的服务器） |
+| `server.js` | Node / Express 版 —— **线上用的是这个**（部署在 Render） |
+| `package.json` | Express 依赖 + `npm start` |
+| `worker.js` | Cloudflare Worker 版（备用，见下方「为什么不用它」） |
 
-## 部署（Cloudflare Worker，约 3 分钟）
+## 部署（Render，约 3 分钟）
 
-1. 打开 https://dash.cloudflare.com → **Workers & Pages** → **Create** → **Create Worker**，
-   随便起个名字（比如 `resume-autofill-gate`）→ **Deploy**。
-2. 点 **Edit code**，把 `worker.js` 的内容整段粘进去，覆盖默认代码 → **Deploy**。
-3. **Settings → Variables and Secrets → Add**，加两个（类型都选 **Secret**，加密存储）：
+仓库根目录有一份 `render.yaml`（Blueprint），最省事：
 
-   | 变量名 | 值 |
-   |---|---|
-   | `GH_CLIENT_ID` | `Ov23li7TDJXKaxFNgIxd` |
-   | `GH_CLIENT_SECRET` | OAuth App 页面生成的那串（见下） |
+1. Render 控制台 → **New +** → **Blueprint** → 选 `Nefelibata857/resume-autofill` 仓库 → **Apply**。
+2. 它会把服务名建为 `resume-autofill-gate`、根目录指到 `gh-gate/`、自动跑 `npm install && node server.js`。
+3. 弹出 `GH_CLIENT_SECRET` 的输入框时填入那串 secret（`render.yaml` 里标了 `sync: false`，
+   所以不会写进仓库）。`GH_CLIENT_ID` 和 `ALLOW_ORIGINS` 已在蓝图里配好。
 
-   可选再加一个普通变量 `ALLOW_ORIGINS`，默认已经是 `https://nefelibata857.github.io`。
+也可以手动建：**New + → Web Service** → 选仓库 → Root Directory 填 `gh-gate` →
+Build `npm install` → Start `node server.js` → 环境变量加 `GH_CLIENT_ID`、`GH_CLIENT_SECRET`。
 
-4. 复制 Worker 的访问地址（`https://resume-autofill-gate.<你的子域>.workers.dev`），
-   把它填到 `index.html` 里的 `var GH_API = '.../token';`（只改这一处），提交推送。
+4. 服务地址就是 `https://resume-autofill-gate.onrender.com`，前端 `var GH_API` 已经指向
+   `https://resume-autofill-gate.onrender.com/token`，**不用改任何代码**。
 
-### client secret 在哪拿
+验证：浏览器打开 `https://resume-autofill-gate.onrender.com/` 应返回 `{"ok":true,...}`。
 
-GitHub → **Settings** → **Developer settings** → **OAuth Apps** → 打开那个 App
-（client_id 是 `Ov23li7TDJXKaxFNgIxd` 的那个）→ **Generate a new client secret**。
-**这串只显示一次**，生成后立刻粘到上面的 Secret 里。
+> 免费实例闲置 15 分钟会挂起，下次请求要 30～60 秒才醒。前端做了两件事缓解：
+> 页面打开 1.5 秒后静默 `GET /` 预热；换凭证超过 6 秒就把提示条切成「正在唤醒登录服务」。
 
-同一个页面确认 **Authorization callback URL** 正好是
-`https://nefelibata857.github.io/resume-autofill/`（**结尾的斜杠必须有**）。
+## 为什么不用 Cloudflare Worker
 
-## 部署（Node 版，备用）
+`*.workers.dev` 在中国大陆被 DNS 污染——实测解析出来是 `199.59.148.106` /
+`2a03:2880:f11c:8183:face:b00c:0:25de`（Facebook 的 IP），浏览器报 `ERR_CONNECTION_TIMED_OUT`。
+访客打不开就等于登录不了。`*.vercel.app`、`*.deno.dev` 同样不通；
+`*.onrender.com` 实测 200 / 1.3s，可用。
+
+`worker.js` 仍然保留：如果你以后有自己的域名并托管在 Cloudflare，可以给 Worker 绑自定义域名再用它，
+那样没有冷启动，比 Render 体验好。
+
+## 部署（Node 版本地跑）
 
 ```bash
 npm i express
@@ -54,7 +59,14 @@ GH_CLIENT_ID=Ov23li7TDJXKaxFNgIxd GH_CLIENT_SECRET=xxx PORT=3000 node server.js
 # 健康检查：curl http://localhost:3000/  →  {"ok":true}
 ```
 
-前端 `GH_API` 填 `https://你的域名/token`。
+## client secret 在哪拿
+
+GitHub → **Settings** → **Developer settings** → **OAuth Apps** → 打开那个 App
+（client_id 是 `Ov23li7TDJXKaxFNgIxd` 的那个）→ **Generate a new client secret**。
+**这串只显示一次**，生成后立刻粘到环境变量里。
+
+同一个页面确认 **Authorization callback URL** 正好是
+`https://nefelibata857.github.io/resume-autofill/`（**结尾的斜杠必须有**）。
 
 ## 接口
 
@@ -80,11 +92,14 @@ Origin: https://nefelibata857.github.io
   "hint": "授权码只能用一次、10 分钟内有效" }
 ```
 
-其他：`405` 非 POST、`403` Origin 不在白名单、`400` code 格式不对。
+其他：`405` 非 POST、`403` Origin 不在白名单、`400` code 格式不对、
+`500 server_missing_client_secret` 忘了配 secret。
+
+`GET /` 返回 `{"ok":true}`，只用于健康检查和前端预热。
 
 ## 安全边界
 
-- client_secret 只存在于服务端（Worker 的 Secret 里），不下发、不进日志；
+- client_secret 只存在于服务端环境变量里，不下发、不进日志；
 - GitHub access_token 只在服务端内存中出现一次，用完即弃，不落库、不返回；
 - 只向浏览器返回用户名；
 - CORS 白名单锁死为 `https://nefelibata857.github.io`；

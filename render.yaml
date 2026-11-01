@@ -1,0 +1,20 @@
+# Render 蓝图：一条 render.yaml 就能把这个小后端建起来
+# 用法：Render 控制台 → New + → Blueprint → 选本仓库 → Apply
+services:
+  - type: web
+    name: resume-autofill-gate
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: gh-gate
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: GH_CLIENT_ID
+        value: Ov23li7TDJXKaxFNgIxd
+      - key: GH_CLIENT_SECRET
+        sync: false
+      - key: ALLOW_ORIGINS
+        value: https://nefelibata857.github.io

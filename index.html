@@ -5199,9 +5199,10 @@ var GH_PENDING_KEY = 'rz_gh_pending';
 var GH_URL_KEY = 'rz_gh_url';
 var GH_STATE_KEY = 'rz_gh_state';
 var GH_CLIENT = 'Ov23li7TDJXKaxFNgIxd';
-/* 换 token 的小后端（源码见仓库 gh-gate/worker.js，几十行，可部署到 Cloudflare Worker）。
-   后端只回「用户名」，GitHub 的 token 从不离开服务端。 */
-var GH_API = 'https://resume-autofill-gate.2414926363.workers.dev/token';
+/* 换 token 的小后端（源码见仓库 gh-gate/，Node 版部署在 Render）。
+   后端只回「用户名」，GitHub 的 token 从不离开服务端。
+   为什么不用 Cloudflare Worker：workers.dev 在国内被 DNS 污染，打不开；onrender.com 可达。 */
+var GH_API = 'https://resume-autofill-gate.onrender.com/token';
 
 function ghAuth() { try { return JSON.parse(localStorage.getItem(GH_AUTH_KEY) || 'null'); } catch (e) { return null; } }
 function ghLogged() { var a = ghAuth(); return !!(a && a.t); }
@@ -5296,6 +5297,8 @@ function ghBar(kind, extra) {
           '再点绿色的 <b>Authorize</b> 按钮。完成后本页会自动解锁，不用再点一次登录。' +
           '<br>没看到新标签页？用右边的「手动打开授权页」，或者点「重新登录」。',
     busy: 'GitHub 已经把授权码送回来了，正在换登录凭证，一般一两秒就好。这时别关页面。',
+    wake: '换凭证的服务跑在免费实例上，闲置一阵子会被挂起；这会儿正在把它叫醒，' +
+          '第一次可能要等 <b>30～60 秒</b>，页面别关，醒了会自动继续。',
     fail: 'GitHub 那边没有把登录凭证带回来，所以还不能下载。常见原因有三个：' +
           '<br>① 这个网络打不开 github.com（需要代理或换网络）；② 授权页被提前关掉了；③ 在 GitHub 上点了 Cancel。' +
           '再点一次「重新登录」通常就成。',
@@ -5307,12 +5310,26 @@ function ghBar(kind, extra) {
          '小后端没起来或没配 client secret。'
   };
 
-  if (t) t.textContent = ({ wait: '正在等待 GitHub 授权', busy: '正在完成 GitHub 登录',
+  if (t) t.textContent = ({ wait: '正在等待 GitHub 授权', busy: '正在完成 GitHub 登录', wake: '正在唤醒登录服务（首次较慢）',
                             fail: 'GitHub 登录没完成，还不能下载', deny: 'GitHub 拒绝了这次授权',
                             srv: '登录服务没打通' })[kind] || 'GitHub 登录没完成';
   if (x) x.innerHTML = T[kind] || T.fail;
   if (link) link.textContent = '手动打开授权页';
   bar.classList.add('on');
+}
+
+/* 页面打开后悄悄叫醒一下服务：免费实例冷启动要 30~60 秒，等用户点登录时再叫就太晚了。
+   只在联网的线上页、且还没登录时做；失败无所谓，不提示、不重试。 */
+function ghWarm() {
+  try {
+    if (location.protocol === 'file:') return;
+    if (document.documentElement.hasAttribute('data-offline')) return;
+    /* 只在正式站点预热：本地副本 / 预览页没必要为一个演示去唤醒线上服务 */
+    if (location.hostname !== 'nefelibata857.github.io') return;
+    if (!GH_API || ghLogged()) return;
+    /* no-cors：只求把服务叫醒，不需要读响应。这样不会因为缺 CORS 头在控制台刷错误 */
+    fetch(GH_API.replace(/\/token$/, '/'), { mode: 'no-cors', cache: 'no-store' }).catch(function () {});
+  } catch (e) {}
 }
 
 function ghLogin() {
@@ -5379,6 +5396,8 @@ async function ghFinish(code, state) {
 
   if (!GH_API) { ghBar('srv', '还没配置换 token 的后端地址'); return false; }
   ghBar('busy');
+  /* 免费实例闲置会休眠，头一次请求要等它醒来；超过 6 秒就把提示换成「正在唤醒」 */
+  var slow = setTimeout(function () { if (!ghLogged()) ghBar('wake'); }, 6000);
   var j = null;
   try {
     var r = await fetch(GH_API, {
@@ -5386,12 +5405,14 @@ async function ghFinish(code, state) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code: String(code) })
     });
+    clearTimeout(slow);
     j = await r.json().catch(function () { return {}; });
     if (!r.ok || !j.login) {
       ghBar('srv', (j.description || j.error || ('HTTP ' + r.status)) + '（' + GH_API + '）');
       return false;
     }
   } catch (e) {
+    clearTimeout(slow);
     ghBar('srv', '请求后端失败：' + ((e && e.message) || e) + '（' + GH_API + '）');
     return false;
   }
@@ -5480,6 +5501,8 @@ window.addEventListener('focus', function () { if (ghLogged()) uiDl(); });
   uiSample();
   /* 刚从 GitHub 回来却没带凭证：常驻提示条讲清楚原因，别用一闪而过的 toast */
   if (!wasCallback && ghPendingFresh() && !ghLogged()) ghBar('fail');
+  /* 首屏稳定后再悄悄把后端叫醒（不影响加载，也不打扰用户） */
+  if (!wasCallback) setTimeout(ghWarm, 1500);
 })();
 </script>
 </body>
