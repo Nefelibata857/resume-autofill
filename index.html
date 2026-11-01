@@ -418,6 +418,18 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #tut video{width:100%;height:100%;display:block;background:#000;}
 #tut .vtip{font-size:12px;color:var(--sub);margin-top:10px;line-height:1.75;}
 #tut .vtip b{font-weight:600;color:#5f4520;}
+/* 登录没成时的排查条：把该填的回调地址直接摆出来 */
+#gh-help{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:120;width:min(760px,94vw);
+  background:#fffdf6;border:1px solid #e6d6b4;border-radius:14px;padding:14px 16px;
+  box-shadow:0 14px 38px rgba(90,64,20,.18);font-size:13px;line-height:1.85;color:#3d3a34;}
+#gh-help b{display:block;font-size:13.5px;color:#8a5a12;margin-bottom:2px;}
+#gh-help code{display:block;margin:7px 0 0;padding:9px 11px;background:#f6f0e0;border:1px solid #ecdcbc;
+  border-radius:9px;word-break:break-all;font-size:12px;color:#2f2b24;user-select:all;}
+#gh-help .gh-row{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;}
+#gh-help .gh-row button{font:inherit;font-size:12.5px;padding:5px 12px;border-radius:999px;cursor:pointer;
+  border:1px solid #e0cda6;background:#fff;color:#5f4520;}
+#gh-help .gh-row button:hover{background:#fbf3e0;}
+#gh-help .gh-row a{font-size:12.5px;color:#8a5a12;}
 </style>
 </head>
 <body>
@@ -430,12 +442,24 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
       <button id="btn-help" class="ghost">使用说明</button>
       <button id="btn-copyall">复制全部为文本</button>
       <button id="btn-dl" class="ghost">🔒 登录 GitHub 下载</button>
+      <button id="btn-ghout" class="ghost" hidden>退出登录</button>
       <button id="btn-example">填入示例</button>
       <button id="btn-reset">清空全部</button>
     </div>
   </div>
   <nav id="tabs"></nav>
 </header>
+
+<div id="gh-help" hidden>
+  <b>GitHub 登录没走通</b>
+  <span id="gh-help-msg"></span>
+  <code id="gh-help-url"></code>
+  <div class="gh-row">
+    <button id="gh-help-cp">复制这个地址</button>
+    <a href="https://github.com/settings/developers" target="_blank" rel="noopener">打开 OAuth App 设置 →</a>
+    <button id="gh-help-x">先关掉</button>
+  </div>
+</div>
 
 <div id="banner"><div class="in">
   <b>数据改过了，书签里还是旧的。</b>
@@ -700,6 +724,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
   "political": "",
   "idType": "",
   "idcard": "",
+  "driverLicense": "",
   "height": "",
   "weight": "",
   "maritalStatus": "",
@@ -798,7 +823,7 @@ const GROUPS = [
     ['age','年龄（按生日自动算）'], ['phone','手机'], ['email','邮箱'], ['wechat','微信号'],
     ['qq','QQ'], ['mbti','MBTI'], ['hometown','籍贯'], ['nationality','国籍'], ['jobSource','求职信息来源（分号分隔 = 备选顺序）'], ['birthPlace','生源所在地'],
     ['currentCity','现居城市'], ['address','通讯地址'], ['zipcode','邮政编码'], ['ethnicity','民族'], ['political','政治面貌'],
-    ['idType','证件类型'], ['idcard','身份证号'], ['height','身高(cm)'], ['weight','体重(kg)'],
+    ['idType','证件类型'], ['idcard','身份证号'], ['driverLicense','驾照'], ['height','身高(cm)'], ['weight','体重(kg)'],
     ['maritalStatus','婚姻状况'], ['healthStatus','健康状况'],
     ['emergencyName','紧急联系人'], ['emergencyPhone','紧急联系人电话']
   ]},
@@ -871,6 +896,7 @@ const ENUMS = {
   maritalStatus:   ['未婚', '已婚', '离异'],
   political:       ['群众', '共青团员', '中共党员', '民主党派'],
   healthStatus:    ['健康', '良好', '一般'],
+  driverLicense:   ['C1', 'C2', 'C1D', 'D', '无'],
   transferAccept:  ['是', '否'],
   tripartite:      ['是', '否'],
   jobType:         ['全职（校园招聘）', '实习', '兼职', '社会招聘'],
@@ -932,7 +958,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v35';
+  var ENGINE_VER = 'v36';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -960,6 +986,8 @@ function applyResume(D, O) {
     ['ethnicity',     /(民族)/, /(要求)/],
     ['political',     /(政治面貌)/, null],
     ['idType',        /(证件号码类型|证件类型|身份证件类型)/, null],
+    /* 「驾照」放在身份证前面：否则「驾驶证」里的「证」容易被证件规则抢走 */
+    ['driverLicense', /(驾照|驾驶证|驾驶执照|准驾车型|驾照类型|驾驶证类型)/, /(档案|编号|有效期|上传|照片|图片)/],
     ['idcard',        /(公民身份号码|身份证号码|身份证号|身份证|证件号码|证件号|个人证件|证件信息)/, /(类型|有效期|照片|扫描|上传|正面|反面)/],
     ['mbti',          /(mbti)/i, null],
     ['school',        /(毕业院校|就读院校|学校名称|毕业学校|院校名称|就读学校|所在院校)/, /(专业|高中|中学|小学|公司|单位|院系)/],
@@ -3322,7 +3350,7 @@ const HOSTED = /^https?:$/.test(location.protocol) &&
 
 /* 每次往 resume-data 写新数据，这个数字 +1。
    页面下次打开会自动换上最新数据，同时保留你手动补过的空字段 */
-const DATA_VERSION = 2;
+const DATA_VERSION = 3;
 
 /* 已知错误的旧值要在升级时清掉，否则会一直被"保留空字段"的逻辑救活。
    注意：必须声明在 loadData() 被调用之前。 */
@@ -4824,7 +4852,7 @@ const SAMPLE = {
   hometown: '浙江省杭州市', nationality: '中国', birthPlace: '浙江省杭州市西湖区',
   currentCity: '浙江-杭州', address: '浙江省杭州市西湖区余杭塘路 866 号',
   zipcode: '310058', ethnicity: '汉族', political: '共青团员',
-  idType: '身份证', idcard: '330106200205180014',
+  idType: '身份证', idcard: '330106200205180014', driverLicense: 'C1',
   height: '175', weight: '62', maritalStatus: '未婚', healthStatus: '健康',
   emergencyName: '张建国', emergencyPhone: '13900139000',
   jobSource: '学校;公众号;招聘网站;智联招聘',
@@ -4973,55 +5001,92 @@ document.getElementById('btn-example').addEventListener('click', () => {
   toast('示例已填入，照着改成你自己的就行');
 });
 
-/* ---------- GitHub 登录（解锁「下载数据」按钮，OAuth 隐式流只读用户名） ---------- */
+/* ---------- GitHub 登录（解锁「下载数据」按钮，OAuth 隐式流只读用户名） ----------
+   排错要点：登录回来仍锁着 = 没拿到 token。最常见是 OAuth App 的
+   Authorization callback URL 和下面 ghCallback() 差一个斜杠，GitHub 会直接报错不回来。
+   所以这里把回调地址明着显示出来，让人能对照着改。 */
 var GH_AUTH_KEY = 'rz_gh_auth_v1';
+var GH_PENDING_KEY = 'rz_gh_pending';
 var GH_CLIENT = 'Ov23li7TDJXKaxFNgIxd';
 function ghAuth(){ try { return JSON.parse(localStorage.getItem(GH_AUTH_KEY) || 'null'); } catch(e){ return null; } }
 function ghSave(a){ try { localStorage.setItem(GH_AUTH_KEY, JSON.stringify(a)); } catch(e){} }
 function ghClear(){ try { localStorage.removeItem(GH_AUTH_KEY); } catch(e){} }
+function ghCallback(){ return location.origin + location.pathname; }
 
-function ghParseHash(){          // OAuth 回调：#access_token=...&state=...
-  if (location.hash.indexOf('access_token') < 0) return;
-  var kv = {}, parts = location.hash.slice(1).split('&');
-  parts.forEach(function(p){ var i = p.indexOf('='); if (i > 0) kv[p.slice(0,i)] = decodeURIComponent(p.slice(i+1)); });
-  var st = null;
-  try { st = sessionStorage.getItem('rz_gh_state'); } catch(e){}
-  history.replaceState(null, '', location.pathname + location.search);
-  if (kv.access_token && (!st || st === kv.state)) {
-    ghSave({ t: kv.access_token, login: '', at: Date.now() });
-    ghWho();
-  }
+/* 同时读 #hash 和 ?query —— 正常授权走 hash，出错时 GitHub 也可能把 error 放在 query */
+function ghParams(){
+  var out = {};
+  [location.hash.slice(1), location.search.slice(1)].forEach(function(s){
+    if (!s) return;
+    s.split('&').forEach(function(p){
+      var i = p.indexOf('='); if (i <= 0) return;
+      var k = p.slice(0, i), v = p.slice(i + 1).replace(/\+/g, ' ');
+      try { out[decodeURIComponent(k)] = decodeURIComponent(v); } catch(e){ out[k] = v; }
+    });
+  });
+  return out;
 }
 
-async function ghWho(){          // 用 token 换用户名；失效则清掉
+function ghParseHash(){
+  var kv = ghParams();
+  if (!kv.access_token && !kv.error) return;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
+  try { sessionStorage.removeItem(GH_PENDING_KEY); } catch(e){}
+  if (kv.access_token) {
+    /* state 只防 CSRF，这里无服务端、无敏感权限；校验不过也不该让登录白跑一趟 */
+    ghSave({ t: kv.access_token, login: '', at: Date.now() });
+    ghWho();
+    return;
+  }
+  ghHelp('GitHub 返回错误：' + (kv.error_description || kv.error || '未知原因'));
+}
+
+/* 登录没成时把「该填什么回调地址」直接摆出来 */
+function ghHelp(msg){
+  var box = document.getElementById('gh-help');
+  if (!box) { toast(msg); return; }
+  var m = document.getElementById('gh-help-msg');
+  var u = document.getElementById('gh-help-url');
+  if (m) m.textContent = msg || '';
+  if (u) u.textContent = ghCallback();
+  box.hidden = false;
+}
+
+async function ghWho(){          // 用 token 换用户名；已失效就清掉并说明原因
   var a = ghAuth(); if (!a || !a.t) { ghUI(); return; }
   try {
     var r = await fetch('https://api.github.com/user', { headers: { 'Authorization': 'Bearer ' + a.t, 'Accept': 'application/vnd.github+json' } });
-    if (r.status === 401) { ghClear(); ghUI(); return; }
+    if (r.status === 401) {
+      ghClear(); ghUI();
+      ghHelp('GitHub 说这个登录凭证已失效（可能过期或被撤销），请再登录一次。');
+      return;
+    }
     var j = await r.json();
     if (j && j.login) { a.login = j.login; ghSave(a); }
-  } catch(e){}
+  } catch(e){ /* 网络问题：token 仍留在本地，按钮保持解锁，不影响下载 */ }
   ghUI();
 }
 
 function ghLogin(){
-  var st = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  try { sessionStorage.setItem('rz_gh_state', st); } catch(e){}
+  try { sessionStorage.setItem(GH_PENDING_KEY, String(Date.now())); } catch(e){}
   location.href = 'https://github.com/login/oauth/authorize?client_id=' + GH_CLIENT
-    + '&redirect_uri=' + encodeURIComponent(location.origin + location.pathname)
-    + '&response_type=token&scope=&state=' + st;
+    + '&redirect_uri=' + encodeURIComponent(ghCallback())
+    + '&response_type=token&scope=&state=' + Math.random().toString(36).slice(2);
 }
 
 function ghUI(){
   var a = ghAuth(), on = !!(a && a.t);
   var dl = document.getElementById('btn-dl');
   if (dl) {
-    dl.textContent = on ? '下载数据' : '🔒 登录 GitHub 下载';
-    dl.title = on ? '已以 GitHub 账号 ' + (a.login || '') + ' 登录'
+    dl.textContent = on ? (a.login ? '下载数据 · @' + a.login : '下载数据') : '🔒 登录 GitHub 下载';
+    dl.title = on ? '下载 resume-info.json（已登录 ' + (a.login || '') + '）'
                   : '登录 GitHub（只读用户名，不申请资料权限）后解锁下载';
   }
+  var out = document.getElementById('btn-ghout');
+  if (out) out.hidden = !on;
 }
 window.ghAuth = ghAuth; window.ghSave = ghSave; window.ghClear = ghClear;
+window.ghParams = ghParams; window.ghCallback = ghCallback; window.ghHelp = ghHelp;
 window.ghParseHash = ghParseHash; window.ghWho = ghWho; window.ghLogin = ghLogin; window.ghUI = ghUI;
 
 /* ---------- 启动 ---------- */
@@ -5031,9 +5096,29 @@ refreshBookmarks();
 syncBanner();
 
 document.getElementById('btn-dl').addEventListener('click', () => { ghAuth() ? dlData() : ghLogin(); });
+(function () {
+  var out = document.getElementById('btn-ghout');
+  if (out) out.addEventListener('click', () => { ghClear(); ghUI(); toast('已退出 GitHub 登录'); });
+  var cp = document.getElementById('gh-help-cp');
+  if (cp) cp.addEventListener('click', async () => {
+    if (await copyText(ghCallback())) toast('已复制回调地址');
+  });
+  var x = document.getElementById('gh-help-x');
+  if (x) x.addEventListener('click', () => { document.getElementById('gh-help').hidden = true; });
+})();
 ghParseHash();
 ghUI();
 if (ghAuth()) ghWho();
+/* 刚从 GitHub 回来却没 token：把回调地址摆出来，别让人干等着 */
+(function () {
+  var p = null;
+  try { p = sessionStorage.getItem(GH_PENDING_KEY); } catch(e){}
+  if (!p) return;
+  try { sessionStorage.removeItem(GH_PENDING_KEY); } catch(e){}
+  if (ghAuth()) return;
+  if (Date.now() - Number(p) < 180000)
+    ghHelp('点完 GitHub「Authorize」回来还是没拿到授权。若刚才看到 redirect_uri 相关报错，把下面这个地址原样填进 OAuth App 的 Authorization callback URL，再重新登录。');
+})();
 </script>
 </body>
 </html>
