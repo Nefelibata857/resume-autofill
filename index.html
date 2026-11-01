@@ -422,12 +422,14 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #btn-dl.locked{opacity:.85;}
 
 /* 建议存一份到本地：贴在进度卡片底部，不挡操作 */
-.stip{display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding:11px 12px;
+.stip{position:relative;margin-top:12px;padding:11px 34px 11px 13px;
   background:#fffaf0;border:1px solid #f0e0bd;border-radius:11px;
-  font-size:12.5px;line-height:1.85;color:#5a4a2c;}
-.stip .stxt{flex:1;min-width:0;}
+  font-size:12.5px;line-height:1.9;color:#5a4a2c;}
+.stip .stxt{display:inline;}
 .stip .stxt b{color:#8a5a12;font-weight:600;}
-.stip .stipx{background:none;border:0;color:#b49a6a;font-size:17px;line-height:1;cursor:pointer;padding:0 2px;}
+.stip .linkbtn{display:inline-block;margin-left:4px;white-space:nowrap;}
+.stip .stipx{position:absolute;top:6px;right:9px;background:none;border:0;color:#b49a6a;
+  font-size:17px;line-height:1;cursor:pointer;padding:0 2px;}
 .stip .stipx:hover{color:#8a5a12;}
 
 /* 登录没走通时的提示用 toast，不再放常驻横幅 */
