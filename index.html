@@ -451,13 +451,13 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 </header>
 
 <div id="gh-help" hidden>
-  <b>GitHub 登录没走通</b>
+  <b>GitHub 登录还差一步</b>
   <span id="gh-help-msg"></span>
   <code id="gh-help-url"></code>
   <div class="gh-row">
     <button id="gh-help-cp">复制这个地址</button>
     <a href="https://github.com/settings/developers" target="_blank" rel="noopener">打开 OAuth App 设置 →</a>
-    <button id="gh-help-x">先关掉</button>
+    <button id="gh-help-x">知道了</button>
   </div>
 </div>
 
@@ -666,7 +666,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
         </dd>
 
         <dt>换电脑 / 换浏览器</dt>
-        <dd>数据保存在浏览器本地；点顶栏「下载数据」可导出一份 JSON 备份文件。</dd>
+        <dd>数据保存在浏览器本地；点顶栏「⬇ 下载表单助手」可把整个工具连数据存成一个文件，换电脑直接打开。</dd>
 
         <dt>手机上能用吗</dt>
         <dd>填写和预览可以，但手机浏览器装不了书签栏脚本，<b>自动填表请用电脑</b>。</dd>
@@ -3972,9 +3972,41 @@ document.getElementById('btn-copyall').addEventListener('click', async () => {
   if (ok) toast('已复制全部字段');
 });
 
-function dlData() {
-  download('resume-info.json', JSON.stringify(DATA, null, 2), 'application/json');
-  toast('已下载 resume-info.json');
+/* =========================================================================
+   下载「表单助手」本体：把当前页面打包成一个 HTML 文件，连同已填数据一起带走。
+   存到本地后双击就打开，是个完整可用的工具（书签照样能装、能填表）。
+   ========================================================================= */
+function offlinePatch(html) {
+  /* 数据当快照塞进去：只有本地还没有数据时才写入，免得覆盖你在离线版里后来的修改 */
+  var snap = JSON.stringify(Object.assign({}, DATA, { __v: DATA_VERSION })).replace(/<\//g, '<\\/');
+  var boot = '(function(){try{'
+    + 'var K=' + JSON.stringify(STORE_KEY) + ',S=' + JSON.stringify(snap) + ',cur=null;'
+    + 'try{cur=JSON.parse(localStorage.getItem(K)||"null");}catch(e){}'
+    + 'if(!cur||!cur.__v){localStorage.setItem(K,S);}'
+    + '}catch(e){}'
+    + 'document.documentElement.setAttribute("data-offline","1");'
+    + '})();';
+  /* 离线用不上的东西藏掉：教程视频要联网、GitHub 登录在本地文件里没法走 */
+  var add = '<style id="offline-css">html[data-offline] #tut,html[data-offline] #btn-dl,'
+    + 'html[data-offline] #btn-ghout,html[data-offline] #gh-help{display:none!important}</style>'
+    + '<script id="offline-boot">' + boot + '<\/script>\n';
+  var at = html.search(/<\/head>/i);
+  if (at < 0) return '';
+  return html.slice(0, at) + add + html.slice(at);
+}
+
+async function dlTool() {
+  var html = '';
+  try {
+    var r = await fetch(location.href.split('#')[0], { cache: 'no-store' });
+    if (r && r.ok) html = await r.text();
+  } catch (e) {}
+  /* 本地 file:// 打开时 fetch 自己不通，退回用当前 DOM 序列化 */
+  if (!html || html.indexOf('<html') < 0) html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  var out = offlinePatch(html);
+  if (!out) { toast('页面结构有点异常，先按 F5 刷新再试'); return; }
+  download('简历填表助手.html', out, 'text/html;charset=utf-8');
+  toast('已下载「简历填表助手.html」，双击打开就能用，数据已经带在里面');
 }
 
 /* 一键清空：所有字段置空。自定义字段的行保留，只是值变空，免得重新加字段 */
@@ -3995,12 +4027,12 @@ function clearAllFields() {
 /* 通用版会把这个按钮删掉（它的「清空全部」就是清空），所以这里要容错 */
 const btnClearAll = document.getElementById('btn-clearall');
 if (btnClearAll) btnClearAll.addEventListener('click', () => {
-  if (!confirm('清空所有已填内容？\n\n建议先点「下载数据」备份。\n清空后本机浏览器里不会留下你的信息。')) return;
+  if (!confirm('清空所有已填内容？\n\n建议先点「下载表单助手」存一份。\n清空后本机浏览器里不会留下你的信息。')) return;
   clearAllFields();
 });
 
 document.getElementById('btn-reset').addEventListener('click', () => {
-  if (!confirm('清空所有已填内容？\n\n建议先点「下载数据」备份。\n清空后本机浏览器里不会留下你的信息。')) return;
+  if (!confirm('清空所有已填内容？\n\n建议先点「下载表单助手」存一份。\n清空后本机浏览器里不会留下你的信息。')) return;
   DATA = Object.assign({}, DEFAULTS);
   saveData();
   render();
@@ -4956,7 +4988,7 @@ document.getElementById('hello-x').addEventListener('click', () => {
 
 document.getElementById('btn-example').addEventListener('click', () => {
   if (!confirm('填入一份【虚构的示例数据】，用来演示每个字段该填什么格式。\n\n' +
-               '会覆盖你现在填的内容，建议先「下载数据」备份。\n' +
+               '会覆盖你现在填的内容，建议先点「下载表单助手」存一份。\n' +
                '示例里的姓名是「张小明」，投简历前务必全部改掉。')) return;
   DATA = Object.assign({}, DEFAULTS, SAMPLE);
   saveData();
@@ -4967,7 +4999,7 @@ document.getElementById('btn-example').addEventListener('click', () => {
   toast('示例已填入，照着改成你自己的就行');
 });
 
-/* ---------- GitHub 登录（解锁「下载数据」按钮，OAuth 隐式流只读用户名） ----------
+/* ---------- GitHub 登录（登录后解锁「下载表单助手」，OAuth 隐式流只读用户名） ----------
    排错要点：登录回来仍锁着 = 没拿到 token。最常见是 OAuth App 的
    Authorization callback URL 和下面 ghCallback() 差一个斜杠，GitHub 会直接报错不回来。
    所以这里把回调地址明着显示出来，让人能对照着改。 */
@@ -5004,7 +5036,8 @@ function ghParseHash(){
     ghWho();
     return;
   }
-  ghHelp('GitHub 返回错误：' + (kv.error_description || kv.error || '未知原因'));
+  ghHelp('GitHub 报了「' + (kv.error_description || kv.error || '未知原因') + '」——通常是回调地址没对上。'
+    + '把下面这个地址原样粘进 OAuth App 的 Authorization callback URL，保存后再点一次登录。');
 }
 
 /* 登录没成时把「该填什么回调地址」直接摆出来 */
@@ -5044,14 +5077,15 @@ function ghUI(){
   var a = ghAuth(), on = !!(a && a.t);
   var dl = document.getElementById('btn-dl');
   if (dl) {
-    dl.textContent = on ? (a.login ? '下载数据 · @' + a.login : '下载数据') : '🔒 登录 GitHub 下载';
-    dl.title = on ? '下载 resume-info.json（已登录 ' + (a.login || '') + '）'
-                  : '登录 GitHub（只读用户名，不申请资料权限）后解锁下载';
+    dl.textContent = on ? '⬇ 下载表单助手' : '🔒 登录 GitHub 下载';
+    dl.title = on ? '把这个工具整份存到本地（单个 HTML 文件，含你已填的数据，双击就能打开）'
+                  : '登录 GitHub 后解锁下载（只读用户名，不申请任何资料权限）';
   }
   var out = document.getElementById('btn-ghout');
   if (out) out.hidden = !on;
 }
 window.ghAuth = ghAuth; window.ghSave = ghSave; window.ghClear = ghClear;
+window.dlTool = dlTool; window.offlinePatch = offlinePatch;
 window.ghParams = ghParams; window.ghCallback = ghCallback; window.ghHelp = ghHelp;
 window.ghParseHash = ghParseHash; window.ghWho = ghWho; window.ghLogin = ghLogin; window.ghUI = ghUI;
 
@@ -5061,7 +5095,7 @@ renderHealth();
 refreshBookmarks();
 syncBanner();
 
-document.getElementById('btn-dl').addEventListener('click', () => { ghAuth() ? dlData() : ghLogin(); });
+document.getElementById('btn-dl').addEventListener('click', () => { ghAuth() ? dlTool() : ghLogin(); });
 (function () {
   var out = document.getElementById('btn-ghout');
   if (out) out.addEventListener('click', () => { ghClear(); ghUI(); toast('已退出 GitHub 登录'); });
@@ -5083,7 +5117,8 @@ if (ghAuth()) ghWho();
   try { sessionStorage.removeItem(GH_PENDING_KEY); } catch(e){}
   if (ghAuth()) return;
   if (Date.now() - Number(p) < 180000)
-    ghHelp('点完 GitHub「Authorize」回来还是没拿到授权。若刚才看到 redirect_uri 相关报错，把下面这个地址原样填进 OAuth App 的 Authorization callback URL，再重新登录。');
+    ghHelp('授权回来了，但登录凭证没传回来——你的 OAuth App 里登记的「回调地址」和这个页面对不上。'
+      + '点「打开 OAuth App 设置」，把下面这个地址原样粘到 Authorization callback URL，保存后再点一次登录就好了。');
 })();
 </script>
 </body>
