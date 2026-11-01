@@ -4078,11 +4078,20 @@ function bookmarksFile() {
 
 function download(name, text, type) {
   const blob = new Blob([text], { type: type || 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = url;
   a.download = name;
+  a.rel = 'noopener';
+  /* 必须挂进文档再点：游离的 <a> 在部分浏览器版本里会被忽略 download 属性，
+     于是浏览器把 blob 当普通链接导航过去 —— 用户看到的就是“点下载弹出新页面”。 */
+  a.style.display = 'none';
+  (document.body || document.documentElement).appendChild(a);
   a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  setTimeout(() => {
+    try { a.remove(); } catch (e) {}
+    URL.revokeObjectURL(url);
+  }, 4000);
 }
 
 /* =====================================================================
@@ -4128,8 +4137,13 @@ function offlinePatch(html) {
 
 async function dlTool() {
   var html = '';
+  toast('正在生成文件…', 1200);
   try {
-    var r = await fetch(location.href.split('#')[0], { cache: 'no-store' });
+    /* 3 秒拿不到原文件就直接用 DOM 序列化顶上，别让用户对着没反应的按钮等 */
+    var ac = (typeof AbortController === 'function') ? new AbortController() : null;
+    var timer = ac ? setTimeout(function () { try { ac.abort(); } catch (e) {} }, 3000) : null;
+    var r = await fetch(location.href.split('#')[0], { cache: 'no-store', signal: ac ? ac.signal : undefined });
+    if (timer) clearTimeout(timer);
     if (r && r.ok) html = await r.text();
   } catch (e) {}
   /* 本地 file:// 打开时 fetch 自己不通，退回用当前 DOM 序列化 */
