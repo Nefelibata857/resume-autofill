@@ -495,6 +495,9 @@ window.trackEvent = function (name, data) {
   <nav id="tabs"></nav>
 </header>
 
+<div id="dlnote" style="background:#fbf6e9;border-bottom:1px solid #efe3c2;color:#6b5a2e;font-size:12px;line-height:1.6;">
+  <div style="max-width:1440px;margin:0 auto;padding:7px 24px;">💾 建议把下载到的文件存到本地电脑（别只留在网页或预览窗口里），以防文字丢失。</div>
+</div>
 <div id="ghbar"><div class="in">
   <b id="ghbar-ttl">GitHub 登录没完成</b>
   <span class="tx" id="ghbar-txt"></span>
@@ -4172,7 +4175,12 @@ function offlinePatch(html) {
     + '<script id="offline-boot">' + boot + '<\/script>\n';
   var at = html.search(/<\/head>/i);
   if (at < 0) return '';
-  return html.slice(0, at) + add + html.slice(at);
+  var full = html.slice(0, at) + add + html.slice(at);
+  /* 离线版顶部再钉一条：这份文件要留在本地，别只活在网页或预览窗口里 */
+  var note = '<div id="offline-note" style="background:#fbf6e9;border-bottom:1px solid #efe3c2;color:#6b5a2e;'
+    + 'font-size:12px;line-height:1.6;padding:7px 24px;">💾 这是离线版（数据已嵌在这个文件里）：'
+    + '请把它保存在本地电脑上，别只留在网页或网盘预览里，以防文字丢失。</div>';
+  return full.replace(/<body([^>]*)>/i, '<body$1>' + note);
 }
 
 async function dlTool() {
@@ -4191,7 +4199,7 @@ async function dlTool() {
   var out = offlinePatch(html);
   if (!out) { toast('页面结构有点异常，先按 F5 刷新再试'); return; }
   download('简历填表助手.html', out, 'text/html;charset=utf-8');
-  toast('已下载「简历填表助手.html」，双击打开就能用，数据已经带在里面');
+  toast('已下载「简历填表助手.html」：建议另存到本地电脑，别只留在下载目录里，双击就能用', 5200);
   try { localStorage.setItem('rz_saved_at', String(Date.now())); } catch (e) {}
   if (typeof renderSaveTip === 'function') renderSaveTip();
   window.trackEvent && window.trackEvent('download-tool');
@@ -5257,6 +5265,11 @@ var GH_CLIENT = 'Ov23li7TDJXKaxFNgIxd';
    后端只回「用户名」，GitHub 的 token 从不离开服务端。
    为什么不用 Cloudflare Worker：workers.dev 在国内被 DNS 污染，打不开；onrender.com 可达。 */
 var GH_API = 'https://resume-autofill-gate.onrender.com/token';
+/* 点星门：只读公开的 stargazers 名单，不碰任何用户权限 */
+var GH_STAR_API = GH_API.replace(/\/token$/, '/star');
+var GH_REPO = 'Nefelibata857/resume-autofill';
+var GH_REPO_URL = 'https://github.com/' + GH_REPO;
+var ghBarKind = '';
 
 function ghAuth() { try { return JSON.parse(localStorage.getItem(GH_AUTH_KEY) || 'null'); } catch (e) { return null; } }
 function ghLogged() { var a = ghAuth(); return !!(a && a.t); }
@@ -5301,20 +5314,30 @@ function ghStripCode() {
   } catch (e) {}
 }
 
-function canDownload() { return ghLogged(); }
+/* 下载门是两道：① 登录 GitHub；② 给仓库点过 star。
+   star 由后端去读仓库公开的 stargazers 名单（不需要 token，也不要求任何权限），
+   所以已经登录过的人不用重新授权，点完星回来点一下就能刷新状态。 */
+function ghStarred() { var a = ghAuth(); return !!(a && a.star === 1); }
+function canDownload() { return ghLogged() && ghStarred(); }
 
 function uiDl() {
   var dl = document.getElementById('btn-dl');
   if (!dl) return;
   var on = canDownload(), a = ghAuth();
-  dl.textContent = on ? '⬇ 下载表单助手到本地' : '🔒 登录 GitHub 后下载';
-  dl.title = on
-    ? '已登录 GitHub（' + ((a && a.login) || '已授权') + '），点一下把工具连数据存到本地'
-    : '必须先登录 GitHub（只读用户名，不申请任何资料权限）才能下载';
+  if (!ghLogged()) {
+    dl.textContent = '🔒 登录 GitHub 后下载';
+    dl.title = '必须先登录 GitHub 才能下载（只读用户名，不申请任何资料权限）';
+  } else if (!ghStarred()) {
+    dl.textContent = '⭐ 点一下 star 后下载';
+    dl.title = '还差一步：给 ' + GH_REPO + ' 点个 star，再回来点「我已点星，重新检查」';
+  } else {
+    dl.textContent = '⬇ 下载表单助手到本地';
+    dl.title = '已登录 GitHub（' + ((a && a.login) || '已授权') + '）并已 star 仓库，点一下把工具连数据存到本地';
+  }
   dl.classList.toggle('locked', !on);
 
   var out = document.getElementById('btn-ghout');
-  if (out) out.hidden = !on;
+  if (out) out.hidden = !ghLogged();
   if (on) ghBar(null);
 }
 
@@ -5361,14 +5384,21 @@ function ghBar(kind, extra) {
           '<code>' + ghCallback() + '</code>。',
     srv: '换登录凭证这一步没成功，服务端回的是：<b>' + (extra || '未知原因') + '</b>。' +
          '<br>授权码只能用一次，所以直接点「重新登录」再来一遍就行；反复失败的话，多半是换 token 的' +
-         '小后端没起来或没配 client secret。'
+         '小后端没起来或没配 client secret。',
+    star: '这个工具是免费的，只要求给仓库点一个 star。<br>点右边「去 GitHub 点星」，在打开那页的右上角点一下 ' +
+          '<b>Star</b>（就在 Fork 旁边），再回到这里点「我已点星，重新检查」。' +
+          '<br>不用重新登录 GitHub，点完星刷新一下状态就成。'
   };
 
   if (t) t.textContent = ({ wait: '正在等待 GitHub 授权', busy: '正在完成 GitHub 登录', wake: '正在唤醒登录服务（首次较慢）',
                             fail: 'GitHub 登录没完成，还不能下载', deny: 'GitHub 拒绝了这次授权',
-                            srv: '登录服务没打通' })[kind] || 'GitHub 登录没完成';
+                            srv: '登录服务没打通', star: '还差一步：给项目点个 star' })[kind] || 'GitHub 登录没完成';
   if (x) x.innerHTML = T[kind] || T.fail;
-  if (link) link.textContent = '手动打开授权页';
+  ghBarKind = kind;
+  if (link) link.href = (kind === 'star') ? GH_REPO_URL : ghLastUrl();
+  if (link) link.textContent = (kind === 'star') ? '去 GitHub 点星（右上角 Star）' : '手动打开授权页';
+  var rt0 = document.getElementById('ghbar-retry');
+  if (rt0) rt0.textContent = (kind === 'star') ? '我已点星，重新检查' : '重新登录';
   bar.classList.add('on');
 }
 
@@ -5470,10 +5500,49 @@ async function ghFinish(code, state) {
     ghBar('srv', '请求后端失败：' + ((e && e.message) || e) + '（' + GH_API + '）');
     return false;
   }
-  ghSave({ t: 'srv', login: j.login, name: j.name || '', at: Date.now() });
+  ghSave({ t: 'srv', login: j.login, name: j.name || '', at: Date.now(), star: j.starred ? 1 : 0 });
   uiDl();
-  ghBar(null);
+  /* 没点星的话登录只算完成一半：提示条继续挂着，别让它归零 */
+  if (j.starred) ghBar(null); else ghBar('star');
   return true;
+}
+
+/* 去后端查「这个账号到底点没点星」。quiet=true 时失败不弹提示条（后台静默复查用）。 */
+async function ghCheckStar(tries, quiet) {
+  var a = ghAuth();
+  if (!a || !a.login) return false;
+  if (a.star === 1) return true;
+  tries = tries || 0;
+  var j = null, bad = false;
+  try {
+    var r = await fetch(GH_STAR_API + '?login=' + encodeURIComponent(a.login), { cache: 'no-store' });
+    j = await r.json().catch(function () { return {}; });
+    /* 后端还是旧版本（没有 /star）：说清楚，别让人以为是自己没点星 */
+    if (r.status === 404 || r.status === 405) {
+      if (!quiet) ghBar('srv', '服务端还没更新到支持点星检查的版本，等它重新部署完再试（约 1-2 分钟）');
+      return false;
+    }
+    if (!r.ok) bad = true;
+  } catch (e) { bad = true; }
+
+  if (bad) {
+    /* 免费实例在睡觉：先叫醒，再自己重试一次，别让用户对着「没反应」干等 */
+    if (tries < 1) {
+      if (!quiet) ghBar('wake');
+      await new Promise(function (res) { setTimeout(res, 4000); });
+      return ghCheckStar(tries + 1, quiet);
+    }
+    if (!quiet) ghBar('star');
+    return false;
+  }
+  if (j && j.starred) {
+    a.star = 1; ghSave(a); uiDl(); ghBar(null);
+    toast('已确认你点过 star，现在可以下载了', 4200);
+    return true;
+  }
+  uiDl();
+  if (!quiet) ghBar('star');
+  return false;
 }
 
 /* 返回 true 表示这次打开页面就是 OAuth 回调 */
@@ -5514,7 +5583,13 @@ refreshBookmarks();
 syncBanner();
 
 document.getElementById('btn-dl').addEventListener('click', () => {
-  canDownload() ? dlTool() : ghLogin();
+  if (!ghLogged()) return ghLogin();
+  if (!ghStarred()) {
+    ghBar('star');
+    try { window.open(GH_REPO_URL, '_blank'); } catch (e) {}
+    return;
+  }
+  dlTool();
 });
 
 (function () {
@@ -5522,13 +5597,18 @@ document.getElementById('btn-dl').addEventListener('click', () => {
   if (out) out.addEventListener('click', () => { ghClear(); uiDl(); toast('已退出 GitHub 登录'); });
 
   var retry = document.getElementById('ghbar-retry');
-  if (retry) retry.addEventListener('click', ghLogin);
+  if (retry) retry.addEventListener('click', function () {
+    if (ghBarKind === 'star') return void ghCheckStar(0, false);
+    ghLogin();
+  });
 
   var close = document.getElementById('ghbar-x');
   if (close) close.addEventListener('click', () => ghBar(null));
 
   var link = document.getElementById('ghbar-link');
   if (link) link.addEventListener('click', () => {
+    /* 点星态下这个链接是去 GitHub 仓库页，别把提示条切成「等待授权」 */
+    if (ghBarKind === 'star') return;
     /* 链接本身就会新窗口打开授权页，这里只把提示条切成“等待” */
     ghBar('wait');
   });
@@ -5546,7 +5626,16 @@ window.addEventListener('message', function (e) {
 document.addEventListener('visibilitychange', function () {
   if (!document.hidden && ghLogged()) uiDl();
 });
-window.addEventListener('focus', function () { if (ghLogged()) uiDl(); });
+/* 从 GitHub 点完星切回来：悄悄复查一次（8 秒内不重复打后端） */
+var ghFocusAt = 0;
+window.addEventListener('focus', function () {
+  if (!ghLogged()) return;
+  uiDl();
+  if (ghStarred()) return;
+  if (Date.now() - ghFocusAt < 8000) return;
+  ghFocusAt = Date.now();
+  ghCheckStar(0, true);
+});
 
 (async function () {
   var wasCallback = false;
@@ -5555,6 +5644,8 @@ window.addEventListener('focus', function () { if (ghLogged()) uiDl(); });
   uiSample();
   /* 刚从 GitHub 回来却没带凭证：常驻提示条讲清楚原因，别用一闪而过的 toast */
   if (!wasCallback && ghPendingFresh() && !ghLogged()) ghBar('fail');
+  /* 已登录但没记录过 star（老版本登录的）：静默问一次后端，别一上来就吓人 */
+  if (ghLogged() && !ghStarred()) ghCheckStar(0, true);
   /* 首屏稳定后再悄悄把后端叫醒（不影响加载，也不打扰用户） */
   if (!wasCallback) setTimeout(ghWarm, 1500);
 })();

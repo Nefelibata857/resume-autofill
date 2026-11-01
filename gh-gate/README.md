@@ -6,10 +6,11 @@ GitHub 已经下线了 OAuth 隐式流（`response_type=token` 不再返回 `#ac
 现在只剩授权码流，而**授权码换 token 必须带 client_secret**——静态页面放 secret 等于公开泄露，
 所以这一步只能挪到服务端。
 
-这个后端一共只做两件事：
+这个后端一共只做三件事：
 
 1. 拿浏览器送来的一次性 `code` + 服务端保管的 `client_secret`，向 GitHub 换 access_token；
-2. 用这个 token 问一句「你是谁」，**只把用户名回给浏览器**，token 当场丢掉。
+2. 用这个 token 问一句「你是谁」，**只把用户名回给浏览器**，token 当场丢掉；
+3. 用这个用户名去查「他给本仓库点过 star 没有」——读的是**公开**的 starred 列表，不需要 token、也不需要任何权限。
 
 浏览器的 localStorage 里最后只有 `{t:'srv', login:'Nefelibata857'}`，没有 GitHub token。
 
@@ -78,10 +79,11 @@ Origin: https://nefelibata857.github.io
 { "code": "GitHub 回调带回来的一次性授权码" }
 ```
 
-成功 `200`：
+成功 `200`（`starred` 是顺便查好的点星状态，前端据此决定放不放行下载）：
 
 ```json
-{ "login": "Nefelibata857", "name": "王勇超", "at": 1730000000000 }
+{ "login": "Nefelibata857", "name": "王勇超", "starred": true,
+  "repo": "Nefelibata857/resume-autofill", "at": 1730000000000 }
 ```
 
 失败（举例）`502`：
@@ -97,11 +99,29 @@ Origin: https://nefelibata857.github.io
 
 `GET /` 返回 `{"ok":true}`，只用于健康检查和前端预热。
 
+### 查点星
+
+```
+GET /star?login=Nefelibata857
+Origin: https://nefelibata857.github.io
+```
+
+```json
+{ "login": "Nefelibata857", "repo": "Nefelibata857/resume-autofill", "starred": true }
+```
+
+- 数据源是 `GET /users/:login/starred`（公开、匿名可读）。
+  仓库的 `/repos/:owner/:repo/stargazers` 现在匿名请求会返回 `401 Requires authentication`，所以没用它。
+- 结果在内存里缓存 3 分钟：点完星马上回来查也能拿到新值，又不至于把 GitHub 的匿名额度（60 次/小时）打光。
+- 参数不合法 `400`；查不到（GitHub 侧失败 / 被限流）`502`，前端会提示「正在唤醒服务」并自动重试一次。
+- 要换检查对象就设环境变量 `STAR_REPO=owner/repo`。
+
 ## 安全边界
 
 - client_secret 只存在于服务端环境变量里，不下发、不进日志；
 - GitHub access_token 只在服务端内存中出现一次，用完即弃，不落库、不返回；
-- 只向浏览器返回用户名；
+- 只向浏览器返回用户名与点星状态，不返回任何 token；
+- 点星检查只读公开数据，**不向用户索取任何权限**（scope 仍是空）；
 - CORS 白名单锁死为 `https://nefelibata857.github.io`；
 - 授权码只允许 `[A-Za-z0-9_-]{10,80}`，且本来就是一次性的。
 
