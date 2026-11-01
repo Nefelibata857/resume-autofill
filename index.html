@@ -5201,7 +5201,7 @@ var GH_STATE_KEY = 'rz_gh_state';
 var GH_CLIENT = 'Ov23li7TDJXKaxFNgIxd';
 /* 换 token 的小后端（源码见仓库 gh-gate/worker.js，几十行，可部署到 Cloudflare Worker）。
    后端只回「用户名」，GitHub 的 token 从不离开服务端。 */
-var GH_API = 'https://resume-autofill-gate.nefelibata857.workers.dev/token';
+var GH_API = 'https://resume-autofill-gate.2414926363.workers.dev/token';
 
 function ghAuth() { try { return JSON.parse(localStorage.getItem(GH_AUTH_KEY) || 'null'); } catch (e) { return null; } }
 function ghLogged() { var a = ghAuth(); return !!(a && a.t); }
