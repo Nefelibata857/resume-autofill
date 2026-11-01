@@ -420,6 +420,17 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #tut .vtip b{font-weight:600;color:#5f4520;}
 /* 未解锁时下载按钮弱化一点，解锁后恢复常态 */
 #btn-dl.locked{opacity:.85;}
+
+/* 建议存一份到本地：贴在进度卡片底部，不挡操作 */
+.stip{display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding:11px 12px;
+  background:#fffaf0;border:1px solid #f0e0bd;border-radius:11px;
+  font-size:12.5px;line-height:1.85;color:#5a4a2c;}
+.stip .stxt{flex:1;min-width:0;}
+.stip .stxt b{color:#8a5a12;font-weight:600;}
+.stip .stipx{background:none;border:0;color:#b49a6a;font-size:17px;line-height:1;cursor:pointer;padding:0 2px;}
+.stip .stipx:hover{color:#8a5a12;}
+
+/* 登录没走通时的提示用 toast，不再放常驻横幅 */
 </style>
 <script>
 /* ---------------- 访问统计（Umami，只看访问量，不使用 cookie、不采集个人信息） ----------------
@@ -456,7 +467,8 @@ window.trackEvent = function (name, data) {
       <button id="btn-video" class="ghost">看视频教程</button>
       <button id="btn-help" class="ghost">使用说明</button>
       <button id="btn-copyall">复制全部为文本</button>
-      <button id="btn-dl" class="ghost locked">🔗 去 GitHub 看项目</button>
+      <button id="btn-dl" class="ghost locked">🔒 登录 GitHub 后下载</button>
+      <button id="btn-ghout" class="ghost" hidden>退出登录</button>
       <button id="btn-example">填入示例</button>
       <button id="btn-reset">清空全部</button>
     </div>
@@ -670,8 +682,16 @@ window.trackEvent = function (name, data) {
 
         <dt>换电脑 / 换浏览器</dt>
         <dd>
-          数据只保存在浏览器本地；点顶栏「🔗 去 GitHub 看项目」会开一个新标签，回到本页按钮就变成
-          「⬇ 下载表单助手到本地」，点一下能把整个工具连数据存成一个文件，换电脑直接打开。
+          数据只保存在浏览器本地，换环境就读不到了。点顶栏「🔒 登录 GitHub 后下载」登录一次，
+          按钮会变成「⬇ 下载表单助手到本地」，点一下能把整个工具连数据存成一个文件，换电脑直接打开。
+          （下载必须先登录成功；如果你的网络打不开 GitHub，这一步会走不通。）
+        </dd>
+
+        <dt>数据会丢吗</dt>
+        <dd>
+          只要不清浏览器缓存、不换设备就不会丢，但也没有云端备份兜底 ——
+          <b>清缓存、换电脑、用无痕窗口打开，都会读不到，而且找不回来</b>。
+          所以填到一半建议先「下载表单助手到本地」存一份，那个文件本身就是完整备份。
         </dd>
 
         <dt>手机上能用吗</dt>
@@ -3451,12 +3471,12 @@ function ageFrom(b) {
   return a;
 }
 
-function toast(msg) {
+function toast(msg, ms) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('on');
   clearTimeout(toast._tm);
-  toast._tm = setTimeout(() => t.classList.remove('on'), 1800);
+  toast._tm = setTimeout(() => t.classList.remove('on'), ms || 1800);
 }
 
 async function copyText(text) {
@@ -3541,6 +3561,65 @@ function healthCheck() {
   return out;
 }
 
+/* ---------- 建议存一份到本地（防止数据丢失） ----------
+   数据只在本机浏览器的 localStorage 里：清缓存、换电脑、换浏览器都会读不到，
+   而且这类操作不可逆，没有任何云端兜底。所以填到一定量以后主动提醒一次。 */
+var SAVED_KEY = 'rz_saved_at';
+var TIPOFF_KEY = 'rz_tip_off';
+
+function savedAt() { try { return Number(localStorage.getItem(SAVED_KEY) || 0); } catch (e) { return 0; } }
+function tipOff() { try { return localStorage.getItem(TIPOFF_KEY) === '1'; } catch (e) { return false; } }
+
+function renderSaveTip() {
+  var host = document.getElementById('health');
+  if (!host) return;
+  var old = document.getElementById('save-tip');
+  if (old) old.remove();
+
+  var filled = GROUPS.some(g => g.fields.some(f =>
+    f[0] !== 'age' && String(DATA[f[0]] || '').trim()));
+  if (!filled || tipOff()) return;
+
+  var last = savedAt();
+  var days = last ? Math.floor((Date.now() - last) / 864e5) : -1;
+  if (days >= 0 && days < 14) return;          // 两周内刚存过，不重复烦人
+
+  var box = document.createElement('div');
+  box.id = 'save-tip';
+  box.className = 'stip';
+
+  var txt = document.createElement('div');
+  txt.className = 'stxt';
+  txt.innerHTML = '<b>建议存一份到本地。</b>'
+    + (days < 0
+        ? '这些内容只存在<b>这台电脑的浏览器</b>里 —— '
+        : '上次备份已经是 <b>' + days + ' 天前</b>，')
+    + '清浏览器缓存、换电脑、换浏览器、或者用无痕窗口，都会读不到，且找不回来。'
+    + '右边点一下就能把工具连数据存成一个文件，以后双击打开，数据都还在。';
+
+  var go = document.createElement('button');
+  go.className = 'linkbtn';
+  go.textContent = '⬇ 下载到本地';
+  go.addEventListener('click', function () {
+    var d = document.getElementById('btn-dl');
+    if (d) d.click();
+  });
+
+  var off = document.createElement('button');
+  off.className = 'stipx';
+  off.textContent = '×';
+  off.title = '不用了，别再提醒';
+  off.addEventListener('click', function () {
+    try { localStorage.setItem(TIPOFF_KEY, '1'); } catch (e) {}
+    box.remove();
+  });
+
+  box.appendChild(txt);
+  box.appendChild(go);
+  box.appendChild(off);
+  host.appendChild(box);
+}
+
 function renderHealth() {
   let box = document.getElementById('health');
   if (!box) {
@@ -3588,6 +3667,8 @@ function renderHealth() {
 
   const ver = document.getElementById('ver');
   if (ver) ver.textContent = (errs ? `${errs} 项待修` : '');
+
+  renderSaveTip();
 }
 
 /* =====================================================================
@@ -4000,8 +4081,8 @@ function offlinePatch(html) {
     + 'document.documentElement.setAttribute("data-offline","1");'
     + '})();';
   /* 离线用不上的东西藏掉：教程视频要联网、下载入口在本地文件里也没有意义 */
-  var add = '<style id="offline-css">html[data-offline] #tut,html[data-offline] #btn-dl'
-    + '{display:none!important}</style>'
+  var add = '<style id="offline-css">html[data-offline] #tut,html[data-offline] #btn-dl,'
+    + 'html[data-offline] #btn-ghout{display:none!important}</style>'
     + '<script id="offline-boot">' + boot + '<\/script>\n';
   var at = html.search(/<\/head>/i);
   if (at < 0) return '';
@@ -4020,6 +4101,8 @@ async function dlTool() {
   if (!out) { toast('页面结构有点异常，先按 F5 刷新再试'); return; }
   download('简历填表助手.html', out, 'text/html;charset=utf-8');
   toast('已下载「简历填表助手.html」，双击打开就能用，数据已经带在里面');
+  try { localStorage.setItem('rz_saved_at', String(Date.now())); } catch (e) {}
+  if (typeof renderSaveTip === 'function') renderSaveTip();
   window.trackEvent && window.trackEvent('download-tool');
 }
 
@@ -4857,7 +4940,10 @@ function applyParsed() {
 const REQUIRED = ['name','phone','email','school','major','degree','targetJob','targetCity'];
 
 /* 虚构人物，只用来演示每个字段该填什么格式，投简历前必须全部改掉。
-   目标是点一次「填入示例」就能把每个格子都填上，方便验证书签到底能认多少字段。
+   目标是点一次「填入示例」就能把面板里每个格子都填上（含驾照、分数这些后加的字段），
+   这样既方便自己对照格式，也方便验证书签到底能认多少字段。
+   长文本两栏（自我评价 / 完整课程）给的是能直接用的范文，不是「这里该写什么」的提示语，
+   因为示例值会被原样填进网申表单，写提示语等于把说明文字交上去了。
    唯一刻意留空的是「导师」—— 示例人物是本科，本科没有导师。 */
 const SAMPLE = {
   name: '张小明', enName: 'Xiaoming Zhang', gender: '男', birthday: '2002-05-18',
@@ -4874,7 +4960,7 @@ const SAMPLE = {
   academicDegree: '学士', eduType: '全日制统招', isUpgrade: '否',
   studentId: '3200100001', className: '建筑学2201班', tutor: '',
   enrollDate: '2022-09-01', graduateDate: '2026-06-30',
-  certName: '其他', language: '英语', languageLevel: 'CET-6',
+  certName: '其他', language: '英语', languageLevel: 'CET-6', languageScore: '486',
   gpa: '3.60', majorGpa: '3.85', rank: '前20%', majorRank: '前15%',
   courses: '设计基础、建筑设计、建筑构造、中国建筑史、场地设计',
   targetJob: '建筑设计师', targetJob2: '城市设计师', targetCity: '杭州',
@@ -4906,10 +4992,14 @@ const SAMPLE = {
   prj6_title: '渲染表现素材库', prj6_org: '个人独立项目',
   prj6_role: '产品设计与开发', prj6_time: '2025.11 - 至今',
   prj6_desc: '独立搭建设计素材库网站，设计分类体系与前端页面，累计整理 300 余条材质、LUT 与渲染案例。',
-  selfEval: '一句话说清你能做什么：专业能力 + 解决问题的思路 + 落地经验，别写空话。',
+  selfEval: '建筑学本科应届，五年制专业训练打底，做过 6 个从强排、总图到户型的完整项目。'
+    + '熟 SketchUp / Rhino / CAD 建模制图，D5 与 Enscape 出效果图，能把方案推进到可汇报的深度。'
+    + '做事偏细，习惯先把场地和人流摸清楚再动笔。',
   skills: '设计软件：PS / AI / InDesign；建模制图：SketchUp / Rhino / CAD；渲染表现：D5 / Enscape',
   awards: '校级优秀学生（2024）；「城市微更新」竞赛入围奖（2025）',
-  coursesFull: '按成绩单原样罗列，网申要求填写"专业课程"长文本时用这一栏。',
+  coursesFull: '建筑设计（一）～（六）、建筑设计基础、城市规划原理、城市设计、中国建筑史、外国建筑史、'
+    + '建筑构造、建筑结构、建筑物理（声光热）、场地设计、居住区规划设计、城市道路与交通、'
+    + '景观设计基础、建筑制图与表达、计算机辅助设计',
   sports: '羽毛球、跑步'
 };
 
@@ -5002,85 +5092,161 @@ document.getElementById('hello-x').addEventListener('click', () => {
   try { localStorage.setItem('resume_filler_hello', '1'); } catch (e) {}
 });
 
+/* 示例数据可以一键撤销：点示例前先把当前数据整份存进 localStorage，
+   再点同一个按钮就原样还回来，免得手滑把自己的内容覆盖掉。 */
+var SAMPLE_BK_KEY = 'rz_sample_backup';
+
+function sampleBackup() {
+  try { return localStorage.getItem(SAMPLE_BK_KEY); } catch (e) { return null; }
+}
+
+function uiSample() {
+  var b = document.getElementById('btn-example');
+  if (!b) return;
+  var on = !!sampleBackup();
+  b.textContent = on ? '撤销示例' : '填入示例';
+  b.title = on ? '把填示例之前你自己的数据恢复回来'
+               : '填入一份虚构示例，看看每个字段该填成什么格式';
+}
+
 document.getElementById('btn-example').addEventListener('click', () => {
+  /* 已经在示例状态：这个按钮变成「撤销示例」，点一下原样还回去 */
+  if (sampleBackup()) {
+    var bk = null;
+    try { bk = JSON.parse(sampleBackup()); } catch (e) {}
+    if (!bk) { toast('备份读不出来了，只能在面板里手动改回来'); return; }
+    DATA = bk;
+    try { localStorage.removeItem(SAMPLE_BK_KEY); } catch (e) {}
+    saveData();
+    render();
+    renderHealth();
+    refreshBookmarks();
+    syncBanner();
+    uiSample();
+    toast('已恢复你自己填的数据');
+    return;
+  }
+
   if (!confirm('填入一份【虚构的示例数据】，用来演示每个字段该填什么格式。\n\n' +
                '会覆盖你现在填的内容，建议先点「下载表单助手到本地」存一份。\n' +
-               '示例里的姓名是「张小明」，投简历前务必全部改掉。')) return;
-  DATA = Object.assign({}, DEFAULTS, SAMPLE);
+               '示例里的姓名是「张小明」，投简历前务必全部改掉。\n\n' +
+               '（填完这个按钮会变成「撤销示例」，点一下就能恢复，不用怕点错。）')) return;
+
+  /* 自己加的自定义字段（cx_*）不在默认模板里，不能因为填示例被冲掉 */
+  var keepCustom = {};
+  Object.keys(DATA).forEach(function (k) {
+    if (k.indexOf('cx_') === 0) keepCustom[k] = DATA[k];
+  });
+  try { localStorage.setItem(SAMPLE_BK_KEY, JSON.stringify(DATA)); } catch (e) {}
+
+  DATA = Object.assign({}, DEFAULTS, keepCustom, SAMPLE);
   saveData();
   render();
   renderHealth();
   refreshBookmarks();
   syncBanner();
+  uiSample();
   toast('示例已填入，照着改成你自己的就行');
 });
 
-/* ---------- 下载解锁（不依赖 GitHub 登录） ----------
-   原来用 GitHub OAuth 登录来解锁「下载表单助手到本地」，实际跑下来行不通：
-   国内网络下 github.com 经常直接连不上（实测页面能开、github.com 超时），
-   点登录就死在跳转上，回来还是锁的，等于谁都下载不了。
-   现在改成：点按钮 → 新标签打开项目页（曝光目的照样达到）→ 回到本页自动解锁。
-   不做任何联网校验，任何网络环境下都不会把人挡在门外。 */
-var REPO_URL = 'https://github.com/Nefelibata857/resume-autofill';
-var UNLOCK_KEY = 'rz_unlock_v1';
-var VISIT_KEY = 'rz_visit_pending';
-var UNLOCK_DAYS = 30;
+/* ---------- 下载门：必须先登录 GitHub ----------
+   OAuth 隐式流（只读用户名，不申请任何资料权限）。未登录点下载 → 跳 GitHub 授权；
+   授权回来把 token 存本地，按钮变成「下载表单助手到本地」。
+   注意：GitHub 打不开的网络环境下这一步会失败，此时下载也随之不可用（按作者要求，不做绕过）。 */
+var GH_AUTH_KEY = 'rz_gh_auth_v1';
+var GH_PENDING_KEY = 'rz_gh_pending';
+var GH_CLIENT = 'Ov23li7TDJXKaxFNgIxd';
 
-function isUnlocked(){
-  try {
-    var u = JSON.parse(localStorage.getItem(UNLOCK_KEY) || 'null');
-    return !!(u && u.at && Date.now() - u.at < UNLOCK_DAYS * 864e5);
-  } catch(e){ return false; }
+function ghAuth() { try { return JSON.parse(localStorage.getItem(GH_AUTH_KEY) || 'null'); } catch (e) { return null; } }
+function ghLogged() { var a = ghAuth(); return !!(a && a.t); }
+function ghSave(a) { try { localStorage.setItem(GH_AUTH_KEY, JSON.stringify(a)); } catch (e) {} }
+function ghClear() { try { localStorage.removeItem(GH_AUTH_KEY); } catch (e) {} }
+
+function ghCallback() {
+  /* 统一成目录形式：从 /resume-autofill/ 和 /resume-autofill/index.html 进来算同一个，
+     免得 OAuth App 里登记的地址跟地址栏差一个 index.html 就授权失败。 */
+  var p = location.pathname.replace(/index\.html$/i, '');
+  if (!/\/$/.test(p)) p += '/';
+  return location.origin + p;
 }
-function pendingAt(){ try { return Number(localStorage.getItem(VISIT_KEY) || 0); } catch(e){ return 0; } }
 
-/* 刷新下载按钮的状态与文案 */
-function uiDl(){
+/* 正常授权走 #hash，出错时 GitHub 也可能把 error 放 query 里，两处都读 */
+function ghParams() {
+  var out = {};
+  [location.hash.slice(1), location.search.slice(1)].forEach(function (s) {
+    if (!s) return;
+    s.split('&').forEach(function (p) {
+      var i = p.indexOf('='); if (i <= 0) return;
+      var k = p.slice(0, i), v = p.slice(i + 1).replace(/\+/g, ' ');
+      try { out[decodeURIComponent(k)] = decodeURIComponent(v); } catch (e) { out[k] = v; }
+    });
+  });
+  return out;
+}
+
+function canDownload() { return ghLogged(); }
+
+function uiDl() {
   var dl = document.getElementById('btn-dl');
   if (!dl) return;
-  var on = isUnlocked();
-  dl.textContent = on ? '⬇ 下载表单助手到本地' : '🔗 去 GitHub 看项目';
+  var on = canDownload(), a = ghAuth();
+  dl.textContent = on ? '⬇ 下载表单助手到本地' : '🔒 登录 GitHub 后下载';
   dl.title = on
-    ? '把这个工具整份存到本地（单个 HTML 文件，含你已填的数据，双击就能打开）'
-    : '在新标签打开作者在 GitHub 上的项目页，回到本页就解锁下载';
+    ? '已登录 GitHub（' + ((a && a.login) || '已授权') + '），点一下把工具连数据存到本地'
+    : '必须先登录 GitHub（只读用户名，不申请任何资料权限）才能下载';
   dl.classList.toggle('locked', !on);
+
+  var out = document.getElementById('btn-ghout');
+  if (out) out.hidden = !ghLogged();
 }
 
-/* 真正解锁：记下时间，之后 30 天内都直接可下载 */
-function unlockDl(quiet){
-  try { localStorage.setItem(UNLOCK_KEY, JSON.stringify({ at: Date.now() })); } catch(e){}
-  try { localStorage.removeItem(VISIT_KEY); } catch(e){}
+function ghLogin() {
+  try { sessionStorage.setItem(GH_PENDING_KEY, String(Date.now())); } catch (e) {}
+  location.href = 'https://github.com/login/oauth/authorize?client_id=' + GH_CLIENT
+    + '&redirect_uri=' + encodeURIComponent(ghCallback())
+    + '&response_type=token&scope=&state=' + Math.random().toString(36).slice(2);
+}
+
+async function ghWho() {          // 用 token 换用户名；失效就清掉
+  var a = ghAuth(); if (!a || !a.t) { uiDl(); return; }
+  try {
+    var r = await fetch('https://api.github.com/user', {
+      headers: { 'Authorization': 'Bearer ' + a.t, 'Accept': 'application/vnd.github+json' }
+    });
+    if (r.status === 401) { ghClear(); uiDl(); return; }
+    var j = await r.json();
+    if (j && j.login) { a.login = j.login; ghSave(a); }
+  } catch (e) { /* 网络不通：token 留着，按钮保持可用 */ }
   uiDl();
-  if (!quiet) toast('下载已解锁，再点一次「⬇ 下载表单助手到本地」就存好了');
 }
 
-/* 点未解锁的按钮：开项目页 + 留个「去过了」的记号 */
-function goRepo(){
-  try { localStorage.setItem(VISIT_KEY, String(Date.now())); } catch(e){}
-  var w = null;
-  try { w = window.open(REPO_URL, '_blank'); } catch(e){}
-  if (!w) {                       // 新窗口被拦：不能因此卡住人，直接解锁
-    unlockDl();
-    toast('新窗口被浏览器拦了，下载已直接解锁');
-    return;
+function ghPendingFresh() {
+  try {
+    var p = Number(sessionStorage.getItem(GH_PENDING_KEY) || 0);
+    return p && Date.now() - p < 180000;
+  } catch (e) { return false; }
+}
+
+/* 返回 true 表示这次打开页面就是 OAuth 回调 */
+function ghParseHash() {
+  var kv = ghParams();
+  if (!kv.access_token && !kv.error) return false;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  try { sessionStorage.removeItem(GH_PENDING_KEY); } catch (e) {}
+  if (kv.access_token) {
+    ghSave({ t: kv.access_token, login: '', at: Date.now() });
+    uiDl();
+    ghWho();
+    return true;
   }
-  toast('已在 GitHub 打开项目，回到本页就自动解锁下载');
-  /* 有的浏览器把新标签开在后台、不会触发 visibilitychange，兜个底 */
-  setTimeout(function(){ if (!isUnlocked()) unlockDl(); }, 10000);
+  toast('GitHub 登录没完成：' + (kv.error_description || kv.error || '未知原因'), 6000);
+  return true;
 }
-
-/* 从 GitHub 那个标签切回来 —— 这就是「来过了」的证据 */
-function checkBack(){
-  var p = pendingAt();
-  if (!p) return;
-  if (document.visibilityState === 'visible' && Date.now() - p > 800) unlockDl();
-}
-document.addEventListener('visibilitychange', checkBack);
-window.addEventListener('focus', checkBack);
 
 window.dlTool = dlTool; window.offlinePatch = offlinePatch;
-window.isUnlocked = isUnlocked; window.unlockDl = unlockDl;
-window.uiDl = uiDl; window.goRepo = goRepo;
+window.ghLogged = ghLogged; window.ghLogin = ghLogin; window.ghWho = ghWho;
+window.ghParseHash = ghParseHash;
+window.uiDl = uiDl; window.canDownload = canDownload; window.ghCallback = ghCallback;
 
 /* ---------- 启动 ---------- */
 render();
@@ -5089,11 +5255,20 @@ refreshBookmarks();
 syncBanner();
 
 document.getElementById('btn-dl').addEventListener('click', () => {
-  isUnlocked() ? dlTool() : goRepo();
+  canDownload() ? dlTool() : ghLogin();
 });
+
+(function () {
+  var out = document.getElementById('btn-ghout');
+  if (out) out.addEventListener('click', () => { ghClear(); uiDl(); toast('已退出 GitHub 登录'); });
+})();
+
+var wasCallback = ghParseHash();
 uiDl();
-/* 上次点过「去 GitHub」但没回来触发过解锁（比如直接关了标签）→ 打开页面时补一次 */
-if (pendingAt() && Date.now() - pendingAt() > 1500) unlockDl(true);
+uiSample();
+/* 刚从 GitHub 回来却没带凭证：说明登录没成，下载也就不可用，直接讲清楚 */
+if (!wasCallback && ghPendingFresh() && !ghLogged())
+  toast('GitHub 登录没有完成，下载需要先登录成功。可以再点一次「登录 GitHub 后下载」重试。', 7000);
 </script>
 </body>
 </html>
