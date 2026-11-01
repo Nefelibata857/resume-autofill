@@ -429,10 +429,8 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
       <button id="btn-video" class="ghost">看视频教程</button>
       <button id="btn-help" class="ghost">使用说明</button>
       <button id="btn-copyall">复制全部为文本</button>
-      <button id="btn-export">导出 JSON</button>
+      <button id="btn-dl" class="ghost">🔒 登录 GitHub 下载</button>
       <button id="btn-example">填入示例</button>
-      <label class="btn" for="file-imp">导入 JSON</label>
-      <input type="file" id="file-imp" hidden accept=".json">
       <button id="btn-reset">清空全部</button>
     </div>
   </div>
@@ -554,7 +552,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
         · 多步骤表单：每翻一页点一次书签。<br>
         · 表单套在 iframe 里也能填（限同域名）。<br>
         · 但生成的书签文件里有你的身份证和手机号，<b>别外发</b>。<br>
-        · 换电脑：导出 JSON → 在新电脑导入 → 重新生成书签。
+        · 换电脑：数据存在各自浏览器的本地，换机后在新设备重新填写即可。
       </div>
     </div>
   </div>
@@ -657,7 +655,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
         </dd>
 
         <dt>换电脑 / 换浏览器</dt>
-        <dd>点「导出 JSON」把数据带走，在新电脑「导入 JSON」，再重新生成书签。</dd>
+        <dd>数据保存在浏览器本地；点顶栏「下载数据」可导出一份 JSON 备份文件。</dd>
 
         <dt>手机上能用吗</dt>
         <dd>填写和预览可以，但手机浏览器装不了书签栏脚本，<b>自动填表请用电脑</b>。</dd>
@@ -3958,32 +3956,10 @@ document.getElementById('btn-copyall').addEventListener('click', async () => {
   if (ok) toast('已复制全部字段');
 });
 
-document.getElementById('btn-export').addEventListener('click', () => {
+function dlData() {
   download('resume-info.json', JSON.stringify(DATA, null, 2), 'application/json');
-  toast('已导出 resume-info.json');
-});
-
-document.getElementById('file-imp').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const fr = new FileReader();
-  fr.onload = () => {
-    try {
-      const obj = JSON.parse(fr.result);
-      DATA = Object.assign({}, DEFAULTS, obj);
-      saveData();
-      render();
-      renderHealth();
-      refreshBookmarks();
-      syncBanner();
-      toast('已导入，共 ' + Object.keys(obj).length + ' 个字段');
-    } catch (err) {
-      toast('JSON 解析失败');
-    }
-  };
-  fr.readAsText(file);
-  e.target.value = '';
-});
+  toast('已下载 resume-info.json');
+}
 
 /* 一键清空：所有字段置空。自定义字段的行保留，只是值变空，免得重新加字段 */
 function clearAllFields() {
@@ -4003,12 +3979,12 @@ function clearAllFields() {
 /* 通用版会把这个按钮删掉（它的「清空全部」就是清空），所以这里要容错 */
 const btnClearAll = document.getElementById('btn-clearall');
 if (btnClearAll) btnClearAll.addEventListener('click', () => {
-  if (!confirm('清空所有已填内容？\n\n建议先点「导出 JSON」备份，之后还能导入回来。\n清空后本机浏览器里不会留下你的信息。')) return;
+  if (!confirm('清空所有已填内容？\n\n建议先点「下载数据」备份。\n清空后本机浏览器里不会留下你的信息。')) return;
   clearAllFields();
 });
 
 document.getElementById('btn-reset').addEventListener('click', () => {
-  if (!confirm('清空所有已填内容？\n\n建议先点「导出 JSON」备份，之后还能导入回来。\n清空后本机浏览器里不会留下你的信息。')) return;
+  if (!confirm('清空所有已填内容？\n\n建议先点「下载数据」备份。\n清空后本机浏览器里不会留下你的信息。')) return;
   DATA = Object.assign({}, DEFAULTS);
   saveData();
   render();
@@ -4984,7 +4960,7 @@ document.getElementById('hello-x').addEventListener('click', () => {
 
 document.getElementById('btn-example').addEventListener('click', () => {
   if (!confirm('填入一份【虚构的示例数据】，用来演示每个字段该填什么格式。\n\n' +
-               '会覆盖你现在填的内容，建议先「导出 JSON」备份。\n' +
+               '会覆盖你现在填的内容，建议先「下载数据」备份。\n' +
                '示例里的姓名是「张小明」，投简历前务必全部改掉。')) return;
   DATA = Object.assign({}, DEFAULTS, SAMPLE);
   saveData();
@@ -4995,11 +4971,67 @@ document.getElementById('btn-example').addEventListener('click', () => {
   toast('示例已填入，照着改成你自己的就行');
 });
 
+/* ---------- GitHub 登录（解锁「下载数据」按钮，OAuth 隐式流只读用户名） ---------- */
+var GH_AUTH_KEY = 'rz_gh_auth_v1';
+var GH_CLIENT = 'Ov23li7TDJXKaxFNgIxd';
+function ghAuth(){ try { return JSON.parse(localStorage.getItem(GH_AUTH_KEY) || 'null'); } catch(e){ return null; } }
+function ghSave(a){ try { localStorage.setItem(GH_AUTH_KEY, JSON.stringify(a)); } catch(e){} }
+function ghClear(){ try { localStorage.removeItem(GH_AUTH_KEY); } catch(e){} }
+
+function ghParseHash(){          // OAuth 回调：#access_token=...&state=...
+  if (location.hash.indexOf('access_token') < 0) return;
+  var kv = {}, parts = location.hash.slice(1).split('&');
+  parts.forEach(function(p){ var i = p.indexOf('='); if (i > 0) kv[p.slice(0,i)] = decodeURIComponent(p.slice(i+1)); });
+  var st = null;
+  try { st = sessionStorage.getItem('rz_gh_state'); } catch(e){}
+  history.replaceState(null, '', location.pathname + location.search);
+  if (kv.access_token && (!st || st === kv.state)) {
+    ghSave({ t: kv.access_token, login: '', at: Date.now() });
+    ghWho();
+  }
+}
+
+async function ghWho(){          // 用 token 换用户名；失效则清掉
+  var a = ghAuth(); if (!a || !a.t) { ghUI(); return; }
+  try {
+    var r = await fetch('https://api.github.com/user', { headers: { 'Authorization': 'Bearer ' + a.t, 'Accept': 'application/vnd.github+json' } });
+    if (r.status === 401) { ghClear(); ghUI(); return; }
+    var j = await r.json();
+    if (j && j.login) { a.login = j.login; ghSave(a); }
+  } catch(e){}
+  ghUI();
+}
+
+function ghLogin(){
+  var st = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  try { sessionStorage.setItem('rz_gh_state', st); } catch(e){}
+  location.href = 'https://github.com/login/oauth/authorize?client_id=' + GH_CLIENT
+    + '&redirect_uri=' + encodeURIComponent(location.origin + location.pathname)
+    + '&response_type=token&scope=&state=' + st;
+}
+
+function ghUI(){
+  var a = ghAuth(), on = !!(a && a.t);
+  var dl = document.getElementById('btn-dl');
+  if (dl) {
+    dl.textContent = on ? '下载数据' : '🔒 登录 GitHub 下载';
+    dl.title = on ? '已以 GitHub 账号 ' + (a.login || '') + ' 登录'
+                  : '登录 GitHub（只读用户名，不申请资料权限）后解锁下载';
+  }
+}
+window.ghAuth = ghAuth; window.ghSave = ghSave; window.ghClear = ghClear;
+window.ghParseHash = ghParseHash; window.ghWho = ghWho; window.ghLogin = ghLogin; window.ghUI = ghUI;
+
 /* ---------- 启动 ---------- */
 render();
 renderHealth();
 refreshBookmarks();
 syncBanner();
+
+document.getElementById('btn-dl').addEventListener('click', () => { ghAuth() ? dlData() : ghLogin(); });
+ghParseHash();
+ghUI();
+if (ghAuth()) ghWho();
 </script>
 </body>
 </html>
