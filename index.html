@@ -2451,6 +2451,7 @@ function applyResume(D, O) {
       var it = DATES[i++];
       var tries = 0;
       tr('date:' + it.k);
+      if (RES._ttl) RES._ttl('正在填时间 ' + i + '/' + DATES.length + '…');
       var attempt = function () {
         resolveEl(it);
         var dm = /(\d{4})-(\d{1,2})/.exec(String(it.val || ''));
@@ -2487,6 +2488,7 @@ function applyResume(D, O) {
          这正是「第二遍点书签，期望工作地点反而没了」的原因。 */
       if (!it.sg && comboFilled(it.el)) { RES.skipped++; setTimeout(next, 60); return; }
       tr('combo:' + it.k);
+      if (RES._ttl) RES._ttl('正在填下拉 ' + i + '/' + ASYNC.length + '…');
       var run1 = it.sg
         ? function (cb2) { suggestChoose(it.el, it.val, cb2); }
         : function (cb2) { chooseCombo(it.el, it.val, cb2); };
@@ -3297,6 +3299,8 @@ function applyResume(D, O) {
         DIAG ? '页面字段清单 · ' + RES.diag.length + ' 个'
           : (RES.busy ? '正在填下拉 ' + ASYNC.length + ' 个…' : '已填 ' + RES.filled.length + ' 项'));
       var sub = mk('div', 'font-size:11px;color:rgba(255,255,255,.48);', '点击展开');
+      /* 把标题暴露出来，队列每处理一项就改一次，用户能看出「它还在动」 */
+      RES._ttl = function (s) { try { ttl.textContent = s; } catch (eT0) {} };
       var x = mk('button', 'all:unset;display:inline-block;cursor:pointer;padding:0 4px;font-size:15px;color:rgba(255,255,255,.5);', '×');
       x.addEventListener('click', function (ev) { ev.stopPropagation(); if (host.parentNode) host.parentNode.removeChild(host); });
       head.appendChild(dot); head.appendChild(ttl); head.appendChild(sub); head.appendChild(x);
