@@ -1004,7 +1004,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v36';
+  var ENGINE_VER = 'v37';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
 
   /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
@@ -1412,7 +1412,7 @@ function applyResume(D, O) {
     try { if (el.focus) el.focus(); } catch (e) {}
     /* 面板可能仍开着；此时再 tap 是关面板。只有确认没开时才补点。 */
     if (!monthPanel()) tap(el);
-    setTimeout(function () {
+    function begin() {
       var isMonth = monthPanel();
       cands = isMonth
         ? [Y + '-' + M, Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '/' + M, Y + '.' + M, Y + '年' + M + '月']
@@ -1429,21 +1429,31 @@ function applyResume(D, O) {
           /* 值进了框里，还得让组件「认」下来：日期控件基本都是回车确认。
              普通文本框里回车可能提交表单，所以只对日期控件按。 */
           var opened = datePanelOpen(el) || monthPanel();
-          if (opened || pickerish(el)) {
-            press(el, 'Enter');
-            return setTimeout(function () {
+          if (opened || pickerish(el)) press(el, 'Enter');
+          /* 关键：先失焦让组件做一次提交/校验，再回头看值还在不在。
+             字节教育经历那对纯月控件收到「2022-09-01」会先显示再清空，
+             以前只看「框里以 2022 09 开头」就宣布成功，于是两格永远是空的。
+             现在一旦被清掉就换下一种格式（2022-09）重写。 */
+          setTimeout(function () {
+            try { if (el.blur) el.blur(); } catch (e) {}
+            setTimeout(function () {
               if (okVal()) {
                 /* 收工。关面板点空白处，别用 Escape —— 万一回车没提交，Escape 会回滚 */
                 try { tap(el.ownerDocument.body); } catch (e) {}
                 return cb(true);
               }
               step();
-            }, 300);
-          }
-          cb(true);
+            }, 170);
+          }, opened || pickerish(el) ? 280 : 120);
         }, 150);
       })();
-    }, 160);
+    }
+    setTimeout(function () {
+      /* 面板有渲染动画：160ms 内看不出「这是月份面板」就再等一拍，
+         否则会把「2022-09-01」当首选塞给纯月控件。 */
+      if (monthPanel()) return begin();
+      setTimeout(begin, 300);
+    }, 170);
     }
     /* 先试点选：AntD 日历按「年月导航 + 点日期」，Semi/字节按「翻年 + 点月份」；
        两种都点不成再退回「打字 + 回车」。 */
