@@ -68,6 +68,23 @@ button.primary:hover{background:#000;}
 }
 #banner button:hover{background:#5f4520;border-color:#5f4520;}
 
+/* GitHub 登录状态提示条：常驻，不用 toast 一闪而过 */
+#ghbar{
+  display:none;background:#eef4fb;border-bottom:1px solid #cfdcec;
+  font-size:12.5px;color:#2c4a68;
+}
+#ghbar.on{display:block;}
+#ghbar .in{max-width:1440px;margin:0 auto;padding:9px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+#ghbar b{font-weight:600;}
+#ghbar .tx{flex:1;min-width:240px;line-height:1.5;}
+#ghbar a{color:#1c5fa8;text-decoration:underline;font-size:12px;white-space:nowrap;}
+#ghbar button{
+  font-size:12px;padding:4px 11px;background:#1c5fa8;border-color:#1c5fa8;color:#fff;
+}
+#ghbar button:hover{background:#164b85;border-color:#164b85;}
+#ghbar button.x{background:none;border:0;color:#7b93ab;font-size:16px;line-height:1;padding:0 4px;}
+#ghbar button.x:hover{color:#2c4a68;background:none;}
+
 /* ---------- 布局 ---------- */
 .wrap{max-width:1440px;margin:0 auto;padding:22px 24px 80px;display:grid;grid-template-columns:1fr 380px;gap:22px;align-items:start;}
 @media(max-width:1180px){.wrap{grid-template-columns:1fr;}.side{position:static!important;}}
@@ -477,6 +494,14 @@ window.trackEvent = function (name, data) {
   </div>
   <nav id="tabs"></nav>
 </header>
+
+<div id="ghbar"><div class="in">
+  <b id="ghbar-ttl">GitHub 登录没完成</b>
+  <span class="tx" id="ghbar-txt"></span>
+  <a id="ghbar-link" href="#" target="_blank" rel="noreferrer">手动打开授权页</a>
+  <button id="ghbar-retry">重新登录</button>
+  <button id="ghbar-x" class="x" title="关掉这条提示">×</button>
+</div></div>
 
 <div id="banner"><div class="in">
   <b>数据改过了，书签里还是旧的。</b>
@@ -4084,7 +4109,7 @@ function offlinePatch(html) {
     + '})();';
   /* 离线用不上的东西藏掉：教程视频要联网、下载入口在本地文件里也没有意义 */
   var add = '<style id="offline-css">html[data-offline] #tut,html[data-offline] #btn-dl,'
-    + 'html[data-offline] #btn-ghout{display:none!important}</style>'
+    + 'html[data-offline] #ghbar,html[data-offline] #btn-ghout{display:none!important}</style>'
     + '<script id="offline-boot">' + boot + '<\/script>\n';
   var at = html.search(/<\/head>/i);
   if (at < 0) return '';
@@ -5152,11 +5177,14 @@ document.getElementById('btn-example').addEventListener('click', () => {
 });
 
 /* ---------- 下载门：必须先登录 GitHub ----------
-   OAuth 隐式流（只读用户名，不申请任何资料权限）。未登录点下载 → 跳 GitHub 授权；
-   授权回来把 token 存本地，按钮变成「下载表单助手到本地」。
-   注意：GitHub 打不开的网络环境下这一步会失败，此时下载也随之不可用（按作者要求，不做绕过）。 */
+   OAuth 隐式流（只读用户名，不申请任何资料权限）。
+   点击「登录 GitHub 后下载」→ 新标签页打开 GitHub 授权页（同页整页跳转在某些内嵌预览/弹层里
+   会被拦成白屏，看起来就是“点了没反应”，所以优先新标签页）。授权回来把 token 存本地，
+   原标签页收到 storage 事件就自动解锁；新标签页自己把原页刷新一下再关掉。
+   注意：github.com 打不开的网络下这一步必然失败，下载也随之不可用（按作者要求，不做绕过）。 */
 var GH_AUTH_KEY = 'rz_gh_auth_v1';
 var GH_PENDING_KEY = 'rz_gh_pending';
+var GH_URL_KEY = 'rz_gh_url';
 var GH_CLIENT = 'Ov23li7TDJXKaxFNgIxd';
 
 function ghAuth() { try { return JSON.parse(localStorage.getItem(GH_AUTH_KEY) || 'null'); } catch (e) { return null; } }
@@ -5199,14 +5227,94 @@ function uiDl() {
   dl.classList.toggle('locked', !on);
 
   var out = document.getElementById('btn-ghout');
-  if (out) out.hidden = !ghLogged();
+  if (out) out.hidden = !on;
+  if (on) ghBar(null);
+}
+
+function ghAuthUrl() {
+  return 'https://github.com/login/oauth/authorize?client_id=' + GH_CLIENT
+    + '&redirect_uri=' + encodeURIComponent(ghCallback())
+    + '&response_type=token&scope=&state=' + Math.random().toString(36).slice(2);
+}
+
+function ghLastUrl() {
+  var u = '';
+  try { u = sessionStorage.getItem(GH_URL_KEY) || ''; } catch (e) {}
+  if (!u) u = ghAuthUrl();
+  return u;
+}
+
+/* 常驻提示条：kind = wait / fail / deny / net，null 表示收起 */
+function ghBar(kind, extra) {
+  var bar = document.getElementById('ghbar');
+  if (!bar) return;
+  if (!kind) { bar.classList.remove('on'); return; }
+
+  var t = document.getElementById('ghbar-ttl');
+  var x = document.getElementById('ghbar-txt');
+  var link = document.getElementById('ghbar-link');
+  if (link) link.href = ghLastUrl();
+
+  var box = '';
+  var T = {
+    wait: '已经在新标签页打开 GitHub 授权页。在那页如果让你登录 GitHub 就先登一下，' +
+          '再点绿色的 <b>Authorize</b> 按钮。完成后本页会自动解锁，不用再点一次登录。' +
+          '<br>没看到新标签页？用右边的「手动打开授权页」，或者点「重新登录」。',
+    fail: 'GitHub 那边没有把登录凭证带回来，所以还不能下载。常见原因有三个：' +
+          '<br>① 这个网络打不开 github.com（需要代理或换网络）；② 授权页被提前关掉了；③ 在 GitHub 上点了 Cancel。' +
+          '再点一次「重新登录」通常就成。',
+    net: '这个网络现在连不上 github.com，GitHub 授权没法完成，所以下载也就用不了。' +
+          '换网络（或挂代理）之后再点「重新登录」即可。',
+    deny: 'GitHub 直接拒绝了这次授权，原因是：<b>' + (extra || '未说明') + '</b>。' +
+          '如果反复出现，多半是 OAuth 应用里登记的回调地址跟这个页面不一致，需要正好是 ' +
+          '<code>' + ghCallback() + '</code>。'
+  };
+  box = T[kind] || T.fail;
+
+  if (t) t.textContent = ({ wait: '正在等待 GitHub 授权', fail: 'GitHub 登录没完成，还不能下载',
+                            net: '连不上 github.com', deny: 'GitHub 拒绝了这次授权' })[kind] || 'GitHub 登录没完成';
+  if (x) x.innerHTML = box;
+  if (link) link.textContent = (kind === 'net') ? '仍然手动打开试试' : '手动打开授权页';
+  bar.classList.add('on');
+}
+
+/* 只为了区分「GitHub 打不开」和「授权没做完」：no-cors 只关心能不能连上，读不到内容也没关系 */
+function ghPing() {
+  return new Promise(function (resolve) {
+    var done = false;
+    var finish = function (v) { if (!done) { done = true; resolve(v); } };
+    setTimeout(function () { finish(false); }, 4000);
+    try {
+      fetch('https://github.com/favicon.ico', { mode: 'no-cors', cache: 'no-store' })
+        .then(function () { finish(true); }, function () { finish(false); });
+    } catch (e) { finish(false); }
+  });
 }
 
 function ghLogin() {
-  try { sessionStorage.setItem(GH_PENDING_KEY, String(Date.now())); } catch (e) {}
-  location.href = 'https://github.com/login/oauth/authorize?client_id=' + GH_CLIENT
-    + '&redirect_uri=' + encodeURIComponent(ghCallback())
-    + '&response_type=token&scope=&state=' + Math.random().toString(36).slice(2);
+  var url = ghAuthUrl();
+  try {
+    sessionStorage.setItem(GH_PENDING_KEY, String(Date.now()));
+    sessionStorage.setItem(GH_URL_KEY, url);
+  } catch (e) {}
+
+  /* 优先新标签页：整页跳转在部分内嵌预览窗口里会被目标站的 X-Frame-Options 拦成一片空白，
+     用户看到的就是“点了没反应”。新标签页不受这个限制，而且原页还能留着显示进度。 */
+  var w = null;
+  try { w = window.open(url, '_blank'); } catch (e) {}
+  ghBar('wait');
+  if (w) {
+    try { w.focus(); } catch (e) {}
+    /* 顺带探一下 github.com 通不通：不通的话提示条改成“连不上”，别让人对着白屏猜 */
+    ghPing().then(function (ok) { if (!ok && !ghLogged()) ghBar('net'); });
+    return;
+  }
+
+  /* 被弹窗拦截：退回同页跳转 */
+  toast('正在打开 GitHub 授权页…', 3000);
+  setTimeout(function () {
+    try { location.href = url; } catch (e) {}
+  }, 80);
 }
 
 async function ghWho() {          // 用 token 换用户名；失效就清掉
@@ -5234,20 +5342,37 @@ function ghParseHash() {
   var kv = ghParams();
   if (!kv.access_token && !kv.error) return false;
   try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
-  try { sessionStorage.removeItem(GH_PENDING_KEY); } catch (e) {}
+  try {
+    sessionStorage.removeItem(GH_PENDING_KEY);
+    sessionStorage.removeItem(GH_URL_KEY);
+  } catch (e) {}
+
   if (kv.access_token) {
     ghSave({ t: kv.access_token, login: '', at: Date.now() });
     uiDl();
     ghWho();
+    /* 从新标签页授权回来的：把原页面刷一下再把自己关掉，用户就自然回到原来那页继续 */
+    var op = null, same = false;
+    try { op = window.opener; } catch (e) {}
+    if (op && !op.closed) { try { op.location.pathname; same = true; } catch (e) { same = false; } }
+    if (same) {
+      try { op.postMessage({ t: 'gh-ok' }, location.origin); } catch (e) {}
+      try { op.location.href = ghCallback(); } catch (e) {}
+      toast('登录成功，正在回到原来那页…', 2500);
+      setTimeout(function () { try { window.close(); } catch (e) {} }, 900);
+    } else {
+      toast('GitHub 登录成功，现在可以下载了', 4500);
+    }
     return true;
   }
-  toast('GitHub 登录没完成：' + (kv.error_description || kv.error || '未知原因'), 6000);
+
+  ghBar('deny', kv.error_description || kv.error || '');
   return true;
 }
 
 window.dlTool = dlTool; window.offlinePatch = offlinePatch;
 window.ghLogged = ghLogged; window.ghLogin = ghLogin; window.ghWho = ghWho;
-window.ghParseHash = ghParseHash;
+window.ghParseHash = ghParseHash; window.ghBar = ghBar;
 window.uiDl = uiDl; window.canDownload = canDownload; window.ghCallback = ghCallback;
 
 /* ---------- 启动 ---------- */
@@ -5263,14 +5388,39 @@ document.getElementById('btn-dl').addEventListener('click', () => {
 (function () {
   var out = document.getElementById('btn-ghout');
   if (out) out.addEventListener('click', () => { ghClear(); uiDl(); toast('已退出 GitHub 登录'); });
+
+  var retry = document.getElementById('ghbar-retry');
+  if (retry) retry.addEventListener('click', ghLogin);
+
+  var close = document.getElementById('ghbar-x');
+  if (close) close.addEventListener('click', () => ghBar(null));
+
+  var link = document.getElementById('ghbar-link');
+  if (link) link.addEventListener('click', () => {
+    /* 链接本身就会新窗口打开授权页，这里只把提示条切成“等待” */
+    ghBar('wait');
+  });
 })();
+
+/* 另一个标签页授权成功 → 本页立刻解锁（不用手动刷新） */
+window.addEventListener('storage', function (e) {
+  if (e && e.key !== null && e.key !== GH_AUTH_KEY) return;
+  uiDl();
+  if (ghLogged()) { ghBar(null); toast('GitHub 登录成功，现在可以下载了', 4500); }
+});
+window.addEventListener('message', function (e) {
+  if (e && e.origin === location.origin && e.data && e.data.t === 'gh-ok') uiDl();
+});
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden && ghLogged()) uiDl();
+});
+window.addEventListener('focus', function () { if (ghLogged()) uiDl(); });
 
 var wasCallback = ghParseHash();
 uiDl();
 uiSample();
-/* 刚从 GitHub 回来却没带凭证：说明登录没成，下载也就不可用，直接讲清楚 */
-if (!wasCallback && ghPendingFresh() && !ghLogged())
-  toast('GitHub 登录没有完成，下载需要先登录成功。可以再点一次「登录 GitHub 后下载」重试。', 7000);
+/* 刚从 GitHub 回来却没带凭证：常驻提示条讲清楚原因，别用一闪而过的 toast */
+if (!wasCallback && ghPendingFresh() && !ghLogged()) ghBar('fail');
 </script>
 </body>
 </html>
