@@ -671,7 +671,7 @@ window.trackEvent = function (name, data) {
         <dt>换电脑 / 换浏览器</dt>
         <dd>
           数据只保存在浏览器本地；点顶栏「🔗 去 GitHub 看项目」会开一个新标签，回到本页按钮就变成
-          「⬇ 下载表单助手」，点一下能把整个工具连数据存成一个文件，换电脑直接打开。
+          「⬇ 下载表单助手到本地」，点一下能把整个工具连数据存成一个文件，换电脑直接打开。
         </dd>
 
         <dt>手机上能用吗</dt>
@@ -4041,12 +4041,12 @@ function clearAllFields() {
 /* 通用版会把这个按钮删掉（它的「清空全部」就是清空），所以这里要容错 */
 const btnClearAll = document.getElementById('btn-clearall');
 if (btnClearAll) btnClearAll.addEventListener('click', () => {
-  if (!confirm('清空所有已填内容？\n\n建议先点「下载表单助手」存一份。\n清空后本机浏览器里不会留下你的信息。')) return;
+  if (!confirm('清空所有已填内容？\n\n建议先点「下载表单助手到本地」存一份。\n清空后本机浏览器里不会留下你的信息。')) return;
   clearAllFields();
 });
 
 document.getElementById('btn-reset').addEventListener('click', () => {
-  if (!confirm('清空所有已填内容？\n\n建议先点「下载表单助手」存一份。\n清空后本机浏览器里不会留下你的信息。')) return;
+  if (!confirm('清空所有已填内容？\n\n建议先点「下载表单助手到本地」存一份。\n清空后本机浏览器里不会留下你的信息。')) return;
   DATA = Object.assign({}, DEFAULTS);
   saveData();
   render();
@@ -5004,7 +5004,7 @@ document.getElementById('hello-x').addEventListener('click', () => {
 
 document.getElementById('btn-example').addEventListener('click', () => {
   if (!confirm('填入一份【虚构的示例数据】，用来演示每个字段该填什么格式。\n\n' +
-               '会覆盖你现在填的内容，建议先点「下载表单助手」存一份。\n' +
+               '会覆盖你现在填的内容，建议先点「下载表单助手到本地」存一份。\n' +
                '示例里的姓名是「张小明」，投简历前务必全部改掉。')) return;
   DATA = Object.assign({}, DEFAULTS, SAMPLE);
   saveData();
@@ -5016,7 +5016,7 @@ document.getElementById('btn-example').addEventListener('click', () => {
 });
 
 /* ---------- 下载解锁（不依赖 GitHub 登录） ----------
-   原来用 GitHub OAuth 登录来解锁「下载表单助手」，实际跑下来行不通：
+   原来用 GitHub OAuth 登录来解锁「下载表单助手到本地」，实际跑下来行不通：
    国内网络下 github.com 经常直接连不上（实测页面能开、github.com 超时），
    点登录就死在跳转上，回来还是锁的，等于谁都下载不了。
    现在改成：点按钮 → 新标签打开项目页（曝光目的照样达到）→ 回到本页自动解锁。
@@ -5039,7 +5039,7 @@ function uiDl(){
   var dl = document.getElementById('btn-dl');
   if (!dl) return;
   var on = isUnlocked();
-  dl.textContent = on ? '⬇ 下载表单助手' : '🔗 去 GitHub 看项目';
+  dl.textContent = on ? '⬇ 下载表单助手到本地' : '🔗 去 GitHub 看项目';
   dl.title = on
     ? '把这个工具整份存到本地（单个 HTML 文件，含你已填的数据，双击就能打开）'
     : '在新标签打开作者在 GitHub 上的项目页，回到本页就解锁下载';
@@ -5051,7 +5051,7 @@ function unlockDl(quiet){
   try { localStorage.setItem(UNLOCK_KEY, JSON.stringify({ at: Date.now() })); } catch(e){}
   try { localStorage.removeItem(VISIT_KEY); } catch(e){}
   uiDl();
-  if (!quiet) toast('下载已解锁，再点一次「⬇ 下载表单助手」就存到本地');
+  if (!quiet) toast('下载已解锁，再点一次「⬇ 下载表单助手到本地」就存好了');
 }
 
 /* 点未解锁的按钮：开项目页 + 留个「去过了」的记号 */
