@@ -431,6 +431,31 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #gh-help .gh-row button:hover{background:#fbf3e0;}
 #gh-help .gh-row a{font-size:12.5px;color:#8a5a12;}
 </style>
+<script>
+/* ---------------- 访问统计（Umami，只看访问量，不使用 cookie、不采集个人信息） ----------------
+   启用方法：Umami 后台 Add website 后拿到 Website ID，填进下面的 ID 变量即可。
+   留空 = 完全不加载任何外部脚本，对访客零影响。
+   本地预览地址和下载到本地的离线单文件都不会上报，避免把你自己的调试算进访问量。 */
+(function () {
+  var ID = '';                     // ← 填 Umami 的 Website ID，例如 'a1b2c3d4-0000-1111-2222-333344445555'
+  if (!ID) return;
+  var h = location.hostname;
+  if (location.protocol === 'file:') return;                        // 离线单文件 / 本地打开
+  if (/^(localhost|127\.|0\.0\.0\.0$|\[::1\])/.test(h)) return;      // 本地预览
+  if (/^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)) return; // 局域网
+  var s = document.createElement('script');
+  s.defer = true;
+  s.src = 'https://cloud.umami.is/script.js';
+  s.setAttribute('data-website-id', ID);
+  s.setAttribute('data-auto-track', 'true');
+  document.head.appendChild(s);
+})();
+
+/* 打点助手：umami 没加载（ID 未填 / 被拦）时静默跳过，绝不因为统计报错影响填表 */
+window.trackEvent = function (name, data) {
+  try { if (window.umami && typeof window.umami.track === 'function') window.umami.track(name, data); } catch (e) {}
+};
+</script>
 </head>
 <body>
 
@@ -675,6 +700,12 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
         <dd>
           所有内容只存在你这台电脑的浏览器本地存储里，页面不联网、不上传，断网也能用。
           但生成的书签文件里有你的身份证号、手机号，<b>别外发</b>。共用电脑用完点「清空全部」。
+        </dd>
+
+        <dt>页面不上传，那作者怎么知道有人用</dt>
+        <dd>
+          只挂了一个轻量统计（Umami）记「打开了几次、从哪个网站点进来、什么浏览器」，<b>不写 cookie、
+          不采集你填的任何内容</b>，也不追踪你在招聘网站上的操作。表单数据始终只留在你本机。
         </dd>
       </dl>
 
@@ -3970,6 +4001,7 @@ document.getElementById('btn-copyall').addEventListener('click', async () => {
   });
   const ok = await copyText(lines.join('\n'));
   if (ok) toast('已复制全部字段');
+  if (ok) window.trackEvent && window.trackEvent('copy-all');
 });
 
 /* =========================================================================
@@ -4007,6 +4039,7 @@ async function dlTool() {
   if (!out) { toast('页面结构有点异常，先按 F5 刷新再试'); return; }
   download('简历填表助手.html', out, 'text/html;charset=utf-8');
   toast('已下载「简历填表助手.html」，双击打开就能用，数据已经带在里面');
+  window.trackEvent && window.trackEvent('download-tool');
 }
 
 /* 一键清空：所有字段置空。自定义字段的行保留，只是值变空，免得重新加字段 */
@@ -4157,6 +4190,7 @@ async function doInstall() {
     tick.textContent = '✓';
     hint.textContent = '已放进剪贴板（' + (url.length / 1024).toFixed(0) + ' KB），接下来别再复制别的东西';
     markExported();
+    window.trackEvent && window.trackEvent('install-bookmark');
   } else {
     row.classList.remove('done');
     tick.textContent = '!';
@@ -4732,6 +4766,7 @@ document.getElementById('btn-parse').addEventListener('click', async () => {
     btn.textContent = '识别中…';
     parsedList = parseResumeText(text);
     showParseResult(parsedList);
+    window.trackEvent && window.trackEvent('parse-resume', { count: parsedList.length });
   } catch (e) {
     toast('识别失败：' + (e && e.message ? e.message : e));
   } finally {
