@@ -806,7 +806,7 @@ const GROUPS = [
     ['school','学校'], ['college','学院/院系'], ['major','专业'], ['degree','学历'],
     ['academicDegree','学位'], ['eduType','受教育类型'], ['isUpgrade','是否专升本'],
     ['studentId','学号'], ['className','班级'], ['tutor','导师（研究生填，本科留空）'],
-    ['enrollDate','入学时间（年-月）'], ['graduateDate','毕业时间（年-月）'], ['gpa','GPA'], ['majorGpa','专业课绩点'],
+    ['enrollDate','入学时间'], ['graduateDate','毕业时间'], ['gpa','GPA'], ['majorGpa','专业课绩点'],
     ['rank','年级排名'], ['majorRank','专业排名'], ['courses','主修课程（精选）']
   ]},
   { title: '求职意向', fields: [
@@ -895,8 +895,8 @@ const PH = {
   college:     '学院 / 系',
   major:       '专业全称',
   targetJob:   '如：建筑设计师',
-  enrollDate:  '2023-09',
-  graduateDate:'2027-07',
+  enrollDate:  '2023-09-01',
+  graduateDate:'2027-07-01',
   gpa:         '3.52',
   majorGpa:    '4.23',
   rank:        '前 30%',
@@ -3322,19 +3322,11 @@ const HOSTED = /^https?:$/.test(location.protocol) &&
 
 /* 每次往 resume-data 写新数据，这个数字 +1。
    页面下次打开会自动换上最新数据，同时保留你手动补过的空字段 */
-const DATA_VERSION = 3;
+const DATA_VERSION = 2;
 
 /* 已知错误的旧值要在升级时清掉，否则会一直被"保留空字段"的逻辑救活。
    注意：必须声明在 loadData() 被调用之前。 */
-const MIGRATIONS = [
-  /* v3：入学/毕业时间统一成「年-月」格式（2022-09-01 → 2022-09），横杠保留、去掉日 */
-  { v: 3, f: d => {
-      ['enrollDate', 'graduateDate'].forEach(k => {
-        const m = String(d[k] || '').trim().match(/^(\d{4})-(\d{1,2})-\d{1,2}$/);
-        if (m) d[k] = m[1] + '-' + m[2];
-      });
-  } }
-];
+const MIGRATIONS = [];
 
 let DATA = loadData();
 
@@ -4839,7 +4831,7 @@ const SAMPLE = {
   school: '浙江大学', college: '建筑工程学院', major: '建筑学', degree: '本科',
   academicDegree: '学士', eduType: '全日制统招', isUpgrade: '否',
   studentId: '3200100001', className: '建筑学2201班', tutor: '',
-  enrollDate: '2022-09', graduateDate: '2026-06',
+  enrollDate: '2022-09-01', graduateDate: '2026-06-30',
   certName: '其他', language: '英语', languageLevel: 'CET-6',
   gpa: '3.60', majorGpa: '3.85', rank: '前20%', majorRank: '前15%',
   courses: '设计基础、建筑设计、建筑构造、中国建筑史、场地设计',
