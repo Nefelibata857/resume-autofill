@@ -5009,7 +5009,13 @@ var GH_CLIENT = 'Ov23li7TDJXKaxFNgIxd';
 function ghAuth(){ try { return JSON.parse(localStorage.getItem(GH_AUTH_KEY) || 'null'); } catch(e){ return null; } }
 function ghSave(a){ try { localStorage.setItem(GH_AUTH_KEY, JSON.stringify(a)); } catch(e){} }
 function ghClear(){ try { localStorage.removeItem(GH_AUTH_KEY); } catch(e){} }
-function ghCallback(){ return location.origin + location.pathname; }
+function ghCallback(){
+  /* 回调地址统一成「目录」形式：从 /resume-autofill/index.html 和 /resume-autofill/ 进来算同一个，
+     免得 OAuth App 里登记的地址跟地址栏差一个 index.html 就授权失败。 */
+  var p = location.pathname.replace(/index\.html$/i, '');
+  if (!/\/$/.test(p)) p += '/';
+  return location.origin + p;
+}
 
 /* 同时读 #hash 和 ?query —— 正常授权走 hash，出错时 GitHub 也可能把 error 放在 query */
 function ghParams(){
