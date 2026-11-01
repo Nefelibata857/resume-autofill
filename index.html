@@ -5244,7 +5244,7 @@ function ghLastUrl() {
   return u;
 }
 
-/* 常驻提示条：kind = wait / fail / deny / net，null 表示收起 */
+/* 常驻提示条：kind = wait / fail / deny，null 表示收起 */
 function ghBar(kind, extra) {
   var bar = document.getElementById('ghbar');
   if (!bar) return;
@@ -5263,8 +5263,6 @@ function ghBar(kind, extra) {
     fail: 'GitHub 那边没有把登录凭证带回来，所以还不能下载。常见原因有三个：' +
           '<br>① 这个网络打不开 github.com（需要代理或换网络）；② 授权页被提前关掉了；③ 在 GitHub 上点了 Cancel。' +
           '再点一次「重新登录」通常就成。',
-    net: '这个网络现在连不上 github.com，GitHub 授权没法完成，所以下载也就用不了。' +
-          '换网络（或挂代理）之后再点「重新登录」即可。',
     deny: 'GitHub 直接拒绝了这次授权，原因是：<b>' + (extra || '未说明') + '</b>。' +
           '如果反复出现，多半是 OAuth 应用里登记的回调地址跟这个页面不一致，需要正好是 ' +
           '<code>' + ghCallback() + '</code>。'
@@ -5272,23 +5270,10 @@ function ghBar(kind, extra) {
   box = T[kind] || T.fail;
 
   if (t) t.textContent = ({ wait: '正在等待 GitHub 授权', fail: 'GitHub 登录没完成，还不能下载',
-                            net: '连不上 github.com', deny: 'GitHub 拒绝了这次授权' })[kind] || 'GitHub 登录没完成';
+                            deny: 'GitHub 拒绝了这次授权' })[kind] || 'GitHub 登录没完成';
   if (x) x.innerHTML = box;
-  if (link) link.textContent = (kind === 'net') ? '仍然手动打开试试' : '手动打开授权页';
+  if (link) link.textContent = '手动打开授权页';
   bar.classList.add('on');
-}
-
-/* 只为了区分「GitHub 打不开」和「授权没做完」：no-cors 只关心能不能连上，读不到内容也没关系 */
-function ghPing() {
-  return new Promise(function (resolve) {
-    var done = false;
-    var finish = function (v) { if (!done) { done = true; resolve(v); } };
-    setTimeout(function () { finish(false); }, 4000);
-    try {
-      fetch('https://github.com/favicon.ico', { mode: 'no-cors', cache: 'no-store' })
-        .then(function () { finish(true); }, function () { finish(false); });
-    } catch (e) { finish(false); }
-  });
 }
 
 function ghLogin() {
@@ -5303,12 +5288,7 @@ function ghLogin() {
   var w = null;
   try { w = window.open(url, '_blank'); } catch (e) {}
   ghBar('wait');
-  if (w) {
-    try { w.focus(); } catch (e) {}
-    /* 顺带探一下 github.com 通不通：不通的话提示条改成“连不上”，别让人对着白屏猜 */
-    ghPing().then(function (ok) { if (!ok && !ghLogged()) ghBar('net'); });
-    return;
-  }
+  if (w) { try { w.focus(); } catch (e) {} return; }
 
   /* 被弹窗拦截：退回同页跳转 */
   toast('正在打开 GitHub 授权页…', 3000);
