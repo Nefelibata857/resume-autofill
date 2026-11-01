@@ -203,6 +203,7 @@ resume-autofill/
 │   ├── pdf.min.mjs
 │   └── pdf.worker.min.mjs
 ├── assets/preview.png
+├── gh-gate/           ← 登录门的换 token 后端（自己部署时才用得到）
 ├── 修改指南.md
 ├── README.md
 └── LICENSE
@@ -214,7 +215,12 @@ resume-autofill/
 
 这样也能填信息、生成书签，但**识别 PDF 需要联网**（会从 CDN 取 pdf.js）。粘贴文字识别不受影响。
 
-**离线能力**：除了「首次识别 PDF」，其余功能全部离线可用 —— 没有后端、没有埋点、没有网络字体。
+**前提是登录一次 GitHub**：点「登录 GitHub 后下载」→ 在 GitHub 上点一下授权 → 回来自动解锁。
+只取用户名，不申请任何资料权限。GitHub 已下线隐式流，授权码换 token 这一步由
+[gh-gate/](gh-gate/README.md) 里那个几十行的小后端完成，**client secret 只存在服务端**，
+浏览器拿到的只有用户名。自己部署时把 Worker 地址填进 `index.html` 的 `var GH_API` 一行即可。
+
+**离线能力**：除了「首次识别 PDF」和「登录 GitHub 那一步」，其余功能全部离线可用 —— 没有业务后端、没有网络字体。
 
 ---
 

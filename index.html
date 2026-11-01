@@ -5187,15 +5187,21 @@ document.getElementById('btn-example').addEventListener('click', () => {
 });
 
 /* ---------- 下载门：必须先登录 GitHub ----------
-   OAuth 隐式流（只读用户名，不申请任何资料权限）。
+   授权码流（只申请「读用户名」，不申请任何资料权限）。
    点击「登录 GitHub 后下载」→ 新标签页打开 GitHub 授权页（同页整页跳转在某些内嵌预览/弹层里
-   会被拦成白屏，看起来就是“点了没反应”，所以优先新标签页）。授权回来把 token 存本地，
-   原标签页收到 storage 事件就自动解锁；新标签页自己把原页刷新一下再关掉。
+   会被拦成白屏，看起来就是“点了没反应”，所以优先新标签页）→ GitHub 带着一次性 code 回本页
+   → 把 code 交给 GH_API 那个小后端换成用户名（换 token 必须带 client_secret，secret 不能放
+   静态页面，所以只能放服务端）→ 用户名存本地即解锁。
+   GitHub 的 access_token 只在服务端出现一次，不落浏览器、不落 localStorage。
    注意：github.com 打不开的网络下这一步必然失败，下载也随之不可用（按作者要求，不做绕过）。 */
 var GH_AUTH_KEY = 'rz_gh_auth_v1';
 var GH_PENDING_KEY = 'rz_gh_pending';
 var GH_URL_KEY = 'rz_gh_url';
+var GH_STATE_KEY = 'rz_gh_state';
 var GH_CLIENT = 'Ov23li7TDJXKaxFNgIxd';
+/* 换 token 的小后端（源码见仓库 gh-gate/worker.js，几十行，可部署到 Cloudflare Worker）。
+   后端只回「用户名」，GitHub 的 token 从不离开服务端。 */
+var GH_API = 'https://resume-autofill-gate.nefelibata857.workers.dev/token';
 
 function ghAuth() { try { return JSON.parse(localStorage.getItem(GH_AUTH_KEY) || 'null'); } catch (e) { return null; } }
 function ghLogged() { var a = ghAuth(); return !!(a && a.t); }
@@ -5210,7 +5216,7 @@ function ghCallback() {
   return location.origin + p;
 }
 
-/* 正常授权走 #hash，出错时 GitHub 也可能把 error 放 query 里，两处都读 */
+/* 正常授权走 query（code），出错时 GitHub 也可能把 error 放 hash 里，两处都读 */
 function ghParams() {
   var out = {};
   [location.hash.slice(1), location.search.slice(1)].forEach(function (s) {
@@ -5222,6 +5228,22 @@ function ghParams() {
     });
   });
   return out;
+}
+
+/* 授权码是一次性的，用完就从地址栏抹掉，别留在历史记录里（hash 里的老 token 也一并清掉） */
+function ghStripCode() {
+  try {
+    var drop = ['code', 'state', 'error', 'error_description', 'iss',
+                'access_token', 'token_type', 'expires_in', 'scope'];
+    var pick = function (raw) {
+      return raw.split('&').filter(function (p) {
+        return p && drop.indexOf(p.split('=')[0]) < 0;
+      }).join('&');
+    };
+    var q = pick(location.search.slice(1));
+    var h = pick(location.hash.slice(1));
+    history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + (h ? '#' + h : ''));
+  } catch (e) {}
 }
 
 function canDownload() { return ghLogged(); }
@@ -5242,9 +5264,13 @@ function uiDl() {
 }
 
 function ghAuthUrl() {
-  return 'https://github.com/login/oauth/authorize?client_id=' + GH_CLIENT
+  var st = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  try { sessionStorage.setItem(GH_STATE_KEY, st); } catch (e) {}
+  var url = 'https://github.com/login/oauth/authorize?client_id=' + GH_CLIENT
     + '&redirect_uri=' + encodeURIComponent(ghCallback())
-    + '&response_type=token&scope=&state=' + Math.random().toString(36).slice(2);
+    + '&response_type=code&scope=&state=' + encodeURIComponent(st);
+  try { sessionStorage.setItem(GH_URL_KEY, url); } catch (e) {}
+  return url;
 }
 
 function ghLastUrl() {
@@ -5254,7 +5280,7 @@ function ghLastUrl() {
   return u;
 }
 
-/* 常驻提示条：kind = wait / fail / deny，null 表示收起 */
+/* 常驻提示条：kind = wait / busy / fail / deny / srv，null 表示收起 */
 function ghBar(kind, extra) {
   var bar = document.getElementById('ghbar');
   if (!bar) return;
@@ -5265,33 +5291,33 @@ function ghBar(kind, extra) {
   var link = document.getElementById('ghbar-link');
   if (link) link.href = ghLastUrl();
 
-  var box = '';
   var T = {
     wait: '已经在新标签页打开 GitHub 授权页。在那页如果让你登录 GitHub 就先登一下，' +
           '再点绿色的 <b>Authorize</b> 按钮。完成后本页会自动解锁，不用再点一次登录。' +
           '<br>没看到新标签页？用右边的「手动打开授权页」，或者点「重新登录」。',
+    busy: 'GitHub 已经把授权码送回来了，正在换登录凭证，一般一两秒就好。这时别关页面。',
     fail: 'GitHub 那边没有把登录凭证带回来，所以还不能下载。常见原因有三个：' +
           '<br>① 这个网络打不开 github.com（需要代理或换网络）；② 授权页被提前关掉了；③ 在 GitHub 上点了 Cancel。' +
           '再点一次「重新登录」通常就成。',
     deny: 'GitHub 直接拒绝了这次授权，原因是：<b>' + (extra || '未说明') + '</b>。' +
           '如果反复出现，多半是 OAuth 应用里登记的回调地址跟这个页面不一致，需要正好是 ' +
-          '<code>' + ghCallback() + '</code>。'
+          '<code>' + ghCallback() + '</code>。',
+    srv: '换登录凭证这一步没成功，服务端回的是：<b>' + (extra || '未知原因') + '</b>。' +
+         '<br>授权码只能用一次，所以直接点「重新登录」再来一遍就行；反复失败的话，多半是换 token 的' +
+         '小后端没起来或没配 client secret。'
   };
-  box = T[kind] || T.fail;
 
-  if (t) t.textContent = ({ wait: '正在等待 GitHub 授权', fail: 'GitHub 登录没完成，还不能下载',
-                            deny: 'GitHub 拒绝了这次授权' })[kind] || 'GitHub 登录没完成';
-  if (x) x.innerHTML = box;
+  if (t) t.textContent = ({ wait: '正在等待 GitHub 授权', busy: '正在完成 GitHub 登录',
+                            fail: 'GitHub 登录没完成，还不能下载', deny: 'GitHub 拒绝了这次授权',
+                            srv: '登录服务没打通' })[kind] || 'GitHub 登录没完成';
+  if (x) x.innerHTML = T[kind] || T.fail;
   if (link) link.textContent = '手动打开授权页';
   bar.classList.add('on');
 }
 
 function ghLogin() {
   var url = ghAuthUrl();
-  try {
-    sessionStorage.setItem(GH_PENDING_KEY, String(Date.now()));
-    sessionStorage.setItem(GH_URL_KEY, url);
-  } catch (e) {}
+  try { sessionStorage.setItem(GH_PENDING_KEY, String(Date.now())); } catch (e) {}
 
   /* 优先新标签页：整页跳转在部分内嵌预览窗口里会被目标站的 X-Frame-Options 拦成一片空白，
      用户看到的就是“点了没反应”。新标签页不受这个限制，而且原页还能留着显示进度。 */
@@ -5307,8 +5333,10 @@ function ghLogin() {
   }, 80);
 }
 
-async function ghWho() {          // 用 token 换用户名；失效就清掉
+async function ghWho() {
   var a = ghAuth(); if (!a || !a.t) { uiDl(); return; }
+  /* 后端已经把用户名给回来了，不用再问 GitHub；只有很早以前存的真实 token 才需要补一次 */
+  if (a.login || !/^gh[oasu]_/.test(String(a.t))) { uiDl(); return; }
   try {
     var r = await fetch('https://api.github.com/user', {
       headers: { 'Authorization': 'Bearer ' + a.t, 'Accept': 'application/vnd.github+json' }
@@ -5327,42 +5355,81 @@ function ghPendingFresh() {
   } catch (e) { return false; }
 }
 
+/* 从新标签页授权回来的：把原页刷新一下再把自己关掉，人就自然回到原来那页继续 */
+function ghBackHome() {
+  var op = null, same = false;
+  try { op = window.opener; } catch (e) {}
+  if (op && !op.closed) { try { op.location.pathname; same = true; } catch (e) { same = false; } }
+  if (same) {
+    try { op.postMessage({ t: 'gh-ok' }, location.origin); } catch (e) {}
+    try { op.location.href = ghCallback(); } catch (e) {}
+    toast('登录成功，正在回到原来那页…', 2500);
+    setTimeout(function () { try { window.close(); } catch (e) {} }, 900);
+  } else {
+    toast('GitHub 登录成功（' + ((ghAuth() || {}).login || '') + '），现在可以下载了', 4500);
+  }
+}
+
+/* 拿一次性授权码去后端换用户名。true = 成功 */
+async function ghFinish(code, state) {
+  var want = '';
+  try { want = sessionStorage.getItem(GH_STATE_KEY) || ''; } catch (e) {}
+  /* state 对不上说明这次回调不是本页发起的，别放行 */
+  if (want && state && state !== want) { ghBar('fail'); return false; }
+
+  if (!GH_API) { ghBar('srv', '还没配置换 token 的后端地址'); return false; }
+  ghBar('busy');
+  var j = null;
+  try {
+    var r = await fetch(GH_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: String(code) })
+    });
+    j = await r.json().catch(function () { return {}; });
+    if (!r.ok || !j.login) {
+      ghBar('srv', (j.description || j.error || ('HTTP ' + r.status)) + '（' + GH_API + '）');
+      return false;
+    }
+  } catch (e) {
+    ghBar('srv', '请求后端失败：' + ((e && e.message) || e) + '（' + GH_API + '）');
+    return false;
+  }
+  ghSave({ t: 'srv', login: j.login, name: j.name || '', at: Date.now() });
+  uiDl();
+  ghBar(null);
+  return true;
+}
+
 /* 返回 true 表示这次打开页面就是 OAuth 回调 */
-function ghParseHash() {
+async function ghParseCallback() {
   var kv = ghParams();
-  if (!kv.access_token && !kv.error) return false;
-  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  if (!kv.code && !kv.error && !kv.error_description && !kv.access_token) return false;
+  ghStripCode();
   try {
     sessionStorage.removeItem(GH_PENDING_KEY);
     sessionStorage.removeItem(GH_URL_KEY);
   } catch (e) {}
 
+  if (kv.error || kv.error_description) {
+    ghBar('deny', kv.error_description || kv.error || '');
+    return true;
+  }
+  /* 很早以前存的隐式流 token：GitHub 已不再返回，留着只是兜底 */
   if (kv.access_token) {
     ghSave({ t: kv.access_token, login: '', at: Date.now() });
-    uiDl();
-    ghWho();
-    /* 从新标签页授权回来的：把原页面刷一下再把自己关掉，用户就自然回到原来那页继续 */
-    var op = null, same = false;
-    try { op = window.opener; } catch (e) {}
-    if (op && !op.closed) { try { op.location.pathname; same = true; } catch (e) { same = false; } }
-    if (same) {
-      try { op.postMessage({ t: 'gh-ok' }, location.origin); } catch (e) {}
-      try { op.location.href = ghCallback(); } catch (e) {}
-      toast('登录成功，正在回到原来那页…', 2500);
-      setTimeout(function () { try { window.close(); } catch (e) {} }, 900);
-    } else {
-      toast('GitHub 登录成功，现在可以下载了', 4500);
-    }
+    uiDl(); ghWho(); ghBackHome();
     return true;
   }
 
-  ghBar('deny', kv.error_description || kv.error || '');
+  var ok = await ghFinish(kv.code, kv.state);
+  if (ok) ghBackHome();
   return true;
 }
 
 window.dlTool = dlTool; window.offlinePatch = offlinePatch;
 window.ghLogged = ghLogged; window.ghLogin = ghLogin; window.ghWho = ghWho;
-window.ghParseHash = ghParseHash; window.ghBar = ghBar;
+window.ghParseHash = ghParseCallback; window.ghFinish = ghFinish; window.ghBackHome = ghBackHome; window.ghBar = ghBar;
 window.uiDl = uiDl; window.canDownload = canDownload; window.ghCallback = ghCallback;
 
 /* ---------- 启动 ---------- */
@@ -5406,11 +5473,14 @@ document.addEventListener('visibilitychange', function () {
 });
 window.addEventListener('focus', function () { if (ghLogged()) uiDl(); });
 
-var wasCallback = ghParseHash();
-uiDl();
-uiSample();
-/* 刚从 GitHub 回来却没带凭证：常驻提示条讲清楚原因，别用一闪而过的 toast */
-if (!wasCallback && ghPendingFresh() && !ghLogged()) ghBar('fail');
+(async function () {
+  var wasCallback = false;
+  try { wasCallback = await ghParseCallback(); } catch (e) {}
+  uiDl();
+  uiSample();
+  /* 刚从 GitHub 回来却没带凭证：常驻提示条讲清楚原因，别用一闪而过的 toast */
+  if (!wasCallback && ghPendingFresh() && !ghLogged()) ghBar('fail');
+})();
 </script>
 </body>
 </html>
