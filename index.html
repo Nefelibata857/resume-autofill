@@ -721,6 +721,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
   "certName": "",
   "language": "",
   "languageLevel": "",
+  "languageScore": "",
   "gpa": "",
   "majorGpa": "",
   "rank": "",
@@ -842,7 +843,7 @@ const GROUPS = [
     ['prj6_desc','项目6 · 描述']
   ]},
   { title: '证书与语言', fields: [
-    ['certName','证书名称'], ['language','语言'], ['languageLevel','精通程度']
+    ['certName','证书名称'], ['language','语言'], ['languageLevel','精通程度'], ['languageScore','分数']
   ]},
   { title: '长文本', fields: [
     ['selfEval','自我评价 / 自我介绍'], ['skills','专业技能'], ['awards','奖项荣誉'],
@@ -990,6 +991,7 @@ function applyResume(D, O) {
     /* 字节这类页面把「证书」「语言能力」单独成块：一个名称/语言下拉 + 一个等级或描述 */
     ['certName',      /(证书名称|资格证书|执业资格|技能证书|证书(?!编号|日期|时间|照片|扫描|上传|描述|类型))/, /(描述|编号|说明|时间|日期)/],
     ['languageLevel', /(精通程度|熟练程度|掌握程度|语言水平|外语水平|语言等级|语言能力等级)/, null],
+    ['languageScore', /(分数|成绩(?!单|时间|日期|编号))/, /(时间|日期|编号|单|上传|照片)/],
     ['language',      /(外语|语言(?!编程))/, /(精通|熟练|掌握|程度|等级|水平|编程|开发|种类|字符)/],
     /* 字节这类页面把经历里的描述框就叫「描述」，前面不带任何前缀，所以这里必须能单吃「描述」。
        「自我描述 / 个人描述 / 简介」归 selfEval，用排除项挡住。 */
@@ -3320,7 +3322,7 @@ const HOSTED = /^https?:$/.test(location.protocol) &&
 
 /* 每次往 resume-data 写新数据，这个数字 +1。
    页面下次打开会自动换上最新数据，同时保留你手动补过的空字段 */
-const DATA_VERSION = 1;
+const DATA_VERSION = 2;
 
 /* 已知错误的旧值要在升级时清掉，否则会一直被"保留空字段"的逻辑救活。
    注意：必须声明在 loadData() 被调用之前。 */
