@@ -540,12 +540,6 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
           下载后：<code>Ctrl+Shift+O</code> 打开书签管理器 → <code>⋮</code> → 导入书签 → 选文件。
         </div>
       </details>
-
-      <div class="sep"></div>
-      <div class="tip">
-        换了个没见过的招聘系统、填不上？下载一份<b>诊断书签</b>，它只扫描不填写，把整页字段名和当前值列出来，发我就能补匹配规则。
-        <div style="margin-top:8px"><button class="linkbtn" id="btn-diag">下载诊断书签 →</button></div>
-      </div>
     </div>
 
     <section class="card" id="tut">
@@ -560,14 +554,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
       <p class="vtip">点封面播放，建议<b>全屏</b>看：怎么装书签，以及装完在招聘网站上自动填完整页。</p>
     </section>
 
-    <div class="card" id="card-script">
-      <h2>控制台脚本</h2>
-      <div class="tip">书签被网站 CSP 拦下时用这个：点下面按钮复制，粘贴到网页 Console 回车。</div>
-      <pre class="script" id="script-preview">生成中…</pre>
-      <button class="primary" id="btn-copyscript" style="margin-top:10px;width:100%">复制填表脚本</button>
-    </div>
-
-    <div class="card">
+    <div class="card" id="card-about">
       <h2>说明</h2>
       <div class="tip">
         · 这个文件<b>不含任何个人信息</b>，可以直接发给同学、朋友，各填各的。<br>
@@ -662,9 +649,8 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
       <dl>
         <dt>点了书签没反应</dt>
         <dd>
-          有些网站的安全策略（CSP）会拦书签脚本。这时点右侧「复制填表脚本」，到网申页面按
-          <code>F12</code> → <code>Console</code> → 粘贴 → 回车。Chrome 第一次会要求先输入
-          <code>allow pasting</code> 再粘贴。
+          先把页面按 <code>F5</code> 刷新一次再点；如果还是没动静，多半是这个网站把表单放进了
+          <code>iframe</code> 里或做了特殊限制，换一份招聘网站的网申页面试试。
         </dd>
 
         <dt>改完信息，书签还是旧的</dt>
@@ -675,7 +661,8 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 
         <dt>某些字段没填上</dt>
         <dd>
-          点「下载诊断书签」，它<b>只扫描不填写</b>，会列出整页字段名和当前值，照着就能判断是哪个字段没认出来。
+          每个招聘网站的字段叫法都不一样，常见写法（姓名、手机、毕业院校、入学时间…）基本都能认。
+          遇到没认出来的，把那个<b>输入框上方的文字</b>连同网站名发给作者，就能补上匹配规则。
         </dd>
 
         <dt>换电脑 / 换浏览器</dt>
@@ -3955,7 +3942,6 @@ function bookmarksFile() {
     '<DL><p>',
     line('简历填表·完整版', buildScript({ exp: true })),
     line('简历填表·精简版', buildScript({ short: true })),
-    line('简历填表·诊断', buildScript({ diag: true })),
     '</DL><p>'
   ].join('\n');
 }
@@ -4075,7 +4061,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
         main.insertBefore(tut, pg ? pg.nextElementSibling : main.firstElementChild);
       }
     } else if (tut.parentElement !== side) {
-      var sc = document.getElementById('card-script');
+      var sc = document.getElementById('card-about');
       side.insertBefore(tut, sc || null);
     }
   }
@@ -4083,11 +4069,6 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   window.addEventListener('load', placeTut);
   window.addEventListener('resize', placeTut);
 })();
-
-document.getElementById('btn-copyscript').addEventListener('click', async () => {
-  const ok = await copyText(buildScript({ exp: true }));
-  if (ok) toast('脚本已复制，去网申页面按 F12 粘贴');
-});
 
 /* 必填还没填完就导出书签，等于白导入一次，先提醒一句 */
 function incompleteWarn() {
@@ -4109,21 +4090,6 @@ const doDownloadBookmarks = () => {
 document.getElementById('btn-bmfile').addEventListener('click', doDownloadBookmarks);
 document.getElementById('float-dl').addEventListener('click', doInstall);
 document.getElementById('banner-dl').addEventListener('click', doInstall);
-
-document.getElementById('btn-diag').addEventListener('click', () => {
-  download('简历诊断书签.html', (function () {
-    const now = Math.floor(Date.now() / 1000);
-    return [
-      '<!DOCTYPE NETSCAPE-Bookmark-file-1>',
-      '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">',
-      '<TITLE>Bookmarks</TITLE><H1>Bookmarks</H1>',
-      '<DL><p>',
-      '    <DT><A HREF="javascript:' + encodeURIComponent(buildScript({ diag: true })) + '" ADD_DATE="' + now + '">简历填表·诊断</A>\n',
-      '</DL><p>'
-    ].join('\n');
-  })(), 'text/html;charset=utf-8');
-  toast('诊断书签已下载，导入后点它会列出整页字段');
-});
 
 /* ---------- 安装书签：一下复制，三步装好 ---------- */
 /* 版本号直接印在按钮/弹窗上：书签是「装了就一直用」的东西，
