@@ -987,8 +987,14 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v39';
-  var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
+  var ENGINE_VER = 'v40';
+  var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER,
+             overwrite: [], handled: [], sample: 0 };
+  /* 数据源自检：书签里带的还是示例人物时提一句，
+     否则用户以为填进去的是自己的资料（页面上会出现「张小明 / 浙江大学」）。 */
+  try {
+    if (String(D.name || '') === '张小明' && String(D.school || '') === '浙江大学') RES.sample = 1;
+  } catch (e0) {}
   /* 轻量轨迹：出问题时不用开 DevTools，面板/控制台里看 __RZ.trace 就知道
      卡在哪一步（下拉点了不开、看门狗判失败、日期队列有没有轮到）。 */
   var TRACE = [];
@@ -2610,14 +2616,89 @@ function applyResume(D, O) {
     return val;
   }
 
+  /* 日期写进纯文本框时该写成什么样：YYYY-MM 还是 YYYY-MM-DD。
+     优先看框自己的提示（placeholder / data-format），
+     没提示就看框里原来的值是什么格式 —— 原来只到月就写到月。
+     都没有就写到月：国内网申的起止时间基本都是「2023-09」这种。 */
+  function dateTextFor(el, val) {
+    var s = String(val == null ? '' : val);
+    var m = /^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/.exec(s);
+    if (!m) return fmtFor(el, s);
+    var ym = m[1] + '-' + (m[2].length === 1 ? '0' + m[2] : m[2]);
+    var ph = (el.getAttribute('placeholder') || '') + ' ' + (el.getAttribute('data-format') || '');
+    var cur = String(el.value || '');
+    var wantDay = false;
+    if (/yyyy-mm-dd/i.test(ph)) wantDay = true;
+    else if (/年/.test(ph) && /日/.test(ph)) wantDay = true;
+    else if (cur && /\d{4}-\d{1,2}-\d{1,2}/.test(cur)) wantDay = true;
+    else if (cur && /\d{4}-\d{1,2}/.test(cur)) wantDay = false;
+    else if (!cur && !ph) wantDay = false;
+    if (!wantDay) return ym;
+    return fmtFor(el, s);
+  }
+
   /* 同一行里若有 2~3 个输入框，返回 el 是从左数第几个（0 起）；不是这种结构返回 -1 */
-  /* 控件所在区块：往上找一个最近的小标题（教育 / 实习 / 项目）。
-     「起止时间」这种标签在教育区是「入学-毕业」，在经历区是项目时间，不能混。 */
-  function secOf(el) {
-    var doc = (el && el.ownerDocument) || document, wk, tn, kind = '', best = '', bd = 1e9;
-    var cr = null;
-    try { cr = el.getBoundingClientRect(); } catch (e0) {}
-    var cy = cr ? cr.top + cr.height / 2 : -9999;
+  /* 控件属于哪个区块：教育 / 经历。
+     「起止时间」这种标签在教育区是「入学-毕业」，在经历区是某段经历的时间，不能混。
+
+     v40 重写的理由（真实字节校招页上查出来的）：
+     页面左侧有一列 sticky 的区块指示器，显示当前滚到的区块名，视口坐标几乎不变。
+     用「视觉上离控件最近的标题」判区块，滚到哪个区块就判成哪个 ——
+     页面停在别处时，教育区的日期框被判成「项目区」，于是一整段被静默丢掉，
+     用户看到的现象就是「第一遍压根没填，滚到那一块再点一次才填上」。
+     现在换两条都稳的判据：
+       ① 就近特征词：控件上下几百像素内，谁离得近谁说了算（学校/学历/在校 vs 公司/职位/项目）
+       ② 区块标题：按「文档坐标」找上方最近的标题，并排除 position:sticky/fixed 的侧栏指示器
+     两条都判不出就返回 ''（不知道就不拦）—— 宁可多填一个，也别整段丢掉。 */
+  var ZEDU = /(学校|院校|学院|专业|学历|学位|班级|学号|在校|就读|入学|毕业|绩点|排名|教育)/;
+  var ZEXP = /(公司|单位|职位|岗位|职务|部门|担任|职责|团队|项目名称|项目角色|项目描述|工作内容|工作经历|实习经历|项目经历)/;
+
+  /* 往上找几层，看有没有 sticky/fixed 的祖先（左侧那块区块指示器就是 sticky） */
+  function stickyUp(pe) {
+    var p = pe, hop = 0;
+    while (p && p.nodeType === 1 && hop < 5) {
+      var pos = '';
+      try { pos = ((p.ownerDocument && p.ownerDocument.defaultView) || window).getComputedStyle(p).position || ''; } catch (e) {}
+      if (pos === 'sticky' || pos === 'fixed') return true;
+      p = p.parentElement; hop++;
+    }
+    return false;
+  }
+
+  function zoneOf(el) {
+    var doc = (el && el.ownerDocument) || document, r, list, i, pe, pr, t, dy;
+    try { r = el.getBoundingClientRect(); } catch (e0) { return ''; }
+    if (!r || !r.width) return '';
+    var cy = r.top + r.height / 2;
+    /* ① 就近特征词 */
+    var ed = 1e9, ex = 1e9;
+    try { list = geoCands(doc); } catch (e1) { list = null; }
+    if (list) {
+      for (i = 0; i < list.length; i++) {
+        pe = list[i].n.parentElement;
+        if (!pe) continue;
+        try { pr = pe.getBoundingClientRect(); } catch (e2) { continue; }
+        if (!pr.width || !pr.height) continue;
+        dy = Math.abs(pr.top + pr.height / 2 - cy);
+        if (dy > 460) continue;
+        t = list[i].t;
+        var isE = ZEDU.test(t), isX = ZEXP.test(t);
+        if (isE && !isX) { if (dy < ed) ed = dy; }
+        else if (isX && !isE) { if (dy < ex) ex = dy; }
+      }
+    }
+    if (ed < 1e9 && ed < ex) return 'edu';
+    if (ex < 1e9) return 'exp';
+    /* ② 特征词没结论，退到区块标题（文档坐标 + 排除 sticky 侧栏） */
+    return zoneByHead(el);
+  }
+
+  function zoneByHead(el) {
+    var doc = (el && el.ownerDocument) || document, wk, tn, best = '', bd = 1e9, scy = 0, cr, cTop;
+    try { scy = ((doc.defaultView) || window).scrollY || 0; } catch (e0) {}
+    try { cr = el.getBoundingClientRect(); } catch (e1) { return ''; }
+    if (!cr) return '';
+    cTop = cr.top + scy;
     try {
       wk = doc.createTreeWalker(doc.body || doc.documentElement, 4, null, false);
       while ((tn = wk.nextNode())) {
@@ -2630,25 +2711,39 @@ function applyResume(D, O) {
         if (!k) continue;
         var pe = tn.parentNode;
         if (!pe) continue;
-        try { if (!shown(pe)) continue; } catch (e) { continue; }
-        var r = 0;
-        try { r = pe.compareDocumentPosition(el); } catch (e2) { continue; }
-        if (!(r & 4)) continue;      /* 标题必须在控件之前 */
-        kind = k;                    /* 兜底：DOM 顺序里最后一个 */
-        /* 优先用「视觉上离控件最近」的那个标题：左侧常驻导航的 DOM 顺序和视觉顺序
-           不是一回事，按顺序取会把教育框判成项目区，日期框就被整段跳过了。 */
-        if (cr) {
-          var pr;
-          try { pr = pe.getBoundingClientRect(); } catch (e3) { continue; }
-          if (!pr.width || !pr.height) continue;
-          var dy = cy - (pr.top + pr.height / 2);
-          if (dy < -20) continue;               /* 标题在控件下方，不算 */
-          var dist = Math.abs(dy);
-          if (dist < bd) { bd = dist; best = k; }
-        }
+        try { if (!shown(pe)) continue; } catch (e2) { continue; }
+        if (stickyUp(pe)) continue;          /* 左侧 sticky 区块指示器不算 */
+        var pr;
+        try { pr = pe.getBoundingClientRect(); } catch (e3) { continue; }
+        if (!pr.width || !pr.height) continue;
+        var pC = pr.top + scy + pr.height / 2;
+        if (pC > cTop + 24) continue;        /* 标题在控件下方，不算 */
+        var d = cTop - pC;
+        if (d < bd) { bd = d; best = k; }
       }
-    } catch (e3) {}
-    return best || kind;
+    } catch (e4) {}
+    return best;
+  }
+
+  /* 教育经历的起止时间框里留着旧值时，返回该用哪个键去改写；
+     不是这一对、或者旧值其实是对的，就返回 ''（照旧跳过，不动用户手填的东西）。 */
+  function staleDateKey(el, tag) {
+    if (tag !== 'input') return '';
+    if (zoneOf(el) !== 'edu') return '';
+    var row = rowInputs(el), idx = -1, i, lab = '', key, k;
+    for (i = 0; i < row.length; i++) if (row[i] === el) idx = i;
+    if (idx < 0) return '';
+    for (i = 0; i < row.length; i++) {
+      lab += ' ' + (upLabel(row[i]) || '') + ' ' + (labelText(row[i]) || '') + ' ' + (ctxText(row[i]) || '');
+    }
+    k = matchRule(lab);
+    if (k !== 'enrollDate' && k !== 'graduateDate') return '';
+    key = (idx === 0) ? 'enrollDate' : (idx === 1) ? 'graduateDate' : k;
+    var cur = String(el.value || ''), want = String(D[key] || '');
+    var cm = /(\d{4})\D?(\d{1,2})/.exec(cur), wm = /(\d{4})\D?(\d{1,2})/.exec(want);
+    if (!wm) return '';
+    if (cm && cm[1] === wm[1] && cm[2] === wm[2]) return '';   /* 值已经是对的，别动 */
+    return key;
   }
 
   function dateRowIdx(el) {
@@ -2865,8 +2960,20 @@ function applyResume(D, O) {
           continue;
         }
 
-        /* --- 已填内容跳过 --- */
-        if (!DIAG && !isEmpty(el, tag)) { RES.skipped++; continue; }
+        /* --- 已填内容跳过 ---
+           教育经历的起止时间是成对字段，值直接来自简历资料。
+           框里若留的是上一次运行写进去的旧值（资料改了 / 之前用的还是示例数据），
+           会被永远跳过 —— 用户看到的现象就是「填不上」。
+           这一对值对不上就改写，并在面板上写明改了什么。 */
+        var forceKey = '';
+        if (!DIAG && !isEmpty(el, tag)) {
+          forceKey = staleDateKey(el, tag);
+          if (!forceKey) { RES.skipped++; continue; }
+          if (RES.overwrite.length < 20) {
+            RES.overwrite.push(forceKey + '：' + String(el.value || '') + ' → '
+              + String(D[forceKey] || '').replace(/-\d\d$/, '').slice(0, 10));
+          }
+        }
 
         /* --- 匹配字段 --- */
         var ctx = ctxText(el);
@@ -2886,6 +2993,9 @@ function applyResume(D, O) {
            两条兜底：① 借同行兄弟框的标签；② 这一行上方写着「起止时间」就按左右当成入学/毕业。 */
         if (!key) { var sh = rowSharedLabel(el); if (sh) key = matchRule(sh); }
         if (!key) { var pr2 = datePairRow(el); if (pr2 >= 0) key = (pr2 === 0) ? 'enrollDate' : 'graduateDate'; }
+
+        /* 旧值要改写时，用判定出来的键（按同行左右顺序），别用标签猜出来的 */
+        if (forceKey) key = forceKey;
 
         if (DIAG) {
           var dv = tag === 'select'
@@ -2909,17 +3019,44 @@ function applyResume(D, O) {
            页面还会在这行底下写一句「无准确的毕业时间可填写预计毕业时间」，
            标签识别经常被那句提示抢走，导致两个框都被认成毕业时间 —— 这里按左右顺序纠正。 */
         if (key === 'enrollDate' || key === 'graduateDate') {
-          var secNow = secOf(el);
-          /* 经历区块里的「起止时间」是多段经历的时间，别拿入学日期去填 */
-          if (secNow && secNow !== 'edu') continue;
+          var zNow = zoneOf(el);
+          /* 经历区块里的「起止时间」是多段经历的时间，别拿入学日期去填。
+             只有「明确判定为经历区」才拦；判不出来（长表单 + sticky 侧栏）就照填 ——
+             之前就是这里 continue 掉的，而且面板上连一条记录都不留，
+             用户只看到「第一遍压根没填，滚到那一块再点一次才填上」。 */
+          if (zNow === 'exp') {
+            /* 这一格归「实习/项目时间」字段管（下面那段经历逻辑会填），
+               不算「未识别」，单独记一笔，免得面板上看着像引擎没认出来。 */
+            if (RES.handled.length < 20) RES.handled.push('（实习/项目区）起止时间');
+            continue;
+          }
           var ridx = dateRowIdx(el);
           if (ridx === 0) key = 'enrollDate';
           else if (ridx === 1) key = 'graduateDate';
         }
 
         var val = D[key], ok = false, sugQ = false;
-        /* 日期控件一律排到日期队列：要异步点开面板再回车，同步写完会被回滚 */
-        if (isDateKey(key) && tag === 'input' && key !== 'birthday') { pushDate(el, key, val); continue; }
+        /* 日期控件一律排到日期队列：要异步点开面板再回车，同步写完会被回滚。
+           例外：纯文本框型的日期（type=text 且不是只读）压根没有日历面板，
+           直接打字就成 —— 字节教育经历的「起止时间」就是这种框，
+           走日期队列要空等面板、找不到面板还会被误判成「没写进去」。 */
+        if (isDateKey(key) && tag === 'input' && key !== 'birthday') {
+          var dtx = (el.getAttribute('type') || '').toLowerCase();
+          if (dtx !== 'date' && dtx !== 'month' && dtx !== 'datetime-local' && !el.readOnly) {
+            var dval = dateTextFor(el, val), ddoc = el.ownerDocument || document, ins = false;
+            try { if (el.focus) el.focus(); } catch (eF) {}
+            try { try { el.select(); } catch (eS1) {} ins = ddoc.execCommand('insertText', false, String(dval)); } catch (eX) {}
+            if (!ins || String(el.value || '') !== String(dval)) protoSet(el, dval);
+            var dchk = String(el.value || '').replace(/[^\d]/g, '');
+            var dwant = String(val || '').replace(/[^\d]/g, '').slice(0, 6);
+            if (dchk && dwant && dchk.indexOf(dwant) === 0) {
+              RES.filled.push({ k: key, l: labelText(el) || key, v: String(dval).slice(0, 40), el: el });
+              continue;
+            }
+            /* 没留住就老实排进日期队列，让它走面板那条路再试一次 */
+          }
+          pushDate(el, key, val); continue;
+        }
         /* 开了多段经历模式时，经历类字段交给下面的 exp 逻辑按顺序对位，
            否则表单里三个「工作内容」会全被填成第一段的描述 */
         if (O.exp && /^(exp|prj)\d_/.test(key)) continue;
@@ -3385,6 +3522,11 @@ function applyResume(D, O) {
       if (RES.cross) stat.push('跨域 iframe ' + RES.cross + ' 个');
       body.appendChild(mk('div', 'font-size:12px;color:rgba(255,255,255,.62);padding:2px 0 8px;',
         '引擎 ' + (RES.ver || '?') + ' · ' + stat.join(' · ')));
+      /* 书签里带的还是示例人物的资料，得说清楚，不然用户以为填进去的是自己的 */
+      if (!DIAG && RES.sample) {
+        body.appendChild(mk('div', 'font-size:12px;color:#ffcf7a;line-height:1.6;padding:2px 0 6px;',
+          '当前填的是示例人物（张小明）的资料，不是你自己的。要填真实资料，请在本地那份表单助手里重新生成一次书签。'));
+      }
       /* 折叠区块里的必填框扫不到，用户只会觉得「这块没填」，得说清楚是没展开而不是没认出来 */
       if (!DIAG && RES.hiddenReq) {
         body.appendChild(mk('div', 'font-size:12px;color:#ffcf7a;line-height:1.6;padding:2px 0 6px;',
@@ -3405,6 +3547,8 @@ function applyResume(D, O) {
           return o.l + ' = ' + (o.v || '（空）') + (o.k ? '  →  ' + o.k : '  →  ？');
         });
       } else {
+        listBlock('已改写（原来是旧值）', RES.overwrite, function (s) { return s; });
+        listBlock('由实习/项目时间填写', RES.handled, function (s) { return s; });
         listBlock('未识别字段（复制发我，可补规则）', RES.unmatched, function (s) { return s; });
         listBlock('已识别但没填进去', RES.failed, function (o) { return o.l + '：' + o.r; });
         listBlock('已填明细', RES.filled, function (o) { return o.k + ' = ' + o.v; });
@@ -3424,6 +3568,8 @@ function applyResume(D, O) {
         } else {
           lines.push('【已填 ' + RES.filled.length + ' 项】');
           for (var a = 0; a < RES.filled.length; a++) lines.push(RES.filled[a].k + ' = ' + RES.filled[a].v);
+          if (RES.overwrite.length) { lines.push(''); lines.push('【已改写】' + RES.overwrite.join('；')); }
+          if (RES.handled.length) { lines.push(''); lines.push('【由实习/项目时间填写】' + RES.handled.length + ' 个'); }
           if (RES.unmatched.length) { lines.push(''); lines.push('【未识别 ' + RES.unmatched.length + ' 项】' + RES.unmatched.join('、')); }
           if (RES.failed.length) {
             lines.push('');
