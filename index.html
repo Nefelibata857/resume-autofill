@@ -987,7 +987,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v38';
+  var ENGINE_VER = 'v39';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER };
   /* 轻量轨迹：出问题时不用开 DevTools，面板/控制台里看 __RZ.trace 就知道
      卡在哪一步（下拉点了不开、看门狗判失败、日期队列有没有轮到）。 */
@@ -2614,7 +2614,10 @@ function applyResume(D, O) {
   /* 控件所在区块：往上找一个最近的小标题（教育 / 实习 / 项目）。
      「起止时间」这种标签在教育区是「入学-毕业」，在经历区是项目时间，不能混。 */
   function secOf(el) {
-    var doc = (el && el.ownerDocument) || document, wk, tn, kind = '';
+    var doc = (el && el.ownerDocument) || document, wk, tn, kind = '', best = '', bd = 1e9;
+    var cr = null;
+    try { cr = el.getBoundingClientRect(); } catch (e0) {}
+    var cy = cr ? cr.top + cr.height / 2 : -9999;
     try {
       wk = doc.createTreeWalker(doc.body || doc.documentElement, 4, null, false);
       while ((tn = wk.nextNode())) {
@@ -2630,10 +2633,22 @@ function applyResume(D, O) {
         try { if (!shown(pe)) continue; } catch (e) { continue; }
         var r = 0;
         try { r = pe.compareDocumentPosition(el); } catch (e2) { continue; }
-        if (r & 4) kind = k;         /* 标题在控件之前，取最后一个 = 最近的那个 */
+        if (!(r & 4)) continue;      /* 标题必须在控件之前 */
+        kind = k;                    /* 兜底：DOM 顺序里最后一个 */
+        /* 优先用「视觉上离控件最近」的那个标题：左侧常驻导航的 DOM 顺序和视觉顺序
+           不是一回事，按顺序取会把教育框判成项目区，日期框就被整段跳过了。 */
+        if (cr) {
+          var pr;
+          try { pr = pe.getBoundingClientRect(); } catch (e3) { continue; }
+          if (!pr.width || !pr.height) continue;
+          var dy = cy - (pr.top + pr.height / 2);
+          if (dy < -20) continue;               /* 标题在控件下方，不算 */
+          var dist = Math.abs(dy);
+          if (dist < bd) { bd = dist; best = k; }
+        }
       }
     } catch (e3) {}
-    return kind;
+    return best || kind;
   }
 
   function dateRowIdx(el) {
@@ -2654,6 +2669,70 @@ function applyResume(D, O) {
     if (row.length < 2 || row.length > 3) return -1;
     row.sort(function (a, b) { return a.getBoundingClientRect().left - b.getBoundingClientRect().left; });
     for (i = 0; i < row.length; i++) if (row[i] === el) return i;
+    return -1;
+  }
+
+  /* 同一行的输入框（上下对齐、控件高度相近），按从左到右排好 */
+  function rowInputs(el) {
+    var doc = (el && el.ownerDocument) || document, all, i, row = [], r0;
+    try { r0 = el.getBoundingClientRect(); } catch (e) { return row; }
+    if (!r0.width) return row;
+    try { all = doc.querySelectorAll('input,textarea'); } catch (e2) { return row; }
+    for (i = 0; i < all.length && i < 400; i++) {
+      var e2 = all[i], ty = (e2.getAttribute('type') || '').toLowerCase();
+      if (['hidden', 'checkbox', 'radio', 'file', 'submit', 'button', 'image', 'reset'].indexOf(ty) >= 0) continue;
+      var r;
+      try { r = e2.getBoundingClientRect(); } catch (e3) { continue; }
+      if (!r.width) continue;
+      if (Math.abs(r.top - r0.top) > 6) continue;
+      if (Math.abs(r.height - r0.height) > 10) continue;
+      row.push(e2);
+    }
+    row.sort(function (a, b) {
+      try { return a.getBoundingClientRect().left - b.getBoundingClientRect().left; } catch (e4) { return 0; }
+    });
+    return row;
+  }
+
+  /* 标签只写在左格上方时，右格在版面上够不到它（水平不重叠）→ 整行都认不出来。
+     借同行兄弟框的标签用。 */
+  function rowSharedLabel(el) {
+    var row = rowInputs(el), i, t;
+    for (i = 0; i < row.length; i++) {
+      if (row[i] === el) continue;
+      t = upLabel(row[i]) || labelText(row[i]) || geoLabel(row[i]);
+      if (t && matchRule(t)) return t;
+    }
+    return '';
+  }
+
+  /* 版面兜底：一行里正好两个框，且这行上方写着「起止时间」之类 → 左入学、右毕业。
+     返回该框在同行里的序号（0 起），不适用返回 -1。 */
+  var PAIR_RE = /(起止时间|起止年月|起止日期|就读时间|在校时间)/;
+  function datePairRow(el) {
+    var row = rowInputs(el);
+    if (row.length !== 2) return -1;
+    var doc = (el && el.ownerDocument) || document, list = geoCands(doc);
+    if (!list || !list.length) return -1;
+    var r0, lft, rgt;
+    try {
+      r0 = el.getBoundingClientRect();
+      lft = Math.min(row[0].getBoundingClientRect().left, row[1].getBoundingClientRect().left);
+      rgt = Math.max(row[0].getBoundingClientRect().right, row[1].getBoundingClientRect().right);
+    } catch (e) { return -1; }
+    if (!r0.width) return -1;
+    for (var i = 0; i < list.length; i++) {
+      var pe = list[i].n.parentElement, pr;
+      if (!pe) continue;
+      try { pr = pe.getBoundingClientRect(); } catch (e2) { continue; }
+      if (!pr.width || !pr.height) continue;
+      var gap = r0.top - pr.bottom;          /* 文字底边在框顶之上 */
+      if (gap < -8 || gap > 70) continue;
+      if (pr.right < lft - 8 || pr.left > rgt + 8) continue;
+      if (!PAIR_RE.test(list[i].t)) continue;
+      for (var j = 0; j < row.length; j++) if (row[j] === el) return j;
+      return -1;
+    }
     return -1;
   }
 
@@ -2803,6 +2882,10 @@ function applyResume(D, O) {
         /* 标签在正上方的排版（字节 / Semi Design 那种），左侧同一行找不到 */
         if (!key) { var up = upLabel(el); if (up) key = matchRule(up); }
         if (!key) key = matchRule(ctx + ' ' + ctxUp(el, 2));
+        /* 「起止时间」是并排两个框，标签只写在左格上方，右格版面上够不到 → 整行都认不出该填什么。
+           两条兜底：① 借同行兄弟框的标签；② 这一行上方写着「起止时间」就按左右当成入学/毕业。 */
+        if (!key) { var sh = rowSharedLabel(el); if (sh) key = matchRule(sh); }
+        if (!key) { var pr2 = datePairRow(el); if (pr2 >= 0) key = (pr2 === 0) ? 'enrollDate' : 'graduateDate'; }
 
         if (DIAG) {
           var dv = tag === 'select'
