@@ -5720,13 +5720,25 @@ async function ghStarRun(quiet) {
     var j = null;
     bad = false;
     try {
-      /* fresh=1 让后端跳过 3 分钟缓存 —— 刚点完星必须拿到当下的真实状态 */
+      /* fresh=1 让后端跳过 3 分钟缓存 —— 刚点完星必须拿到当下的真实状态。
+         带上自己的 token：后端用它去问 GitHub 就能吃到 5000 次/小时的额度，
+         不会再被「匿名 60 次/小时、还按出口 IP 算」卡住（别人打光了我们也能查）。 */
       var r = await fetch(GH_STAR_API + '?login=' + encodeURIComponent(a.login) + '&fresh=1&_=' + Date.now(),
-                          { cache: 'no-store' });
+                          { cache: 'no-store', headers: a.t ? { Authorization: 'Bearer ' + a.t } : {} });
       j = await r.json().catch(function () { return {}; });
       /* 后端还是旧版本（没有 /star）：说清楚，别让人以为是自己没点星 */
       if (r.status === 404 || r.status === 405) {
         if (!quiet) ghBar('srv', '后端版本 ' + ((j && j.version) || '未知') + '，还没有 /star 接口，等它重新部署完再点一次');
+        return false;
+      }
+      /* 429 = GitHub 那边的接口额度用完了（匿名每小时 60 次，还按出口 IP 算），
+         不是「你没点星」。原地重试没用，直接说清楚怎么绕过去。 */
+      if (r.status === 429) {
+        if (!quiet) {
+          ghBar('srv', ((j && j.description) || 'GitHub 接口这个小时的额度用完了')
+            + '。过几分钟再点一次；或者点右边「重新登录」走一遍授权，之后就用你自己的额度查，不会再被卡。');
+        }
+        uiDl();
         return false;
       }
       if (!r.ok) {

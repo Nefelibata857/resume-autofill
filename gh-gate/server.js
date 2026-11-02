@@ -7,21 +7,28 @@
  *
  * 两个职责：
  *   1) POST /token  拿一次性授权码换用户名（client_secret 只在服务端出现）
- *   2) GET  /star   查某个账号有没有给仓库点过 star —— 读的是该用户**公开**的 starred 列表，
- *                   不需要任何 token、也不向用户要任何权限，所以老用户不用重新授权。
+ *   2) GET  /star   查某个账号有没有给仓库点过 star —— 读的是该用户**公开**的 starred 列表
  *
- * v2 变化：
- *   - 支持 ?fresh=1 跳过内存缓存（用户点完星回来点「重新检查」时用，不再等 3 分钟）
- *   - 支持 ?debug=1 返回上游诊断（GitHub 状态码、首页样本、命中位置），线上排查用
- *   - 仓库名比较统一 trim + 小写，避免环境变量里多一个空格就永远匹配不上
- *   - GitHub 返回非数组（限流/被拦）时不再静默当成「没点星」，直接 502 让前端说清楚
+ * v2：?fresh=1 跳缓存、?debug=1 出诊断；仓库名比较 trim+小写；非数组不再静默当「没点星」。
+ *
+ * v3（修「github 403 API rate limit exceeded」）：
+ *   匿名访问 GitHub 只有 60 次/小时，而且是**按出口 IP** 算的 ——
+ *   Render 免费实例的出口 IP 是共享的，别人打光了我们就没有了，
+ *   用户看到的是「这次检查没成功：github 403 API rate limit exceeded」，
+ *   还会误以为是自己没点星。三条通道，按优先级：
+ *     ① 登录用户自己的 token（5000 次/小时，按 token 算，完全不占服务器额度）
+ *        —— 前端复查时把 token 带在 Authorization 头里；后端登录时也暂存一份兜底
+ *     ② 服务端自己的只读 PAT（环境变量 GH_TOKEN，可选；配了就更稳）
+ *     ③ 都没有 → 退回匿名（60 次/小时），并且只查第一页，别把额度吃光
+ *   限流时返回 429 + error=rate_limited，让前端说「等几分钟」而不是「你没点星」。
  */
 const express = require('express');
 const app = express();
 
-const VERSION = 'gate/v2';
+const VERSION = 'gate/v3';
 const CLIENT_ID = process.env.GH_CLIENT_ID || 'Ov23li7TDJXKaxFNgIxd';
 const CLIENT_SECRET = process.env.GH_CLIENT_SECRET || '';
+const GH_TOKEN = (process.env.GH_TOKEN || '').trim();   /* 可选：服务端自己的只读 PAT */
 const ALLOW = (process.env.ALLOW_ORIGINS || 'https://nefelibata857.github.io').split(',').map(s => s.trim()).filter(Boolean);
 /* 要检查点星的仓库，owner/repo */
 const STAR_REPO = (process.env.STAR_REPO || 'Nefelibata857/resume-autofill').trim();
@@ -34,23 +41,34 @@ app.use((req, res, next) => {
   const origin = req.headers.origin || '';
   if (ALLOW.indexOf(origin) >= 0) res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Vary', 'Origin');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
 
 app.get('/', (req, res) => res.json({
-  ok: true, service: 'resume-autofill-gate', repo: STAR_REPO, version: VERSION
+  ok: true, service: 'resume-autofill-gate', repo: STAR_REPO, version: VERSION,
+  serverToken: !!GH_TOKEN
 }));
 
 /* ---------- 点星检查 ---------- */
 
-/* 结果缓存 3 分钟：免得把 GitHub 的匿名额度（60 次/小时）打光。
+/* 结果缓存 3 分钟：免得同一秒里连点几次把额度打光。
    ?fresh=1 会绕过它 —— 用户点完星的那一下必须拿到当下的真实状态。 */
 const starCache = new Map();   // login -> { v, at }
 const STAR_TTL = 3 * 60 * 1000;
-const MAX_PAGES = 30;          // 最多翻 3000 个 star，够用了
+
+/* 登录时换到的 token 暂存一份，复查没带 token 时兜底。
+   Render 免费实例会休眠、重启就没了，所以前端复查时也会自己带 —— 两条都认。 */
+const tokenStore = new Map();  // login -> { tok, at }
+const TOK_TTL = 25 * 60 * 1000;
+
+function bearer(req) {
+  const h = String((req.headers && req.headers.authorization) || '');
+  const m = /^Bearer\s+(\S+)$/i.exec(h);
+  return m ? m[1] : '';
+}
 
 async function fetchStarred(login, opt) {
   opt = opt || {};
@@ -62,36 +80,77 @@ async function fetchStarred(login, opt) {
     }
   }
 
+  /* 挑一条额度通道 */
+  const stash = tokenStore.get(key);
+  const stashTok = (stash && Date.now() - stash.at < TOK_TTL) ? stash.tok : '';
+  let tok = opt.token || stashTok || GH_TOKEN;
+  let via = opt.token ? 'user' : (stashTok ? 'stash' : (GH_TOKEN ? 'server' : 'anon'));
+
   /* 读「某个用户的 starred 列表」而不是仓库的 stargazers 名单：
      后者匿名访问已被 GitHub 关掉（401 Requires authentication），
-     前者是公开数据，匿名就能读 —— 不用向用户要 token、也不要任何权限。
-     显式指定按 star 时间倒序，刚点完的仓库必然在第一页。 */
-  const info = { upstream: 0, pages: 0, sample: [], matchedAt: -1, badBody: false, cached: false };
+     前者是公开数据，匿名也能读；带 token 只是为了把额度从 60 提到 5000。
+     显式按 star 时间倒序，刚点完的仓库必然在第一页。 */
+  const MAX_PAGES = tok ? 6 : 1;   /* 匿名只查第一页，别把 60 次吃光 */
+  const info = {
+    upstream: 0, pages: 0, sample: [], matchedAt: -1, badBody: false, cached: false,
+    authed: !!tok, via, maxPages: MAX_PAGES
+  };
   let starred = false;
 
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const r = await fetch(
-      'https://api.github.com/users/' + encodeURIComponent(login) +
-      '/starred?per_page=100&sort=created&direction=desc&page=' + page,
-      { headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': UA } }
-    );
-    info.upstream = r.status;
-    if (!r.ok) {
-      /* 限流 / 被封 / 用户不存在：明确报错，别让用户对着「没点星」自我怀疑 */
-      const txt = await r.text().catch(() => '');
-      throw new Error('github_' + r.status + (txt ? ' ' + txt.slice(0, 120) : ''));
+  async function walk(token) {
+    const headers = { 'Accept': 'application/vnd.github+json', 'User-Agent': UA };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const r = await fetch(
+        'https://api.github.com/users/' + encodeURIComponent(login) +
+        '/starred?per_page=100&sort=created&direction=desc&page=' + page,
+        { headers }
+      );
+      info.upstream = r.status;
+
+      if (!r.ok) {
+        const txt = await r.text().catch(() => '');
+        if (r.status === 401 && token) {         /* token 过期/被撤销 → 换下一档通道 */
+          const e = new Error('token_dead'); e.tokenDead = true; throw e;
+        }
+        /* 限流：429，或 403 且正文提到 rate limit */
+        if (r.status === 429 || (r.status === 403 && /rate limit/i.test(txt))) {
+          const e = new Error('rate_limited');
+          e.rateLimited = true;
+          e.reset = r.headers.get('x-ratelimit-reset') || '';
+          e.remaining = r.headers.get('x-ratelimit-remaining') || '';
+          e.authed = !!token;
+          throw e;
+        }
+        throw new Error('github_' + r.status + (txt ? ' ' + txt.slice(0, 120) : ''));
+      }
+
+      const arr = await r.json().catch(() => null);
+      if (!Array.isArray(arr)) { info.badBody = true; return false; }
+      if (!arr.length) return false;
+      info.pages = page;
+      if (page === 1) {
+        info.sample = arr.slice(0, 8).map(x => String((x && x.full_name) || ''));
+        info.totalFirstPage = arr.length;
+      }
+      const i = arr.findIndex(x => String((x && x.full_name) || '').trim().toLowerCase() === WANT);
+      if (i >= 0) { info.matchedAt = (page - 1) * 100 + i; return true; }
+      if (arr.length < 100) return false;
     }
-    const arr = await r.json().catch(() => null);
-    if (!Array.isArray(arr)) { info.badBody = true; break; }
-    if (!arr.length) break;
-    info.pages = page;
-    if (page === 1) {
-      info.sample = arr.slice(0, 8).map(x => String((x && x.full_name) || ''));
-      info.totalFirstPage = arr.length;
-    }
-    const i = arr.findIndex(x => String((x && x.full_name) || '').trim().toLowerCase() === WANT);
-    if (i >= 0) { starred = true; info.matchedAt = (page - 1) * 100 + i; break; }
-    if (arr.length < 100) break;
+    return false;
+  }
+
+  try {
+    starred = await walk(tok);
+  } catch (e) {
+    /* 用户 token 失效了：清掉，用服务端 token / 匿名再走一遍，别让用户卡在这 */
+    if (e && e.tokenDead) {
+      tokenStore.delete(key);
+      tok = GH_TOKEN;
+      via = GH_TOKEN ? 'server' : 'anon';
+      info.authed = !!tok; info.via = via; info.maxPages = tok ? 6 : 1;
+      starred = await walk(tok);
+    } else throw e;
   }
 
   if (info.badBody) throw new Error('github_bad_body');
@@ -108,19 +167,34 @@ app.get('/star', async (req, res) => {
 
   const fresh = req.query.fresh === '1';
   const dbg = req.query.debug === '1';
+  const tok = bearer(req) || String(req.query.token || '').trim() || '';
 
   try {
-    const r = await fetchStarred(login, { fresh });
+    const r = await fetchStarred(login, { fresh, token: tok || undefined });
     const body = { login, repo: STAR_REPO, starred: r.starred, v: VERSION, at: Date.now() };
     if (dbg) {
       body.diag = Object.assign({}, r.info, {
         repoExact: JSON.stringify(STAR_REPO),
         want: WANT,
-        node: process.version
+        node: process.version,
+        hasUserToken: !!tok,
+        hasServerToken: !!GH_TOKEN
       });
     }
     res.json(body);
   } catch (e) {
+    if (e && e.rateLimited) {
+      return res.status(429).json({
+        error: 'rate_limited',
+        version: VERSION,
+        reset: e.reset,
+        authed: e.authed,
+        description: e.authed
+          ? 'GitHub 接口额度用完了（5000 次/小时），过几分钟再试'
+          : '访问 GitHub 的匿名额度用完了（60 次/小时，按出口 IP 算），不是你没点星',
+        hint: '过几分钟再点「重新检查」；或者点「重新登录」走一遍授权，之后会用你自己的额度'
+      });
+    }
     res.status(502).json({ error: 'upstream_failed', version: VERSION, description: String((e && e.message) || e) });
   }
 });
@@ -156,10 +230,14 @@ app.post('/token', async (req, res) => {
     if (!u.ok) return res.status(502).json({ error: 'user_failed', status: u.status });
     const me = await u.json().catch(() => ({}));
 
+    /* 把 token 暂存一份：复查时前端会自己带，万一没带这里还能兜底 */
+    if (me.login) tokenStore.set(String(me.login).toLowerCase(), { tok: t.access_token, at: Date.now() });
+
     /* 顺便把「有没有点星」一起问出来：登录这一步就能决定给不给下载。
+       这次用用户自己的 token 查，额度充足、结果也最准。
        查不到 star 不算失败（网络抖一下不该挡人），先按没点处理，前端还能再查。 */
     let starred = false;
-    try { starred = (await fetchStarred(me.login, { fresh: true })).starred; } catch (e) {}
+    try { starred = (await fetchStarred(me.login, { fresh: true, token: t.access_token })).starred; } catch (e) {}
 
     res.json({ login: me.login || '', name: me.name || '', starred, repo: STAR_REPO, v: VERSION, at: Date.now() });
   } catch (e) {

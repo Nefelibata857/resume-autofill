@@ -9,10 +9,28 @@ GitHub 已经下线了 OAuth 隐式流（`response_type=token` 不再返回 `#ac
 这个后端一共只做三件事：
 
 1. 拿浏览器送来的一次性 `code` + 服务端保管的 `client_secret`，向 GitHub 换 access_token；
-2. 用这个 token 问一句「你是谁」，**只把用户名回给浏览器**，token 当场丢掉；
-3. 用这个用户名去查「他给本仓库点过 star 没有」——读的是**公开**的 starred 列表，不需要 token、也不需要任何权限。
+2. 用这个 token 问一句「你是谁」，把用户名回给浏览器；**token 只在服务端内存里留 25 分钟**，
+   用来给第 3 步提额度，不落浏览器、不落盘；
+3. 用这个用户名去查「他给本仓库点过 star 没有」——读的是**公开**的 starred 列表，不需要额外权限。
 
 浏览器的 localStorage 里最后只有 `{t:'srv', login:'Nefelibata857'}`，没有 GitHub token。
+
+## v3：点星检查为什么会报 `github 403 API rate limit exceeded`
+
+匿名访问 GitHub API 只有 **60 次/小时，而且按出口 IP 算**。Render 免费实例的出口 IP 是共享的，
+别人（或爬虫）打光了，我们这边就全挂 —— 用户看到的是「这次检查没成功：github 403 …rate limit…」，
+很容易误以为是自己没点星。
+
+v3 改成三条通道，按优先级：
+
+1. **登录用户自己的 token**（前端复查时带 `Authorization: Bearer`，登录时后端也暂存一份）——
+   5000 次/小时、按 token 算，完全不占服务器额度；
+2. **服务端只读 PAT**（可选环境变量 `GH_TOKEN`）—— 不想让用户 token 参与时用它兜底；
+3. 都没有才退回匿名，并且**只查第一页**，尽量少吃额度。
+
+限流时返回 `429 { error: "rate_limited" }`，前端说「等几分钟 / 点重新登录」，
+不再含糊成「你没点星」。token 失效（401）会自动降级到下一档通道，不会把用户卡死。
+
 
 ## 文件
 
