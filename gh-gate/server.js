@@ -21,11 +21,27 @@
  *     ② 服务端自己的只读 PAT（环境变量 GH_TOKEN，可选；配了就更稳）
  *     ③ 都没有 → 退回匿名（60 次/小时），并且只查第一页，别把额度吃光
  *   限流时返回 429 + error=rate_limited，让前端说「等几分钟」而不是「你没点星」。
+ *
+ * v3.2：额度用完时不再拦人，直接放行（starred:true + assumed:'rate_limited'）——
+ *        这道门防的是白嫖，不是防人；GitHub 免费接口的 60 次/小时不该成为下载障碍。
+ *
+ * v4（GitHub App webhook：把「查星」从轮询改成推送）：
+ *   建一个 GitHub App 订阅 Watch 事件，用户点星的瞬间 GitHub 会主动 POST 到
+ *   POST /gh-webhook。后端验签后把这个 login 记进名单，并把名单写回本仓库的
+ *   gh-gate/stars.json（用 GH_TOKEN）—— Render 休眠/重启也不丢；
+ *   而且「谁 star 过仓库」本来就是 GitHub 上的公开信息，写进仓库反而透明。
+ *   于是查星变成两级：
+ *     ① 名单里有人 → 直接放行，0 次 API 调用、点完星立刻生效（不用等也不用重试）
+ *     ② 名单里没有 → 才走上面那条三级 API 通道，确认「他真的没点」
+ *   环境变量：
+ *     WEBHOOK_SECRET  建 GitHub App 时自己填的 webhook 密钥（不配就拒绝一切推送）
+ *     GH_TOKEN        需要 Contents:write 才能把名单写回仓库；只读也能跑（名单只存内存）
  */
 const express = require('express');
+const crypto = require('crypto');
 const app = express();
 
-const VERSION = 'gate/v3.2';
+const VERSION = 'gate/v4';
 const CLIENT_ID = process.env.GH_CLIENT_ID || 'Ov23li7TDJXKaxFNgIxd';
 const CLIENT_SECRET = process.env.GH_CLIENT_SECRET || '';
 const GH_TOKEN = (process.env.GH_TOKEN || '').trim();   /* 可选：服务端自己的只读 PAT */
@@ -34,6 +50,123 @@ const ALLOW = (process.env.ALLOW_ORIGINS || 'https://nefelibata857.github.io').s
 const STAR_REPO = (process.env.STAR_REPO || 'Nefelibata857/resume-autofill').trim();
 const WANT = STAR_REPO.toLowerCase();
 const UA = 'resume-autofill-gate';
+
+/* ---------- 点星名单（webhook 推送，零 API 调用） ---------- */
+
+/* 建 GitHub App 时自己设的 webhook 密钥；不配就拒绝所有推送，
+   否则谁都能 POST 一个假 login 进来把下载门解开。 */
+const WEBHOOK_SECRET = (process.env.WEBHOOK_SECRET || '').trim();
+/* 名单存成本仓库里的这个文件，公开可见（GitHub 上本来就能看到谁 star 过） */
+const STARS_PATH = 'gh-gate/stars.json';
+const knownStars = new Set();      // 小写 login
+let starsSha = '';                 // 写回仓库要带的文件 sha
+let writeChain = Promise.resolve();
+
+function ghApi(path, opt) {
+  opt = opt || {};
+  const headers = { 'Accept': 'application/vnd.github+json', 'User-Agent': UA };
+  if (GH_TOKEN) headers['Authorization'] = 'Bearer ' + GH_TOKEN;
+  return fetch('https://api.github.com' + path,
+    Object.assign({ headers, signal: AbortSignal.timeout(15000) }, opt));
+}
+
+/* 启动时把仓库里的名单读回来：Render 免费实例会休眠，内存丢了得能从仓库恢复 */
+async function loadStars() {
+  try {
+    const r = await ghApi('/repos/' + STAR_REPO + '/contents/' + STARS_PATH);
+    if (r.status === 404) { starsSha = ''; return { ok: true, empty: true }; }
+    if (!r.ok) return { ok: false, status: r.status };
+    const j = await r.json().catch(() => ({}));
+    starsSha = String(j.sha || '');
+    const txt = Buffer.from(String(j.content || ''), 'base64').toString('utf8');
+    const d = JSON.parse(txt);
+    if (Array.isArray(d.stars)) d.stars.forEach(x => knownStars.add(String(x).toLowerCase()));
+    return { ok: true, loaded: knownStars.size };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
+
+/* 记一个点星者：先进内存（立刻生效），再异步写回仓库（重启后还在）。
+   串行执行，避免两个人同时点星时 sha 打架。 */
+function noteStar(login) {
+  const key = String(login).toLowerCase();
+  if (knownStars.has(key)) return;
+  knownStars.add(key);
+  writeChain = writeChain.then(async () => {
+    if (!GH_TOKEN) return;               /* 没有写权限就只存内存，不阻塞解锁 */
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const body = JSON.stringify({
+          repo: STAR_REPO,
+          updated: new Date().toISOString(),
+          count: knownStars.size,
+          stars: Array.from(knownStars).sort()
+        }, null, 2) + '\n';
+        const r = await ghApi('/repos/' + STAR_REPO + '/contents/' + STARS_PATH, {
+          method: 'PUT',
+          body: JSON.stringify({
+            message: 'gate: ' + login + ' starred',
+            content: Buffer.from(body, 'utf8').toString('base64'),
+            branch: 'main',
+            sha: starsSha || undefined      /* 新文件时省略这个字段 */
+          })
+        });
+        if (r.ok) {
+          const j = await r.json().catch(() => ({}));
+          starsSha = String((j.content && j.content.sha) || starsSha);
+          return;
+        }
+        /* 409/422 = 本地 sha 过期（别人刚改过）→ 重新拉一次，把别人加的也合进来再试 */
+        if (r.status === 409 || r.status === 422) {
+          const g = await ghApi('/repos/' + STAR_REPO + '/contents/' + STARS_PATH);
+          if (g.ok) {
+            const j = await g.json().catch(() => ({}));
+            starsSha = String(j.sha || '');
+            try {
+              const t = Buffer.from(String(j.content || ''), 'base64').toString('utf8');
+              const d = JSON.parse(t);
+              if (Array.isArray(d.stars)) d.stars.forEach(x => knownStars.add(String(x).toLowerCase()));
+            } catch (e) { /* 远端文件坏了也不解锁阻塞，继续用内存名单 */ }
+            continue;
+          }
+          return;
+        }
+        return;                            /* 其余错误：放弃持久化，内存名单照常生效 */
+      } catch (e) { return; }
+    }
+  }).catch(() => {});
+}
+
+/* webhook 必须验签：用原始字节算 HMAC-SHA256，和 X-Hub-Signature-256 对。
+   所以这个路由要挂在 express.json() 之前，body 得保持 Buffer。 */
+app.post('/gh-webhook', express.raw({ type: '*/*', limit: '256kb' }), (req, res) => {
+  if (!WEBHOOK_SECRET) {
+    return res.status(503).json({ error: 'webhook_secret_not_configured', hint: '在 Render 环境变量里配 WEBHOOK_SECRET' });
+  }
+  const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+  const sig = String(req.headers['x-hub-signature-256'] || '');
+  const mac = crypto.createHmac('sha256', WEBHOOK_SECRET).update(raw).digest('hex');
+  const want = 'sha256=' + mac;
+  const a = Buffer.from(sig), b = Buffer.from(want);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return res.status(403).json({ error: 'bad_signature' });
+  }
+
+  /* 先回 202：GitHub 等不了太久，写仓库这种慢活放后面做 */
+  res.status(202).json({ ok: true });
+
+  const ev = String(req.headers['x-github-event'] || '');
+  if (ev !== 'watch') return;                      /* 只关心点星 */
+  let p = null;
+  try { p = JSON.parse(raw.toString('utf8')); } catch (e) { return; }
+  if (!p || p.action !== 'started') return;        /* watch 事件只有 started（取消星不推） */
+  const full = String((p.repository && p.repository.full_name) || '').trim().toLowerCase();
+  if (full !== WANT) return;                       /* 点的是别的仓库，不是我们的门 */
+  const login = String((p.sender && p.sender.login) || '').trim();
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(login)) return;
+  noteStar(login);
+});
 
 app.use(express.json());
 
@@ -49,7 +182,10 @@ app.use((req, res, next) => {
 
 app.get('/', (req, res) => res.json({
   ok: true, service: 'resume-autofill-gate', repo: STAR_REPO, version: VERSION,
-  serverToken: !!GH_TOKEN
+  serverToken: !!GH_TOKEN,
+  webhook: !!WEBHOOK_SECRET,          /* GitHub App 配好了没有 */
+  knownStars: knownStars.size,        /* 名单里已经有几个人（webhook 记的 + 启动时读回来的） */
+  persist: !!GH_TOKEN                 /* 能不能把名单写回仓库 */
 }));
 
 /* ---------- 点星检查 ---------- */
@@ -168,6 +304,16 @@ app.get('/star', async (req, res) => {
   const fresh = req.query.fresh === '1';
   const dbg = req.query.debug === '1';
   const tok = bearer(req) || String(req.query.token || '').trim() || '';
+  const key = login.toLowerCase();
+
+  /* ① 名单里有人 → 直接放行。webhook 是 GitHub 主动推的，比我们轮询更及时，
+       而且一次 API 都不用调 —— 点完星刷新就能下载，不用等也不用重试。 */
+  if (knownStars.has(key)) {
+    starCache.set(key, { v: true, at: Date.now() });
+    const body = { login, repo: STAR_REPO, starred: true, via: 'webhook', v: VERSION, at: Date.now() };
+    if (dbg) body.diag = { via: 'webhook', known: knownStars.size, apiCalls: 0, hasServerToken: !!GH_TOKEN };
+    return res.json(body);
+  }
 
   try {
     const r = await fetchStarred(login, { fresh, token: tok || undefined });
@@ -232,13 +378,19 @@ app.post('/token', async (req, res) => {
     if (me.login) tokenStore.set(String(me.login).toLowerCase(), { tok: t.access_token, at: Date.now() });
 
     /* 顺便把「有没有点星」一起问出来：登录这一步就能决定给不给下载。
-       这次用用户自己的 token 查，额度充足、结果也最准。
-       查不到 star 不算失败（网络抖一下不该挡人）：额度用完时直接放行，别把人拦在门外。 */
+       名单里已经有他 → 直接算通过，一次 API 都不用调。 */
     let starred = false, assumed = '';
-    try {
-      starred = (await fetchStarred(me.login, { fresh: true, token: t.access_token })).starred;
-    } catch (e) {
-      if (e && e.rateLimited) { starred = true; assumed = 'rate_limited'; }
+    if (knownStars.has(String(me.login).toLowerCase())) {
+      starred = true;
+    } else {
+      try {
+        starred = (await fetchStarred(me.login, { fresh: true, token: t.access_token })).starred;
+      } catch (e) {
+        /* 额度用完 → 放行（不给验证结论，但也不把人拦在门外）。 */
+        if (e && e.rateLimited) { starred = true; assumed = 'rate_limited'; }
+      }
+      /* 这一趟确认他是点过星的，顺手记进名单，以后他就走 webhook 那条零调用的路 */
+      if (starred) noteStar(me.login);
     }
 
     /* 把 token 一并交回浏览器：之后每次复查「点没点星」都带上它，
@@ -254,4 +406,13 @@ app.post('/token', async (req, res) => {
   }
 });
 
-app.listen(process.env.PORT || 3000, () => console.log('gate listening on', process.env.PORT || 3000, VERSION));
+/* 名单先就位再开始收请求：Render 冷启动时也不会漏掉已经点过星的人。
+   读仓库最多等 8 秒，超时也照样起来（名单为空，退回 API 通道确认）。 */
+Promise.race([
+  loadStars(),
+  new Promise(r => setTimeout(r, 8000))
+]).then(r => {
+  if (r && r.ok && r.loaded) console.log('loaded', r.loaded, 'known stars');
+  app.listen(process.env.PORT || 3000, () => console.log('gate listening on', process.env.PORT || 3000, VERSION,
+    '| webhook', WEBHOOK_SECRET ? 'on' : 'OFF', '| knownStars', knownStars.size, '| persist', GH_TOKEN ? 'on' : 'off'));
+});
