@@ -5387,18 +5387,23 @@ function ghBar(kind, extra) {
          '小后端没起来或没配 client secret。',
     star: '这个工具是免费的，只要求给仓库点一个 star。<br>点右边「去 GitHub 点星」，在打开那页的右上角点一下 ' +
           '<b>Star</b>（就在 Fork 旁边），再回到这里点「我已点星，重新检查」。' +
-          '<br>不用重新登录 GitHub，点完星刷新一下状态就成。'
+          '<br>不用重新登录 GitHub，点完星刷新一下状态就成。' +
+          (extra ? '<br><br>' + extra : ''),
+    check: '正在向 GitHub 确认你的 star 状态' + (extra ? '（' + extra + '）' : '') +
+           '，通常 2～3 秒。<br>这一步只读公开的 star 列表，不会要你任何权限。'
   };
 
   if (t) t.textContent = ({ wait: '正在等待 GitHub 授权', busy: '正在完成 GitHub 登录', wake: '正在唤醒登录服务（首次较慢）',
                             fail: 'GitHub 登录没完成，还不能下载', deny: 'GitHub 拒绝了这次授权',
-                            srv: '登录服务没打通', star: '还差一步：给项目点个 star' })[kind] || 'GitHub 登录没完成';
+                            srv: '登录服务没打通', star: '还差一步：给项目点个 star',
+                            check: '正在确认 star 状态' })[kind] || 'GitHub 登录没完成';
   if (x) x.innerHTML = T[kind] || T.fail;
   ghBarKind = kind;
-  if (link) link.href = (kind === 'star') ? GH_REPO_URL : ghLastUrl();
-  if (link) link.textContent = (kind === 'star') ? '去 GitHub 点星（右上角 Star）' : '手动打开授权页';
+  if (link) link.href = (kind === 'star' || kind === 'check') ? GH_REPO_URL : ghLastUrl();
+  if (link) link.textContent = (kind === 'star' || kind === 'check') ? '去 GitHub 点星（右上角 Star）' : '手动打开授权页';
   var rt0 = document.getElementById('ghbar-retry');
-  if (rt0) rt0.textContent = (kind === 'star') ? '我已点星，重新检查' : '重新登录';
+  if (rt0) rt0.textContent = (kind === 'check') ? '检查中…'
+                          : ((kind === 'star') ? '我已点星，重新检查' : '重新登录');
   bar.classList.add('on');
 }
 
@@ -5507,41 +5512,70 @@ async function ghFinish(code, state) {
   return true;
 }
 
-/* 去后端查「这个账号到底点没点星」。quiet=true 时失败不弹提示条（后台静默复查用）。 */
-async function ghCheckStar(tries, quiet) {
+/* 去后端查「这个账号到底点没点星」。quiet=true 是后台静默复查（只问一次、不弹条）。
+   点「我已点星，重新检查」时走非静默：最多连查 3 轮（间隔 5 秒）——
+   GitHub 侧刚点完的 star 有时要十几秒才出现在公开列表里，一次查不到就下结论太武断。 */
+var ghStarP = null;
+function ghCheckStar(tries, quiet) {
+  /* 同一时刻只留一个请求：连点几下按钮也只发一次，结果共享 */
+  if (ghStarP) return ghStarP;
+  ghStarP = ghStarRun(quiet).then(
+    function (v) { ghStarP = null; return v; },
+    function () { ghStarP = null; return false; }
+  );
+  return ghStarP;
+}
+
+async function ghStarRun(quiet) {
   var a = ghAuth();
   if (!a || !a.login) return false;
   if (a.star === 1) return true;
-  tries = tries || 0;
-  var j = null, bad = false;
-  try {
-    var r = await fetch(GH_STAR_API + '?login=' + encodeURIComponent(a.login), { cache: 'no-store' });
-    j = await r.json().catch(function () { return {}; });
-    /* 后端还是旧版本（没有 /star）：说清楚，别让人以为是自己没点星 */
-    if (r.status === 404 || r.status === 405) {
-      if (!quiet) ghBar('srv', '服务端还没更新到支持点星检查的版本，等它重新部署完再试（约 1-2 分钟）');
-      return false;
-    }
-    if (!r.ok) bad = true;
-  } catch (e) { bad = true; }
 
-  if (bad) {
-    /* 免费实例在睡觉：先叫醒，再自己重试一次，别让用户对着「没反应」干等 */
-    if (tries < 1) {
-      if (!quiet) ghBar('wake');
-      await new Promise(function (res) { setTimeout(res, 4000); });
-      return ghCheckStar(tries + 1, quiet);
+  var rounds = quiet ? 1 : 3;
+  var last = '', bad = false;
+
+  for (var i = 0; i < rounds; i++) {
+    if (!quiet) ghBar('check', i ? '第 ' + (i + 1) + ' 次尝试' : '');
+    var j = null;
+    bad = false;
+    try {
+      /* fresh=1 让后端跳过 3 分钟缓存 —— 刚点完星必须拿到当下的真实状态 */
+      var r = await fetch(GH_STAR_API + '?login=' + encodeURIComponent(a.login) + '&fresh=1&_=' + Date.now(),
+                          { cache: 'no-store' });
+      j = await r.json().catch(function () { return {}; });
+      /* 后端还是旧版本（没有 /star）：说清楚，别让人以为是自己没点星 */
+      if (r.status === 404 || r.status === 405) {
+        if (!quiet) ghBar('srv', '后端版本 ' + ((j && j.version) || '未知') + '，还没有 /star 接口，等它重新部署完再点一次');
+        return false;
+      }
+      if (!r.ok) {
+        bad = true;
+        last = String((j && (j.description || j.error)) || ('HTTP ' + r.status));
+      } else if (j && j.starred) {
+        a.star = 1; ghSave(a); uiDl(); ghBar(null);
+        toast('已确认你点过 star，现在可以下载了', 4200);
+        return true;
+      } else {
+        last = 'no';
+      }
+    } catch (e) {
+      bad = true;
+      last = String((e && e.message) || e);
     }
-    if (!quiet) ghBar('star');
-    return false;
+
+    /* 免费实例在睡觉：第一次失败先提示「正在唤醒」，再给一轮机会 */
+    if (bad && i === 0 && !quiet) ghBar('wake');
+    if (i < rounds - 1) await new Promise(function (res) { setTimeout(res, bad ? 3500 : 5000); });
   }
-  if (j && j.starred) {
-    a.star = 1; ghSave(a); uiDl(); ghBar(null);
-    toast('已确认你点过 star，现在可以下载了', 4200);
-    return true;
-  }
+
   uiDl();
-  if (!quiet) ghBar('star');
+  if (!quiet) {
+    if (last === 'no') {
+      ghBar('star', '已经点过 Star 的话，可能是 GitHub 那边还没更新：等十几秒再点一次「我已点星，重新检查」。');
+    } else {
+      ghBar('srv', '这次检查没成功：' + (last || '未知原因'));
+    }
+  }
   return false;
 }
 
