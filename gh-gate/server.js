@@ -239,7 +239,14 @@ app.post('/token', async (req, res) => {
     let starred = false;
     try { starred = (await fetchStarred(me.login, { fresh: true, token: t.access_token })).starred; } catch (e) {}
 
-    res.json({ login: me.login || '', name: me.name || '', starred, repo: STAR_REPO, v: VERSION, at: Date.now() });
+    /* 把 token 一并交回浏览器：之后每次复查「点没点星」都带上它，
+       走的是这个用户自己的 5000 次/小时额度，不再受服务器出口 IP 那 60 次连累。
+       这个 OAuth App 的 scope 是空的，token 只能读公开数据 + 「你是谁」，
+       而页面本来就把身份证号手机号存在同一份 localStorage 里 —— 风险并不比那更高。 */
+    res.json({
+      login: me.login || '', name: me.name || '', starred, repo: STAR_REPO,
+      token: t.access_token || '', v: VERSION, at: Date.now()
+    });
   } catch (e) {
     res.status(502).json({ error: 'upstream_failed', description: String((e && e.message) || e) });
   }

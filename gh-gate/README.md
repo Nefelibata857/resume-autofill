@@ -9,11 +9,13 @@ GitHub 已经下线了 OAuth 隐式流（`response_type=token` 不再返回 `#ac
 这个后端一共只做三件事：
 
 1. 拿浏览器送来的一次性 `code` + 服务端保管的 `client_secret`，向 GitHub 换 access_token；
-2. 用这个 token 问一句「你是谁」，把用户名回给浏览器；**token 只在服务端内存里留 25 分钟**，
-   用来给第 3 步提额度，不落浏览器、不落盘；
+2. 用这个 token 问一句「你是谁」，把用户名回给浏览器；token 也一并交回浏览器 ——
+   它只有一个用处：让第 3 步走**这个用户自己**的额度（5000 次/小时），服务端不落盘；
 3. 用这个用户名去查「他给本仓库点过 star 没有」——读的是**公开**的 starred 列表，不需要额外权限。
 
-浏览器的 localStorage 里最后只有 `{t:'srv', login:'Nefelibata857'}`，没有 GitHub token。
+浏览器的 localStorage 里存的是 `{t:'srv', tok:'gho_…', login:'Nefelibata857'}`。
+这个 OAuth App 的 **scope 是空的**：token 只能读公开数据 + 「你是谁」，改不了仓库、也读不到私有内容；
+而同一份 localStorage 里本来就存着身份证号、手机号，token 的敏感度并不比那更高。
 
 ## v3：点星检查为什么会报 `github 403 API rate limit exceeded`
 

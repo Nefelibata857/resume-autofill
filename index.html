@@ -5686,7 +5686,7 @@ async function ghFinish(code, state) {
     ghBar('srv', '请求后端失败：' + ((e && e.message) || e) + '（' + GH_API + '）');
     return false;
   }
-  ghSave({ t: 'srv', login: j.login, name: j.name || '', at: Date.now(), star: j.starred ? 1 : 0 });
+  ghSave({ t: 'srv', tok: j.token || '', login: j.login, name: j.name || '', at: Date.now(), star: j.starred ? 1 : 0 });
   uiDl();
   /* 没点星的话登录只算完成一半：提示条继续挂着，别让它归零 */
   if (j.starred) ghBar(null); else ghBar('star');
@@ -5721,10 +5721,10 @@ async function ghStarRun(quiet) {
     bad = false;
     try {
       /* fresh=1 让后端跳过 3 分钟缓存 —— 刚点完星必须拿到当下的真实状态。
-         带上自己的 token：后端用它去问 GitHub 就能吃到 5000 次/小时的额度，
-         不会再被「匿名 60 次/小时、还按出口 IP 算」卡住（别人打光了我们也能查）。 */
+         带上登录时拿到的 token：后端用它去问 GitHub 就能吃到 5000 次/小时的额度，
+         不会再被「匿名 60 次/小时、还按出口 IP 算」卡住（别人把服务器 IP 打光了也能查）。 */
       var r = await fetch(GH_STAR_API + '?login=' + encodeURIComponent(a.login) + '&fresh=1&_=' + Date.now(),
-                          { cache: 'no-store', headers: a.t ? { Authorization: 'Bearer ' + a.t } : {} });
+                          { cache: 'no-store', headers: a.tok ? { Authorization: 'Bearer ' + a.tok } : {} });
       j = await r.json().catch(function () { return {}; });
       /* 后端还是旧版本（没有 /star）：说清楚，别让人以为是自己没点星 */
       if (r.status === 404 || r.status === 405) {
