@@ -987,9 +987,13 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v40';
+  var ENGINE_VER = 'v41';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER,
              overwrite: [], handled: [], sample: 0 };
+  /* 经历区（实习/项目）的起止时间框：主循环认出来后会交给下面的经历块逻辑填，
+     这里先记下来，等日期队列跑完回读一遍——填上了报喜，还是空的必须说清为什么，
+     不能再像以前那样 silently 丢掉了事。 */
+  var SPAN_WAIT = [];
   /* 数据源自检：书签里带的还是示例人物时提一句，
      否则用户以为填进去的是自己的资料（页面上会出现「张小明 / 浙江大学」）。 */
   try {
@@ -3025,9 +3029,18 @@ function applyResume(D, O) {
              之前就是这里 continue 掉的，而且面板上连一条记录都不留，
              用户只看到「第一遍压根没填，滚到那一块再点一次才填上」。 */
           if (zNow === 'exp') {
-            /* 这一格归「实习/项目时间」字段管（下面那段经历逻辑会填），
-               不算「未识别」，单独记一笔，免得面板上看着像引擎没认出来。 */
-            if (RES.handled.length < 20) RES.handled.push('（实习/项目区）起止时间');
+            /* 这一格归「实习/项目时间」字段管（下面那段经历逻辑会填）。
+               但「交给别人填」不等于「填上了」：资料里没有这段时间、或者那段经历
+               的框没认出来，都会让它一直空着。所以先记下来，
+               等日期队列跑完由 checkSpanWait() 回读核对，空的说清楚原因。 */
+            if (SPAN_WAIT.length < 40) {
+              SPAN_WAIT.push({
+                el: el,
+                ord: (typeof el.__rzOrd === 'number') ? el.__rzOrd : -1,
+                lab: clean(labelText(el) || upLabel(el) || '起止时间') || '起止时间',
+                why: ''
+              });
+            }
             continue;
           }
           var ridx = dateRowIdx(el);
@@ -3332,8 +3345,30 @@ function applyResume(D, O) {
       var INTERN = pack('exp', 4), PROJ = pack('prj', 6);
 
       /* 写一个格子：时间框只认年月日，其余原样写。块对位与全局排队共用这一段 */
+      /* 给某个起止时间框记下「为什么没填上」，checkSpanWait() 回读时用 */
+      function spanWhy(cell, why) {
+        for (var sw = 0; sw < SPAN_WAIT.length; sw++) {
+          if (SPAN_WAIT[sw].el === cell) { SPAN_WAIT[sw].why = why; return; }
+        }
+      }
+
       function putCell(cell, d, kk, mv) {
-        if (!cell || !mv) return false;
+        if (!cell) {
+          if (kk === 'start' || kk === 'end') {
+            RES.failed.push({ l: '第 ' + (d.key || '') + ' 段经历', r: '页面上的起止时间框没认出来，没填' });
+          }
+          return false;
+        }
+        if (!mv) {
+          /* 最常见的一种：资料里压根没有这段时间（exp1_time / prj1_time 空着）。
+              以前这里静默 return false，用户连点三遍也不知道是该去补资料。 */
+          if (kk === 'start' || kk === 'end') {
+            var miss = '资料里没有 ' + (d.key || '') + '_time 这段时间，去表单助手里补上再点一次';
+            RES.failed.push({ l: labelText(cell) || '起止时间', r: miss });
+            spanWhy(cell, miss);
+          }
+          return false;
+        }
         if (kk === 'start' || kk === 'end') {
           var ct = (cell.getAttribute('type') || '').toLowerCase();
           if ((ct === 'date' || ct === 'month') && !/^\d{4}-\d{2}(-\d{2})?$/.test(mv)) {
@@ -3426,6 +3461,16 @@ function applyResume(D, O) {
           var d = list[n];
           var map = { org: d.org, title: d.title, role: d.role, start: d.start, end: d.end, span: d.span, desc: d.desc };
           for (var kk in map) {
+            /* 资料里没有这个字段的值：最常见是「这段时间压根没填进资料」
+               （exp1_time / prj1_time 空着）。以前这里静默 continue，
+               用户看到的就是这一块的时间框一直空着，连点三遍也没线索 ——
+               页面上明明有框、资料里却没值，必须说一声该去补什么。 */
+            if (!map[kk] && (kk === 'start' || kk === 'end') && P[kk] && P[kk][n]) {
+              var miss = '资料里没有 ' + (d.key || '') + '_time 这段时间，去表单助手里补上再点一次';
+              RES.failed.push({ l: labelText(P[kk][n]) || '起止时间', r: miss });
+              spanWhy(P[kk][n], miss);
+              continue;
+            }
             if (!map[kk] || !P[kk] || !P[kk][n]) continue;
             putCell(P[kk][n], d, kk, map[kk]);
           }
@@ -3445,6 +3490,29 @@ function applyResume(D, O) {
         }
       }
     })();
+  }
+
+  /* 经历区起止时间核对：主循环把这些框交给经历逻辑填，这里等日期队列跑完后
+     回读一遍。填上了记一笔「起止时间 = 2025-07」；还是空的按 putCell 留下的原因
+     报出来（资料缺字段 / 框没认出来），不再无声无息。 */
+  function checkSpanWait() {
+    for (var i = 0; i < SPAN_WAIT.length; i++) {
+      var w = SPAN_WAIT[i], el = w.el, v = '';
+      try {
+        if (!el || !el.isConnected) {
+          var pool = liveFields(document);
+          if (w.ord >= 0 && pool[w.ord]) el = pool[w.ord];
+        }
+      } catch (e0) {}
+      try { v = String((el && el.value) || '').trim(); } catch (e1) {}
+      if (v) {
+        if (RES.handled.length < 20) RES.handled.push(w.lab + ' = ' + v.slice(0, 12));
+        continue;
+      }
+      if (RES.failed.length < 40) {
+        RES.failed.push({ l: w.lab, r: w.why || '经历区的起止时间没填上（资料里可能没有这段时间）' });
+      }
+    }
   }
 
   /* 收尾回读核对：写完 ≠ 填上。
@@ -3624,6 +3692,7 @@ function applyResume(D, O) {
     panel();
     runCombo(function () {
       runDates(function () {
+        try { checkSpanWait(); } catch (e) {}
         try { verifyFilled(); } catch (e) {}
         try { panel(); } catch (e) {}
       });
