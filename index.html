@@ -5731,22 +5731,22 @@ async function ghStarRun(quiet) {
         if (!quiet) ghBar('srv', '后端版本 ' + ((j && j.version) || '未知') + '，还没有 /star 接口，等它重新部署完再点一次');
         return false;
       }
-      /* 429 = GitHub 那边的接口额度用完了（匿名每小时 60 次，还按出口 IP 算），
-         不是「你没点星」。原地重试没用，直接说清楚怎么绕过去。 */
+      /* 429 = GitHub 那边的接口额度用完了（匿名每小时 60 次，按出口 IP 算），
+         不是「你没点星」。这种情况直接放行 —— 这道门防的是白嫖，不是防人。
+         （新后端已经把 429 折成 starred:true + assumed，这里留着兼容还没更新的旧后端） */
       if (r.status === 429) {
-        if (!quiet) {
-          ghBar('srv', ((j && j.description) || 'GitHub 接口这个小时的额度用完了')
-            + '。过几分钟再点一次；或者点右边「重新登录」走一遍授权，之后就用你自己的额度查，不会再被卡。');
-        }
-        uiDl();
-        return false;
+        a.star = 1; ghSave(a); uiDl(); ghBar(null);
+        if (!quiet) toast('GitHub 接口额度用完了，没能验证点星，先让你下载', 5000);
+        return true;
       }
       if (!r.ok) {
         bad = true;
         last = String((j && (j.description || j.error)) || ('HTTP ' + r.status));
       } else if (j && j.starred) {
         a.star = 1; ghSave(a); uiDl(); ghBar(null);
-        toast('已确认你点过 star，现在可以下载了', 4200);
+        toast(j.assumed
+          ? '没能向 GitHub 验证（接口额度用完了），先让你下载'
+          : '已确认你点过 star，现在可以下载了', 4200);
         return true;
       } else {
         last = 'no';

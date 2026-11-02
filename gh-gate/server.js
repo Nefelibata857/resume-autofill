@@ -184,15 +184,13 @@ app.get('/star', async (req, res) => {
     res.json(body);
   } catch (e) {
     if (e && e.rateLimited) {
-      return res.status(429).json({
-        error: 'rate_limited',
-        version: VERSION,
-        reset: e.reset,
-        authed: e.authed,
-        description: e.authed
-          ? 'GitHub 接口额度用完了（5000 次/小时），过几分钟再试'
-          : '访问 GitHub 的匿名额度用完了（60 次/小时，按出口 IP 算），不是你没点星',
-        hint: '过几分钟再点「重新检查」；或者点「重新登录」走一遍授权，之后会用你自己的额度'
+      /* 额度用完 → 直接放行（不给验证结论，但也不把人拦在门外）。
+         GitHub 免费接口的 60 次/小时不该变成正常用户下载的障碍：
+         这道门防的是白嫖，不是防人。assumed 标记让前端能说明「没验证成功」。 */
+      return res.json({
+        login, repo: STAR_REPO, starred: true, assumed: 'rate_limited',
+        v: VERSION, at: Date.now(),
+        description: '没能向 GitHub 验证（接口额度用完了），先放行'
       });
     }
     res.status(502).json({ error: 'upstream_failed', version: VERSION, description: String((e && e.message) || e) });
@@ -235,16 +233,20 @@ app.post('/token', async (req, res) => {
 
     /* 顺便把「有没有点星」一起问出来：登录这一步就能决定给不给下载。
        这次用用户自己的 token 查，额度充足、结果也最准。
-       查不到 star 不算失败（网络抖一下不该挡人），先按没点处理，前端还能再查。 */
-    let starred = false;
-    try { starred = (await fetchStarred(me.login, { fresh: true, token: t.access_token })).starred; } catch (e) {}
+       查不到 star 不算失败（网络抖一下不该挡人）：额度用完时直接放行，别把人拦在门外。 */
+    let starred = false, assumed = '';
+    try {
+      starred = (await fetchStarred(me.login, { fresh: true, token: t.access_token })).starred;
+    } catch (e) {
+      if (e && e.rateLimited) { starred = true; assumed = 'rate_limited'; }
+    }
 
     /* 把 token 一并交回浏览器：之后每次复查「点没点星」都带上它，
        走的是这个用户自己的 5000 次/小时额度，不再受服务器出口 IP 那 60 次连累。
        这个 OAuth App 的 scope 是空的，token 只能读公开数据 + 「你是谁」，
        而页面本来就把身份证号手机号存在同一份 localStorage 里 —— 风险并不比那更高。 */
     res.json({
-      login: me.login || '', name: me.name || '', starred, repo: STAR_REPO,
+      login: me.login || '', name: me.name || '', starred, assumed, repo: STAR_REPO,
       token: t.access_token || '', v: VERSION, at: Date.now()
     });
   } catch (e) {
