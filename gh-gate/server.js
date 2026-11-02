@@ -25,7 +25,7 @@
 const express = require('express');
 const app = express();
 
-const VERSION = 'gate/v3.1';
+const VERSION = 'gate/v3.2';
 const CLIENT_ID = process.env.GH_CLIENT_ID || 'Ov23li7TDJXKaxFNgIxd';
 const CLIENT_SECRET = process.env.GH_CLIENT_SECRET || '';
 const GH_TOKEN = (process.env.GH_TOKEN || '').trim();   /* 可选：服务端自己的只读 PAT */
