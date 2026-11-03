@@ -83,7 +83,7 @@ button.primary:hover{background:#000;}
 .card h2::after{content:"";flex:1;height:1px;background:var(--line);}
 
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
-@media(max-width:720px){.grid{grid-template-columns:1fr;}}
+@media(max-width:720px){.grid{grid-template-columns:1fr;}.prog-row{grid-template-columns:1fr;}}
 
 .f{display:flex;flex-direction:column;gap:5px;min-width:0;}
 .f.wide{grid-column:1/-1;}
@@ -388,6 +388,12 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #progress .ptxt .ok{color:var(--ok);}
 #progress .ptxt .no{color:var(--bad);}
 #progress .ptxt .sm{color:var(--bad);font-weight:600;}
+
+/* 填写进度 + 数据自检并排两格：原来叠在一张卡里，白占半屏高度 */
+.prog-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.prog-row>.card{margin-bottom:0;min-width:0;padding:14px 15px 15px;}
+.prog-row>.card h2{margin-bottom:10px;}
+.prog-row>.stip{grid-column:1/-1;margin:0;}
 
 #groups .card h2{cursor:pointer;user-select:none;}
 #groups .card h2::before{
@@ -4330,7 +4336,8 @@ function savedAt() { try { return Number(localStorage.getItem(SAVED_KEY) || 0); 
 function tipOff() { try { return localStorage.getItem(TIPOFF_KEY) === '1'; } catch (e) { return false; } }
 
 function renderSaveTip() {
-  var host = document.getElementById('health');
+  /* 建议存一份的提示横跨两格放，塞进半宽的自检格里会挤成五五行 */
+  var host = document.querySelector('.prog-row') || document.getElementById('health');
   if (!host) return;
   var old = document.getElementById('save-tip');
   if (old) old.remove();
@@ -4402,7 +4409,7 @@ function renderHealth() {
   const sum = document.createElement('div');
   if (blank) {
     sum.className = 'hsum idle';
-    sum.textContent = '还没开始填。填完带「必填」的项目后，这里会自动检查格式和前后一致性。';
+    sum.textContent = '还没开始填。填完必填项后这里自动校验。';
   } else {
     sum.className = 'hsum ' + (errs ? 'bad' : warns ? 'warn' : 'ok');
     sum.textContent = errs ? `${errs} 项需要修正`
@@ -5817,6 +5824,10 @@ function isSampleOn() {
 function renderProgress() {
   let box = document.getElementById('progress');
   if (!box) {
+    /* 两格并排：左「填写进度」、右「数据自检」。以前全叠在一张卡里，占掉半屏高度 */
+    const row = document.createElement('div');
+    row.className = 'prog-row';
+
     box = document.createElement('div');
     box.className = 'card';
     box.id = 'progress';
@@ -5833,21 +5844,19 @@ function renderProgress() {
     const tip = document.createElement('div');
     tip.className = 'tip';
     tip.style.marginTop = '9px';
-    tip.textContent = '最少填完 8 个必填项就能生成可用书签，其余按网申要求补。'
-      + '填完的区块点标题可以收起，看着清爽些。';
+    tip.textContent = '填完 8 个必填项就能生成书签，区块点标题可收起。';
     box.appendChild(tip);
 
-    /* 数据自检并进同一张卡片，中间一条分隔线 */
-    const sep = document.createElement('div');
-    sep.className = 'sep';
-    box.appendChild(sep);
-
+    /* 数据自检单独一格，和进度并排 */
     const hb = document.createElement('div');
+    hb.className = 'card';
     hb.id = 'health';
-    box.appendChild(hb);
+
+    row.appendChild(box);
+    row.appendChild(hb);
 
     const main = document.querySelector('.main');
-    if (main) main.insertBefore(box, main.firstElementChild);
+    if (main) main.insertBefore(row, main.firstElementChild);
   }
   const keys = allKeys();
   const total = keys.length;
