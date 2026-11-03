@@ -441,6 +441,10 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #pf-gate .pfg-p{font-size:12.5px;line-height:1.85;color:#8a7a5c;margin:0 0 12px;max-width:470px}
 #profiles.locked .prow{opacity:.32}
 #profiles.locked .ptip{opacity:.32}
+/* 示例资料警示：网页上填了示例（或下载了示例状态的本地版）时，钉在书签卡片上 */
+.bmswarn{margin-top:10px;padding:10px 12px;background:#fdeceb;border:1px solid #f2c4c0;border-radius:9px;
+  font-size:12.5px;line-height:1.75;color:#8c2f28}
+.bmswarn b{display:block;font-weight:600;margin-bottom:2px}
 
 /* 建议存一份到本地：贴在进度卡片底部，不挡操作 */
 .stip{position:relative;margin-top:12px;padding:11px 34px 11px 13px;
@@ -521,7 +525,7 @@ window.trackEvent = function (name, data) {
   <span class="ws"><b>1</b>在下面填你自己的信息（只存在本机浏览器）</span>
   <span class="ws"><b>2</b>点右上「下载书签文件」</span>
   <span class="ws"><b>3</b>Ctrl+Shift+O 导入书签，以后点一下书签就自动填</span>
-  <span class="ws"><b>?</b>手边没资料？<button class="linkbtn" id="hello-sample" type="button">先填份示例看看效果</button>（随时可撤销）</span>
+  <span class="ws"><b>?</b>手边没资料？<button class="linkbtn" id="hello-sample" type="button">先填份示例看看效果</button>（随时可撤销；<b>注意：示例只是用来看的，别用示例资料生成书签</b>）</span>
   <button class="x" id="hello-x">知道了，关掉</button>
 </div></div>
 
@@ -582,6 +586,10 @@ window.trackEvent = function (name, data) {
 
       <button class="primary installbtn" id="btn-install">安装填表书签</button>
       <div class="status" id="bm-status">点一下，代码进剪贴板，再按 3 下键就好</div>
+      <div class="bmswarn" id="bm-sample" hidden>
+        <b>⚠ 表单里现在是示例人物「张小明」的资料，不是你的</b>
+        从这里生成的书签会把张小明填进招聘网站（学校、起止时间、项目全是他的）。要么在下面改成你自己的资料，要么打开你下载到电脑本地的那份助手来生成。
+      </div>
 
       <div class="minsteps">
         <div class="ms"><i>1</i><div>点上面按钮 → <b>代码已复制</b></div></div>
@@ -3660,10 +3668,12 @@ function applyResume(D, O) {
         + 'color:#fff;background:#1a1917;border-radius:11px;box-shadow:0 12px 40px rgba(0,0,0,.34);overflow:hidden;');
       var head = mk('div', 'display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;');
       var dot = mk('span', 'width:7px;height:7px;border-radius:50%;flex:0 0 7px;background:'
-        + (DIAG ? '#60a5fa' : RES.filled.length ? '#4ade80' : '#f59e0b') + ';');
+        + (DIAG ? '#60a5fa' : RES.sample ? '#f59e0b' : RES.filled.length ? '#4ade80' : '#f59e0b') + ';');
       var ttl = mk('div', 'flex:1;font-weight:600;',
         DIAG ? '页面字段清单 · ' + RES.diag.length + ' 个'
-          : (RES._addTip ? RES._addTip : RES.busy ? '正在填下拉 ' + ASYNC.length + ' 个…' : '已填 ' + RES.filled.length + ' 项'));
+          : (RES._addTip ? RES._addTip : RES.busy ? '正在填下拉 ' + ASYNC.length + ' 个…'
+             : RES.sample ? '⚠ 示例资料（不是你的）· 已填 ' + RES.filled.length + ' 项'
+             : '已填 ' + RES.filled.length + ' 项'));
       var sub = mk('div', 'font-size:11px;color:rgba(255,255,255,.48);', '点击展开');
       /* 把标题暴露出来，队列每处理一项就改一次，用户能看出「它还在动」 */
       RES._ttl = function (s) { try { ttl.textContent = s; } catch (eT0) {} };
@@ -3694,7 +3704,8 @@ function applyResume(D, O) {
       if (!DIAG && RES.newer && verNum(RES.newer) > verNum(RES.ver)) {
         body.appendChild(mk('div', 'font-size:12px;color:#ffcf7a;line-height:1.6;padding:2px 0 6px;',
           '这个书签是 ' + RES.ver + '，线上已经是 ' + RES.newer
-          + '。最近修过的几个问题都在新版里，建议去表单助手重新生成一次书签（旧书签删掉）。'));
+          + '。最近修过的几个问题都在新版里——请打开你下载到电脑本地的那份「简历填表助手」重新生成'
+          + '（在公开网页上直接生成，用的可能是网页当时的资料，别搞错）。'));
       }
       /* 折叠区块里的必填框扫不到，用户只会觉得「这块没填」，得说清楚是没展开而不是没认出来 */
       if (!DIAG && RES.hiddenReq) {
@@ -3787,6 +3798,31 @@ function applyResume(D, O) {
     } catch (e) {}
   }
 
+  /* 示例资料终局警告：真实事故是用户在网页上点了「填入示例」再生成书签，
+     把张小明（浙江大学/2022-09/城市微更新）填进了字节招聘页，自己的资料还在本地版里。
+     面板 9 秒会自动收起，必须再给一个关不掉的醒目提示。 */
+  function sampleToast() {
+    try {
+      var old = document.getElementById('__rz_sample_warn');
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      var d = document.createElement('div');
+      d.id = '__rz_sample_warn';
+      d.textContent = '⚠ 刚填进页面的是示例人物（张小明）的资料，不是你的！'
+        + '学校、起止时间、项目全是他的。请用你下载到电脑本地的那份「简历填表助手」重新生成书签，再点一次。';
+      d.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:2147483647;'
+        + 'max-width:min(560px,calc(100vw - 32px));background:#b8433a;color:#fff;'
+        + 'font:13px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;'
+        + 'padding:11px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.3);text-align:center;';
+      var x = document.createElement('span');
+      x.textContent = ' ✕';
+      x.style.cssText = 'cursor:pointer;opacity:.85;margin-left:6px;font-weight:600;';
+      x.onclick = function () { if (d.parentNode) d.parentNode.removeChild(d); };
+      d.appendChild(x);
+      document.body.appendChild(d);
+      setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 20000);
+    } catch (eT) {}
+  }
+
   /* 有下拉组件待填：先亮个面板，再一个个点开选，全填完刷新一次结果 */
   /* 版本比对不阻塞填表：异步发出去，结果回来时面板自己会补一条提示 */
   if (!DIAG) checkVer();
@@ -3799,11 +3835,13 @@ function applyResume(D, O) {
         try { checkSpanWait(); } catch (e) {}
         try { verifyFilled(); } catch (e) {}
         try { panel(); } catch (e) {}
+        try { if (RES.sample && RES.filled.length) sampleToast(); } catch (eT) {}
       });
     });
   } else {
     try { verifyFilled(); } catch (e) {}
     panel();
+    try { if (RES.sample && RES.filled.length) sampleToast(); } catch (eT) {}
   }
   }
 
@@ -4707,6 +4745,7 @@ function syncBanner() {
   try { saved = localStorage.getItem(HASH_KEY) || ''; } catch (e) {}
   const dirty = saved && saved !== payloadHash();
   b.classList.toggle('on', !!dirty);
+  uiSampleWarn();          /* 示例资料警示条跟着数据显隐 */
 }
 
 function refreshBookmarks() {
@@ -4950,7 +4989,27 @@ function incompleteWarn() {
     + '\n\n现在生成的书签会缺这些内容，确定继续？');
 }
 
+/* 示例资料闸门：真实事故——用户在网页上点了「填入示例」再生成书签，
+   把张小明（浙江大学/2022-09/城市微更新）填进了字节招聘页，自己的资料还在本地版里，
+   连教育起止都被覆盖成了错的。生成书签前必须拦一道。 */
+function sampleWarn() {
+  if (!isSampleOn()) return true;
+  return confirm('⚠ 表单里现在还是示例人物「张小明」的资料，不是你的！\n\n'
+    + '用这份资料生成的书签，会把张小明填进招聘网站——学校、起止时间、项目全是他的。\n\n'
+    + '想填你自己的资料？点「取消」，然后二选一：\n'
+    + '· 在下面把表单改成你自己的信息；\n'
+    + '· 打开你下载到电脑本地的那份「简历填表助手」文件来生成。\n\n'
+    + '确定要继续用示例资料生成吗？');
+}
+
+/* 示例资料警示条：数据还是张小明时就钉在书签卡片上（跟着数据变化显隐） */
+function uiSampleWarn() {
+  var el = document.getElementById('bm-sample');
+  if (el) el.hidden = !isSampleOn();
+}
+
 const doDownloadBookmarks = () => {
+  if (!sampleWarn()) return;
   if (!incompleteWarn()) return;
   download('简历填表书签.html', bookmarksFile(), 'text/html;charset=utf-8');
   markExported();
@@ -4983,6 +5042,7 @@ function closeInstall() {
 }
 
 async function doInstall() {
+  if (!sampleWarn()) return;
   if (!incompleteWarn()) return;
   const url = 'javascript:' + encodeURIComponent(buildScript({ exp: true }));
   openInstall();                        /* 先弹层：即便复制失败，也有别的出口 */
@@ -6322,6 +6382,7 @@ refreshBookmarks();
 syncBanner();
 renderProfiles();
 uiProfiles();
+uiSampleWarn();
 
 document.getElementById('btn-dl').addEventListener('click', () => {
   if (!ghLogged()) return ghLogin();
