@@ -158,8 +158,32 @@ pre.script{
   font:11.5px/1.6 ui-monospace,Consolas,monospace;max-height:150px;overflow:auto;
   white-space:pre-wrap;word-break:break-all;margin-top:8px;
 }
+.seghead{grid-column:1/-1;display:flex;align-items:center;gap:10px;margin-top:8px;
+  border-top:1px dashed var(--line);padding-top:8px;font-size:12.5px;color:var(--sub);}
+.seghead b{color:var(--ink);font-weight:600;}
+.segdel{border:none;background:none;color:var(--bad);font:inherit;font-size:12px;cursor:pointer;padding:0;}
+.segdel:hover{text-decoration:underline;}
+.segbar{display:flex;align-items:center;gap:10px;margin-top:10px;}
+.segadd{border:1px dashed var(--line);background:#fff;border-radius:8px;padding:6px 14px;
+  font:inherit;font-size:12.5px;color:var(--sub);cursor:pointer;}
+.segadd:hover:not(:disabled){border-color:var(--gold);color:var(--ink);}
+.segadd:disabled{opacity:.45;cursor:default;}
+.segtip{font-size:11.5px;color:var(--sub);}
 .status{font-size:12px;color:var(--ok);margin-top:6px;min-height:16px;}
 .status.dirty{color:var(--warn);}
+
+/* ---------- 引擎版本切换 ---------- */
+.engpick{display:flex;gap:6px;margin:0 0 9px;}
+.engbtn{
+  flex:1;min-width:0;padding:7px 6px;border:1px solid var(--line);background:#fff;
+  border-radius:8px;font:inherit;font-size:12.5px;line-height:1.3;color:var(--sub);
+  cursor:pointer;transition:border-color .15s,background .15s,color .15s;
+}
+.engbtn:hover{border-color:var(--gold);color:var(--ink);}
+.engbtn.on{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:600;}
+.engbtn.on:hover{border-color:var(--ink);color:#fff;}
+.engbtn b{font-weight:600;opacity:.72;margin-left:4px;font-variant-numeric:tabular-nums;}
+.engtip{font-size:11.5px;line-height:1.55;color:var(--sub);margin:0 0 12px;}
 .sep{height:1px;background:var(--line);margin:14px 0 12px;}
 
 /* ---------- 安装书签 ---------- */
@@ -590,6 +614,12 @@ window.trackEvent = function (name, data) {
     <div class="card">
       <h2>一键填表</h2>
 
+      <div class="engpick" id="eng-pick" role="group" aria-label="选择引擎版本">
+        <button type="button" class="engbtn on" data-eng="stable" aria-pressed="true">稳定版<b id="eng-v-stable">v40</b></button>
+        <button type="button" class="engbtn" data-eng="test" aria-pressed="false">测试版<b id="eng-v-test">v43</b></button>
+      </div>
+      <p class="engtip" id="eng-tip">稳定版在最常见的网申表单上验证过，建议默认用它。</p>
+
       <button class="primary installbtn" id="btn-install">安装填表书签</button>
       <div class="status" id="bm-status">点一下，代码进剪贴板，再按 3 下键就好</div>
       <div class="bmswarn" id="bm-sample" hidden>
@@ -612,6 +642,9 @@ window.trackEvent = function (name, data) {
       <details class="alt">
         <summary>其他安装方式</summary>
         <a class="bm" id="bm-full" href="javascript:void 0"><span class="drag">⇢</span> 直接拖我到书签栏</a>
+        <!-- 书签脚本预览载体：回归测试从渲染后的 DOM 里导出页面自己生成的书签（export.js），
+             平时对用户隐藏，不影响任何交互 -->
+        <pre class="script" id="script-preview" hidden></pre>
         <div class="tip">能拖动就最省事；新版 Chrome 有时会拦下 <code>javascript:</code> 链接的拖拽。</div>
         <button id="btn-bmfile" style="width:100%;margin-top:10px">下载书签文件再导入</button>
         <div class="tip" style="margin-top:6px">
@@ -893,11 +926,3114 @@ window.trackEvent = function (name, data) {
 }
 </script>
 
+<!-- 测试版引擎（v43）：纯文本存放，本页面不执行；
+     只有点「测试版」生成的书签才会带这段代码。默认用的是上面那段 applyResume。 -->
+<script type="text/plain" id="eng-test">
+function applyResume(D, O) {
+  O = O || {};
+  var DIAG = !!O.diag;
+  var ENGINE_VER = 'v43';
+  var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER,
+             overwrite: [], handled: [], sample: 0, newer: '' };
+  /* 经历区（实习/项目）的起止时间框：主循环认出来后会交给下面的经历块逻辑填，
+     这里先记下来，等日期队列跑完回读一遍——填上了报喜，还是空的必须说清为什么，
+     不能再像以前那样 silently 丢掉了事。 */
+  var SPAN_WAIT = [];
+  /* 数据源自检：书签里带的还是示例人物时提一句，
+     否则用户以为填进去的是自己的资料（页面上会出现「张小明 / 浙江大学」）。 */
+  try {
+    if (String(D.name || '') === '张小明' && String(D.school || '') === '浙江大学') RES.sample = 1;
+  } catch (e0) {}
+  /* 轻量轨迹：出问题时不用开 DevTools，面板/控制台里看 __RZ.trace 就知道
+     卡在哪一步（下拉点了不开、看门狗判失败、日期队列有没有轮到）。 */
+  var TRACE = [];
+  RES.trace = TRACE;
+  function tr(s) {
+    try { if (TRACE.length < 300) TRACE.push((Date.now() % 1000000) + ' ' + s); } catch (e0) {}
+  }
+
+  /* ---------- 规则表：[字段, 命中正则, 排除正则] ---------- */
+  var RULES = [
+    ['name',          /(姓\s*名|真实姓名|中文姓名|中文名|申请人姓名)/, /(公司|单位|企业|学校|项目|作品|紧急|家属|父|母|导师|推荐人|英文|拼音|联系人|文件)/],
+    ['enName',        /(英文名|英文姓名|english\s*name)/i, /(中文)/],
+    ['gender',        /(性别)/, /(要求|偏好|比例)/],
+    ['birthday',      /(出生日期|出生年月日|出生年月|生日)/, /(地|籍|省份|城市)/],
+    ['age',           /(年龄)/, /(工龄|教龄)/],
+    ['height',        /(身高)/, null],
+    ['weight',        /(体重)/, null],
+    ['maritalStatus', /(婚姻状况|婚姻状态|婚否|婚姻)/, null],
+    ['healthStatus',  /(健康状况|身体状况|健康情况)/, null],
+    ['phone',         /(手机号码|手机号|手机|联系电话|联系方式|电话号码|移动电话|mobile|phone)/i, /(验证码|区号|固话|紧急|父|母|家属|备用|学校|单位|公司|办公)/],
+    ['email',         /(电子邮箱|邮箱|电子邮件|e-?mail)/i, /(验证码|确认|备用)/],
+    ['emergencyPhone',/(紧急联系.{0,8}(电话|手机|号码)|紧急电话)/, /(姓名|名字)/],
+    ['emergencyName', /(紧急联系人)/, /(电话|手机|号码)/],
+    ['wechat',        /(微信号|微信账号|微信)/, /(公众号|群|二维码)/],
+    ['qq',            /((^|[^a-z])qq([^a-z]|$))/i, /(邮箱|群)/],
+    ['hometown',      /(籍贯|户籍所在地|户籍|户口所在地|户口所在)/, /(详细地址|通讯地址|家庭地址)/],
+    ['zipcode',       /(邮政编码|邮编|邮\s*编|zip\s*code|postcode)/, /(电话|手机|邮箱)/],
+    ['birthPlace',    /(生源所在地|生源地|生源)/, /(地址)/],
+    ['currentCity',   /(现居住地|现居|所在城市|当前城市|居住城市|常住地)/, /(期望|意向|学校|出生)/],
+    ['address',       /(通讯地址|联系地址|详细地址|邮寄地址|家庭地址|现住址|住址)/, /(邮编|邮箱)/],
+    ['ethnicity',     /(民族)/, /(要求)/],
+    ['political',     /(政治面貌)/, null],
+    ['idType',        /(证件号码类型|证件类型|身份证件类型)/, null],
+    /* 「驾照」放在身份证前面：否则「驾驶证」里的「证」容易被证件规则抢走 */
+    ['driverLicense', /(驾照|驾驶证|驾驶执照|准驾车型|驾照类型|驾驶证类型)/, /(档案|编号|有效期|上传|照片|图片)/],
+    ['idcard',        /(公民身份号码|身份证号码|身份证号|身份证|证件号码|证件号|个人证件|证件信息)/, /(类型|有效期|照片|扫描|上传|正面|反面)/],
+    ['mbti',          /(mbti)/i, null],
+    ['school',        /(毕业院校|就读院校|学校名称|毕业学校|院校名称|就读学校|所在院校)/, /(专业|高中|中学|小学|公司|单位|院系)/],
+    ['college',       /(学院|院系|系别)/, /(学校|大学名称)/],
+    ['major',         /(所学专业|专业名称|主修专业|就读专业|专业(?!排名|课程|课|技能|方向|知识|素养|成绩|类别|代码|技术))/, /(方向|排名|技能|辅修)/],
+    /* 「学历类型」是培养形式（统招全日制…），别被下面的「学历」抢走，所以放前面 */
+    ['eduType',       /(受教育类型|培养方式|学习形式|教育形式|招生类型|学历类型)/, /(学位)/],
+    ['degree',        /(最高学历|学历|培养层次)/, /(学位|证书编号|毕业院校|类型|形式|方式)/],
+    ['academicDegree',/(学位)/, /(学历|证书编号)/],
+    ['isUpgrade',     /(是否专升本|专升本)/, null],
+    ['studentId',     /(学号)/, null],
+    ['className',     /(班级)/, null],
+    ['tutor',         /(导师|指导教师)/, /(推荐人|联系人)/],
+    ['enrollDate',    /(入学时间|入学年月|入学日期|起止时间|起止年月|就读时间|在校时间|起止日期)/, /(项目|实习|工作|公司|单位)/],
+    ['graduateDate',  /(毕业时间|毕业年月|毕业日期|预计毕业)/, /(入学)/],
+    ['gpa',           /(gpa|绩点)/i, /(排名|专业课)/],
+    ['majorGpa',      /(专业课.*(绩点|gpa)|(绩点|gpa).*专业课)/i, null],
+    ['majorRank',     /(专业排名|专业课排名|专业绩点排名|专业名次)/, null],
+    ['rank',          /(年级排名|班级排名|成绩排名|综合排名|排名|名次)/, null],
+    ['targetJob',     /(应聘岗位|求职意向|意向岗位|期望职位|申请职位|应聘职位|应聘方向|目标岗位|意向职位)/, /(城市|地点|薪资|要求|描述)/],
+    ['targetCity',    /(期望城市|意向城市|期望工作地|期望地点|工作城市|意向工作区域|意向工作地|意向地区|工作区域)/, /(岗位|职位)/],
+    ['expectSalary',  /(期望薪资|薪资要求|期望月薪|期望年薪|期望待遇|薪资期望)/, null],
+    ['jobType',       /(求职类型|工作性质|招聘类型)/, null],
+    ['transferAccept',/(是否接受.{0,8}调剂|接受调剂|服从调剂)/, /(地点|城市)/],
+    ['transferCities',/(调剂.{0,6}(地点|城市|区域)|可调剂(地点|城市))/, /(是否|接受)/],
+    ['tripartite',    /(三方协议)/, null],
+    ['availableDate', /(到岗时间|可到岗|可入职时间)/, /(经历|工作经历)/],
+    ['portfolio',     /(作品集|个人主页|作品链接|portfolio|github)/i, /(文件|上传|附件)/],
+    /* 字节这类页面把「证书」「语言能力」单独成块：一个名称/语言下拉 + 一个等级或描述 */
+    ['certName',      /(证书名称|资格证书|执业资格|技能证书|证书(?!编号|日期|时间|照片|扫描|上传|描述|类型))/, /(描述|编号|说明|时间|日期)/],
+    ['languageLevel', /(精通程度|熟练程度|掌握程度|语言水平|外语水平|语言等级|语言能力等级)/, null],
+    ['languageScore', /(分数|成绩(?!单|时间|日期|编号))/, /(时间|日期|编号|单|上传|照片)/],
+    ['language',      /(外语|语言(?!编程))/, /(精通|熟练|掌握|程度|等级|水平|编程|开发|种类|字符)/],
+    /* 字节这类页面把经历里的描述框就叫「描述」，前面不带任何前缀，所以这里必须能单吃「描述」。
+       「自我描述 / 个人描述 / 简介」归 selfEval，用排除项挡住。 */
+    ['exp1_desc',     /(描述|工作内容|工作描述|实习内容|职责描述|主要职责|业绩描述|项目描述)/, /(自我|个人|简介|自我介绍)/],
+    ['selfEval',      /(自我评价|自我介绍|个人简介|个人优势|个人陈述|自我描述|个人评价|个人特长)/, null],
+    ['skills',        /(专业技能|技能特长|掌握技能|技能水平)/, null],
+    ['awards',        /(获奖情况|奖项荣誉|获奖经历|所获奖励|荣誉奖励|奖惩情况|获奖)/, null],
+    ['sports',        /(兴趣爱好|文体特长|个人爱好|特长爱好|爱好)/, null],
+    ['coursesFull',   /(专业课程|修读课程|课程名称|主修课程清单)/, null],
+    ['courses',       /(主修课程|核心课程|主要课程)/, null],
+    ['jobSource',     /(求职信息来源|信息来源|信息渠道|获知渠道|获知途径|了解到.{0,4}渠道|渠道来源)/, /(邮箱|电话|姓名)/],
+    ['nationality',   /(国籍|国家\/地区|所属国家|国际\/地区)/, /(民族|籍贯|户口)/]
+  ];
+
+  var YES = /^(是|有|同意|接受|可以|愿意|true|yes|1)$/i;
+  var NO  = /^(否|没有|不同意|不接受|不可以|不愿意|false|no|0)$/i;
+
+  /* 用户自定义字段：[[key, "别名1|别名2|…"]]，内置规则没命中时兜底 */
+  var CX = O.cx || [];
+
+  /* ---------- 跨文档小工具 ---------- */
+  function W(el) {
+    try { return (el.ownerDocument && el.ownerDocument.defaultView) || window; }
+    catch (e) { return window; }
+  }
+  function fire(el) {
+    var w = W(el), d = el.ownerDocument || document;
+    function ev(t) {
+      try { el.dispatchEvent(new w.Event(t, { bubbles: true })); }
+      catch (e) {
+        try {
+          var e2 = d.createEvent('HTMLEvents');
+          e2.initEvent(t, true, true);
+          el.dispatchEvent(e2);
+        } catch (e3) {}
+      }
+    }
+    ev('input'); ev('change'); ev('blur');
+  }
+  /* 用原型上的 setter 赋值，React / Vue 受控组件才认 */
+  function protoSet(el, val) {
+    var w = W(el), t = el.tagName, P = null, d = null;
+    try {
+      if (t === 'TEXTAREA') P = w.HTMLTextAreaElement && w.HTMLTextAreaElement.prototype;
+      else if (t === 'SELECT') P = w.HTMLSelectElement && w.HTMLSelectElement.prototype;
+      else P = w.HTMLInputElement && w.HTMLInputElement.prototype;
+      if (P) d = Object.getOwnPropertyDescriptor(P, 'value');
+    } catch (e) {}
+    try { if (d && d.set) d.set.call(el, val); else el.value = val; }
+    catch (e) { el.value = val; }
+    fire(el);
+  }
+  function isDateKey(k) { return /(Date|Month)$/.test(k) || k === 'birthday'; }
+  /* 日期 / 月份控件（Semi、AntD、Element 一个脾气）：
+     点开面板 → 等渲染 → 写值 → 回车 → 看「面板有没有关」来判定到底有没有提交。
+     只看输入框里的字会被骗：组件会把不合法的串原样留在框里，实际没认。 */
+  /* 注意：.semi-datepicker 是控件本身的容器（永远包着 input），不是面板。
+     以前把它当面板判，等于恒为 true —— 于是「面板开着」永远成立，写值后必按回车、
+     失败又必 Escape，最后把已经填好的值抹掉。这里只认真正的浮层，且必须不含 el。 */
+  var PANEL_SEL = '.semi-datepicker-panel,.semi-datepicker-month,.ant-picker-dropdown,.ant-calendar,.el-picker-panel,.el-date-picker,.el-date-range-picker,.ivu-date-picker,.ivu-picker-panel,.t-date-picker__panel,.layui-laydate,[class*="datepicker-popup"],[class*="datePickerPopup"],[class*="picker-popover"],[class*="picker-dropdown"],[class*="picker-panel"]';
+  function datePanelOpen(el) {
+    var doc = el.ownerDocument || document, all, i;
+    try { all = doc.querySelectorAll(PANEL_SEL); } catch (e) { return false; }
+    for (i = 0; i < all.length; i++) {
+      var n = all[i], r;
+      /* 控件自己的外壳会被命中，跳过；面板是挂在 body 下的兄弟节点 */
+      try { if (n === el || (n.contains && n.contains(el))) continue; } catch (e0) {}
+      try { r = n.getBoundingClientRect(); } catch (e2) { continue; }
+      if (r.width > 2 && r.height > 2) return true;
+    }
+    return false;
+  }
+  function fillDate(el, val, cb) {
+    var s = String(val == null ? '' : val).replace(/[年月日./]/g, '-').replace(/-+/g, '-');
+    var m = /^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/.exec(s);
+    if (!m) return cb(false);
+    var Y = m[1], M = m[2].length === 1 ? '0' + m[2] : m[2];
+    var D2 = m[3] ? (m[3].length === 1 ? '0' + m[3] : m[3]) : '';
+    var doc = el.ownerDocument || document;
+    var w = W(el), k = 0, cands;
+    /* 原生 <input type=month|date>：浏览器自己管格式，直接写值就成。
+       这类框去点它只会弹出原生选择器（点不到、也翻不了年），纯属浪费几秒。 */
+    var natType = '';
+    try { natType = (el.getAttribute('type') || '').toLowerCase(); } catch (eT) {}
+    function okVal0() {
+      var n = String(el.value || '').replace(/[^\d]/g, '');
+      return n.indexOf(Y + M) === 0;
+    }
+    if (natType === 'month' || natType === 'date') {
+      var nv = natType === 'date' ? (Y + '-' + M + '-' + (D2 || '01')) : (Y + '-' + M);
+      try { el.focus(); } catch (eF) {}
+      put(nv);
+      setTimeout(function () { cb(okVal0()); }, 80);
+      return;
+    }
+    /* 先滚到视野中间再点：面板是按输入框定位的，字段在屏幕外时点开的位置、
+       以及后续按 getBoundingClientRect 找年份/月份格子的判断都会偏。 */
+    try { if (el.scrollIntoView) el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (eSc) {}
+    /* 直接 el.value = v 会被 React 受控组件当成「没变过」直接回滚，只有真输入才认。
+       execCommand('insertText') 会派发真正的 beforeinput/input，最接近手打。 */
+    function put(v) {
+      var doc = el.ownerDocument || document, ins = false;
+      try { if (el.focus) el.focus(); } catch (e0) {}
+      try {
+        try { el.select(); } catch (e1) {}
+        ins = doc.execCommand('insertText', false, String(v));
+      } catch (e2) { ins = false; }
+      if (!ins || String(el.value || '') !== String(v)) {
+        var P = null, d = null;
+        try { P = w.HTMLInputElement && w.HTMLInputElement.prototype; if (P) d = Object.getOwnPropertyDescriptor(P, 'value'); } catch (e) {}
+        try { if (d && d.set) d.set.call(el, v); else el.value = v; } catch (e3) { el.value = v; }
+        try { el.dispatchEvent(new w.Event('input', { bubbles: true })); } catch (e4) {}
+        try { el.dispatchEvent(new w.Event('change', { bubbles: true })); } catch (e5) {}
+      }
+    }
+    function monthPanel() {
+      var doc = el.ownerDocument || document, all, i;
+      try { all = doc.querySelectorAll('li,div,span'); } catch (e) { return false; }
+      for (i = 0; i < all.length && i < 4000; i++) {
+        var e = all[i];
+        if (e.children && e.children.length) continue;
+        if (!/^\d{1,2}\s*月$/.test((e.textContent || '').trim())) continue;
+        try { if (e.contains && e.contains(el)) continue; } catch (e9) {}
+        var r;
+        try { r = e.getBoundingClientRect(); } catch (e2) { continue; }
+        if (r.width > 2 && r.height > 2) return true;
+      }
+      return false;
+    }
+    function pickerish(e) {
+      try { if (e.closest && e.closest('[class*="datepicker"],[class*="DatePicker"],[class*="calendar"],[class*="picker"]')) return true; } catch (e2) {}
+      var t = (e.getAttribute('placeholder') || '') + ' ' + (e.getAttribute('aria-label') || '');
+      return /(时间|日期|年月|date|month)/i.test(t);
+    }
+    /* 值有没有被组件接住：看框里现在的数字是不是以「年+月」开头。
+       字节那个页面点输入框不弹面板，是打字才弹，所以不能再用「面板开没开」判断类型。 */
+    function okVal() {
+      var n = String(el.value || '').replace(/[^\d]/g, '');
+      return n.indexOf(Y + M) === 0;
+    }
+    /* ---- 点选路径 ----
+       字节这类月份面板是「年份下拉 + 12 个月格子」：打字进去它不认（受控组件会回滚），
+       点两下反而稳：先点标题里的年份，再点目标月份。 */
+    function pad2(x) { return String(x).length < 2 ? '0' + String(x) : String(x); }
+    function sameEl(n) { try { return n === el || el.contains(n); } catch (e) { return false; } }
+    function leaves(re, skip) {
+      var doc = el.ownerDocument || document, out = [], all, i;
+      try { all = doc.querySelectorAll('div,span,li,a,td'); } catch (e) { return out; }
+      for (i = 0; i < all.length && i < 6000; i++) {
+        var n = all[i];
+        if (n.children && n.children.length) continue;
+        var t = (n.textContent || '').trim();
+        if (!t || t.length > 8 || !re.test(t)) continue;
+        if (skip && skip(n)) continue;
+        var r; try { r = n.getBoundingClientRect(); } catch (e2) { continue; }
+        if (r.width < 2 || r.height < 2) continue;
+        out.push(n);
+      }
+      return out;
+    }
+    /* 月份面板只有「‹ YYYY年 › + 12 个格子」，年份没有下拉可选 —— 只能点左右箭头一格一格翻。
+       字节（以及大量自研组件）就是这样：打字不认、点年份标题也不弹列表，唯一点得动的就是箭头。 */
+    function lca(list) {
+      if (!list.length) return null;
+      var doc = el.ownerDocument || document;
+      var a = list[0], i, ok;
+      while (a && a !== doc.body) {
+        ok = true;
+        for (i = 1; i < list.length; i++) { try { if (!a.contains(list[i])) { ok = false; break; } } catch (e) { ok = false; break; } }
+        if (ok) return a;
+        a = a.parentElement;
+      }
+      return null;
+    }
+    /* 和年份标题同一行、在它右边的两个小方块，就是翻页箭头 */
+    function yearArrows(box, y) {
+      var yr, cy, out = [], all, i;
+      try { yr = y.getBoundingClientRect(); } catch (e) { return out; }
+      if (!yr || yr.height < 2) return out;
+      cy = yr.top + yr.height / 2;
+      try { all = box.querySelectorAll('*'); } catch (e2) { return out; }
+      for (i = 0; i < all.length && i < 4000; i++) {
+        var n = all[i], r;
+        try { r = n.getBoundingClientRect(); } catch (e3) { continue; }
+        if (r.width < 5 || r.height < 5 || r.width > 46 || r.height > 46) continue;
+        if (Math.abs((r.top + r.height / 2) - cy) > 14) continue;
+        if (r.left < yr.right - 4) continue;
+        try { if (n.contains && n.contains(y)) continue; } catch (e4) {}
+        out.push({ el: n, x: Math.round(r.left), y: Math.round(r.top) });
+      }
+      out.sort(function (a, b) { return a.x - b.x || a.y - b.y; });
+      var uniq = [], j, m;
+      for (j = 0; j < out.length; j++) {
+        var dup = false;
+        for (m = 0; m < uniq.length; m++) {
+          if (Math.abs(uniq[m].x - out[j].x) < 4 && Math.abs(uniq[m].y - out[j].y) < 4) { dup = true; break; }
+        }
+        if (!dup) uniq.push(out[j]);
+      }
+      return uniq;
+    }
+    /* AntD 这类「年 月 + 日」日历（智联就是这一种）：
+       数据只有年月时选当月 1 日；用「上个月/下个月」按钮直接翻到目标年月，
+       再点带 YYYY-MM-DD title 的日期格，避开上月/下月补位的同号格子。 */
+    function dayByClick(cb3) {
+      var done = false, guard = 0;
+      function fin(ok) { if (done) return; done = true; cb3(ok); }
+      function state() {
+        var ys = leaves(/^\d{4}\s*年$/, sameEl);
+        var ms = leaves(/^\d{1,2}\s*月$/, sameEl);
+        var ds = leaves(/^\d{1,2}$/, sameEl);
+        if (!ys.length || !ms.length || ds.length < 20) return null;
+        var yy = parseInt(String(ys[0].textContent).replace(/\D/g, ''), 10);
+        var mm = parseInt(String(ms[0].textContent).replace(/\D/g, ''), 10);
+        if (!yy || !mm || mm > 12) return null;
+        return { y: yy, m: mm };
+      }
+      function nav(next) {
+        var doc = el.ownerDocument || document, all, i;
+        var re = next ? /(下个月|下一月|next month)/i : /(上个月|上一月|previous month|prev month)/i;
+        try { all = doc.querySelectorAll('button,[role="button"],[aria-label]'); } catch (e) { return null; }
+        for (i = 0; i < all.length; i++) {
+          var n = all[i], a = String(n.getAttribute('aria-label') || '');
+          if (!re.test(a)) continue;
+          try { if (sameEl(n) || !shown(n)) continue; } catch (e2) { continue; }
+          return n;
+        }
+        return null;
+      }
+      function pickDay() {
+        var doc = el.ownerDocument || document, day = D2 || '01';
+        var full = Y + '-' + M + '-' + day, all = [], i, tgt = null;
+        try { all = doc.querySelectorAll('[title]'); } catch (e) {}
+        for (i = 0; i < all.length; i++) {
+          var ti = String(all[i].getAttribute('title') || '').replace(/[./]/g, '-');
+          if (ti !== full) continue;
+          try { if (sameEl(all[i]) || !shown(all[i])) continue; } catch (e2) { continue; }
+          tgt = all[i]; break;
+        }
+        /* 无 title 的自研日历：优先当前月（in-view）的那一枚，别点补位灰字 */
+        if (!tgt) {
+          var ds = leaves(/^\d{1,2}$/, sameEl), fallback = null;
+          for (i = 0; i < ds.length; i++) {
+            if (parseInt(String(ds[i].textContent).trim(), 10) !== parseInt(day, 10)) continue;
+            var p = ds[i];
+            try { if (p.closest) p = p.closest('td') || p; } catch (e3) {}
+            var cc = '';
+            try { cc = clsOf(p) + ' ' + clsOf(ds[i]); } catch (e4) {}
+            if (/(out-of-view|outview|disabled)/i.test(cc)) continue;
+            if (/(in-view|inview|current)/i.test(cc)) { tgt = ds[i]; break; }
+            if (!fallback) fallback = ds[i];
+          }
+          tgt = tgt || fallback;
+        }
+        if (!tgt) return fin(false);
+        tapHit(tgt);
+        setTimeout(function () { fin(okVal()); }, 460);
+      }
+      function step() {
+        if (guard++ > 120) return fin(false);
+        var st = state();
+        if (!st) return fin(false);
+        var diff = (parseInt(Y, 10) * 12 + parseInt(M, 10) - 1) - (st.y * 12 + st.m - 1);
+        if (!diff) return pickDay();
+        var btn = nav(diff > 0);
+        if (!btn) return fin(false);
+        tapHit(btn);
+        setTimeout(step, 150);
+      }
+      step();
+    }
+    function dateByClick(cb2) {
+      var done = false, guard = 0, dir = 0;
+      function fin(ok) { if (done) return; done = true; cb2(ok); }
+      function yearLab() {
+        var ys = leaves(/^\d{4}\s*年$/, sameEl);
+        return ys.length ? ys[0] : null;
+      }
+      function pickM() {
+        var ms = leaves(/^\d{1,2}\s*月$/, sameEl);
+        var want = pad2(M) + '月', want2 = String(parseInt(M, 10)) + '月', tgt = null;
+        for (var i = 0; i < ms.length; i++) {
+          var t = String(ms[i].textContent).replace(/\s/g, '');
+          if (t === want || t === want2) { tgt = ms[i]; break; }
+        }
+        if (!tgt) return fin(false);
+        tapHit(tgt);
+        setTimeout(function () { fin(okVal()); }, 460);
+      }
+      /* 没有箭头可点的面板（Semi 那类）：点年份标题会弹出年份列表，直接点目标年 */
+      function yearListPath() {
+        var y = yearLab();
+        if (!y) return fin(false);
+        tap(y);
+        setTimeout(function () {
+          var list = leaves(/^\d{4}$/), tgt = null, i;
+          for (i = 0; i < list.length; i++) {
+            if (String(list[i].textContent).trim() === String(parseInt(Y, 10))) { tgt = list[i]; break; }
+          }
+          if (!tgt) return fin(false);
+          tapHit(tgt);
+          setTimeout(pickM, 320);
+        }, 300);
+      }
+      function step() {
+        if (guard++ > 40) return fin(false);
+        var ms = leaves(/^\d{1,2}\s*月$/, sameEl);
+        if (ms.length < 4) return fin(false);
+        var y = yearLab();
+        if (!y) return fin(false);
+        var cur = parseInt(String(y.textContent).replace(/\D/g, ''), 10);
+        if (!cur) return fin(false);
+        if (cur === parseInt(Y, 10)) return pickM();
+        /* 容器要同时装得下「年份标题」和「12 个月格子」才算面板外壳。
+           只取月份格子的共同祖先会漏掉标题行那一层，箭头就查不到了。 */
+        var ar = yearArrows(lca([y].concat(ms)) || lca(ms) || doc.body, y);
+        if (!ar.length) return yearListPath();
+        var wantDec = parseInt(Y, 10) < cur;
+        /* dir: 0 未知，1 = 最左是「减」，2 = 最左是「增」。猜错一次就永久纠正。 */
+        var useLeft = !dir ? wantDec : (dir === 1 ? wantDec : !wantDec);
+        tapHit(useLeft ? ar[0].el : ar[ar.length - 1].el);
+        setTimeout(function () {
+          var y2 = yearLab(), cur2 = y2 ? parseInt(String(y2.textContent).replace(/\D/g, ''), 10) : cur;
+          if (!cur2 || cur2 === cur) return fin(false);
+          if (!dir) dir = cur2 < cur ? 1 : 2;
+          step();
+        }, 200);
+      }
+      /* 调用方刚 tap 过一次输入框，面板通常已经打开。字节 Semi 的输入框点击是 toggle，
+         这里再无条件 tap 会把面板关掉，后面自然一个年份/月份都找不到。
+         先检查月份格子是否已经在页面上；确实没开才补点一次。 */
+      function ensureMonthPanel(cb3) {
+        if (monthPanel()) return cb3(true);
+        tap(el);
+        setTimeout(function () { cb3(monthPanel()); }, 380);
+      }
+      ensureMonthPanel(function (open) {
+        if (!open) return fin(false);
+        step();
+      });
+    }
+    function typePath() {
+    k = 0;
+    try { if (el.focus) el.focus(); } catch (e) {}
+    /* 面板可能仍开着；此时再 tap 是关面板。只有确认没开时才补点。 */
+    if (!monthPanel()) tap(el);
+    function begin() {
+      var isMonth = monthPanel();
+      /* 月份格式一律排第一：真机把「2023-09-01」塞进纯月控件会被判非法、先显示再清空，
+         而「2023-09」两种控件都认。省掉的这一轮正是时间框反复变空的地方。 */
+      cands = isMonth
+        ? [Y + '-' + M, Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '/' + M, Y + '.' + M, Y + '年' + M + '月']
+        : [Y + '-' + M, Y + '-' + M + (D2 ? '-' + D2 : ''), Y + '/' + M + (D2 ? '/' + D2 : ''), Y + '.' + M, Y + '年' + M + '月'];
+      (function step() {
+        /* 所有格式都试完还没成 —— 但绝不按 Escape：它会把「其实已经写进去、只是判晚了一步」
+           的值一起抹掉，这正是之前两个时间框一直空着的直接原因。 */
+        if (k >= cands.length) { try { if (el.blur) el.blur(); } catch (e) {} return cb(okVal()); }
+        var v = cands[k++];
+        put(v);
+        setTimeout(function () {
+          /* 值根本没进去（受控组件把 value 回滚了）→ 换个格式再写 */
+          if (!okVal()) return step();
+          /* 值进了框里，还得让组件「认」下来：日期控件基本都是回车确认。
+             普通文本框里回车可能提交表单，所以只对日期控件按。 */
+          var opened = datePanelOpen(el) || monthPanel();
+          if (opened || pickerish(el)) press(el, 'Enter');
+          /* 关键：先失焦让组件做一次提交/校验，再回头看值还在不在。
+             字节教育经历那对纯月控件收到「2022-09-01」会先显示再清空，
+             以前只看「框里以 2022 09 开头」就宣布成功，于是两格永远是空的。
+             现在一旦被清掉就换下一种格式（2022-09）重写。 */
+          setTimeout(function () {
+            try { if (el.blur) el.blur(); } catch (e) {}
+            setTimeout(function () {
+              if (okVal()) {
+                /* 收工。关面板点空白处，别用 Escape —— 万一回车没提交，Escape 会回滚 */
+                try { tap(el.ownerDocument.body); } catch (e) {}
+                return cb(true);
+              }
+              step();
+            }, 170);
+          }, opened || pickerish(el) ? 280 : 120);
+        }, 150);
+      })();
+    }
+    setTimeout(function () {
+      /* 面板有渲染动画：160ms 内看不出「这是月份面板」就再等一拍，
+         否则会把「2022-09-01」当首选塞给纯月控件。 */
+      if (monthPanel()) return begin();
+      setTimeout(begin, 300);
+    }, 170);
+    }
+    /* 先试点选：AntD 日历按「年月导航 + 点日期」，Semi/字节按「翻年 + 点月份」；
+       两种都点不成再退回「打字 + 回车」。 */
+    tap(el);
+    setTimeout(function () {
+      dayByClick(function (ok0) {
+        if (ok0) return cb(true);
+        dateByClick(function (ok) {
+          if (ok) return cb(true);
+          try { tap(el.ownerDocument.body); } catch (e) {}
+          setTimeout(typePath, 260);
+        });
+      });
+    }, 380);
+  }
+
+  function shown(el) {
+    try { var r = el.getBoundingClientRect(); return r.width > 2 && r.height > 2; }
+    catch (e) { return false; }
+  }
+  /* 用于拼属性选择器的字符串转义（替代 CSS.escape，兼容老浏览器） */
+  function q(s) { return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"'); }
+  function clean(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
+
+  /* 相邻标签文本：Element UI / AntD 的 label 常是输入框的兄弟节点，不是 label[for] */
+  function nearLabel(el) {
+    var p = el.parentElement;
+    if (!p) return '';
+    var prev = p.previousElementSibling;
+    if (prev && !(prev.querySelector && prev.querySelector('input,select,textarea'))) {
+      var t = clean(prev.innerText || '');
+      if (t) return t.slice(0, 26);
+    }
+    var fc = p.firstElementChild;
+    if (fc && fc !== el && !fc.contains(el)
+        && !(fc.querySelector && fc.querySelector('input,select,textarea'))) {
+      var t2 = clean(fc.innerText || '');
+      if (t2) return t2.slice(0, 26);
+    }
+    return '';
+  }
+
+  function labelText(el) {
+    var t = '';
+    try { if (el.labels && el.labels.length) t = el.labels[0].innerText || ''; } catch (e) {}
+    if (!t && el.id) {
+      try {
+        var l = el.ownerDocument.querySelector('label[for="' + q(el.id) + '"]');
+        if (l) t = l.innerText || '';
+      } catch (e) {}
+    }
+    if (!t && el.closest) { try { var cl = el.closest('label'); if (cl) t = cl.innerText || ''; } catch (e) {} }
+    if (!t) t = nearLabel(el);
+    if (!t) t = el.getAttribute('placeholder') || el.getAttribute('aria-label') || el.getAttribute('title') || '';
+    if (!t) t = el.name || el.id || '';
+    t = clean(t).replace(/[:：*＊]\s*$/, '');
+    return t.slice(0, 30);
+  }
+
+  /* ---------- 几何兜底 ----------
+     自研组件库常把标签放在独立的一列里，DOM 上跟控件毫无关系（不在同一个父级、
+     不是 label、没有 for），文本关系怎么爬都爬不到。这时直接按版面找：
+     控件左侧同一行、距离最近的可见文字，就是它的标签。 */
+  var GEON = null, GEODOC = null;
+  function geoCands(doc) {
+    if (GEON && GEODOC === doc) return GEON;
+    var list = [], w, n, c = 0;
+    try { w = doc.createTreeWalker(doc.body || doc.documentElement, NodeFilter.SHOW_TEXT, null, false); }
+    catch (e) { return null; }
+    while ((n = w.nextNode()) && c < 8000) {
+      c++;
+      var t = (n.nodeValue || '').replace(/\s+/g, '');
+      if (!t || t.length > 24) continue;
+      if (!/[\u4e00-\u9fa5A-Za-z]/.test(t)) continue;
+      var pe = n.parentElement;
+      if (!pe) continue;
+      var pn = pe.tagName.toLowerCase();
+      if (pn === 'script' || pn === 'style' || pn === 'option' || pn === 'title') continue;
+      list.push({ n: n, t: t });
+    }
+    GEON = list; GEODOC = doc;
+    return list;
+  }
+  function geoLabel(el) {
+    var doc = el.ownerDocument || document, list = geoCands(doc);
+    if (!list || !list.length) return '';
+    var r;
+    try { r = el.getBoundingClientRect(); } catch (e) { return ''; }
+    if (!r.width && !r.height) return '';
+    var cy = r.top + r.height / 2, best = '', bd = 1e9, i;
+    for (i = 0; i < list.length; i++) {
+      var pe = list[i].n.parentElement, pr;
+      if (!pe || !pe.getBoundingClientRect) continue;
+      if (el.contains && el.contains(pe)) continue;
+      pr = pe.getBoundingClientRect();
+      if (!pr.width || !pr.height) continue;
+      var dy = Math.abs(pr.top + pr.height / 2 - cy);
+      if (dy > Math.max(16, r.height * 0.75)) continue;
+      var dx = r.left - pr.right;
+      if (dx < -6 || dx > 220) continue;   /* 太远的多半是隔壁那一列的内容 */
+      var d = dx + dy * 4;
+      if (d < bd) { bd = d; best = list[i].t; }
+    }
+    return best;
+  }
+
+  /* 标签在控件正上方时（Form.Item / Semi Design 的默认排版），左侧同一行什么都找不到。
+     取上方 40px 内、与控件水平有重叠的最近一行文字。 */
+  /* 标签下面常有一句说明（「无准确的毕业时间可填写预计毕业时间」），
+     它比标签更靠近控件，会被当成标签，把字段认到别人头上。这类句子直接跳过。 */
+  function looksHint(t) {
+    if (!t) return false;
+    if (/[，。；：,;]/.test(t)) return true;
+    if (t.length > 12) return true;
+    if (/^(请|无|如|若|仅|注|例|示例|提示|说明)/.test(t)) return true;
+    if (/(可填写|可填|如无|若无|暂无|没有的|选填|必填)/.test(t)) return true;
+    return false;
+  }
+  function upLabel(el) {
+    var doc = el.ownerDocument || document, list = geoCands(doc);
+    if (!list || !list.length) return '';
+    var r;
+    try { r = el.getBoundingClientRect(); } catch (e) { return ''; }
+    if (!r.width && !r.height) return '';
+    var best = '', bd = 1e9, i;
+    for (i = 0; i < list.length; i++) {
+      var pe = list[i].n.parentElement, pr;
+      if (!pe || !pe.getBoundingClientRect) continue;
+      if (el.contains && el.contains(pe)) continue;
+      pr = pe.getBoundingClientRect();
+      if (!pr.width || !pr.height) continue;
+      var gap = r.top - pr.bottom;              /* 文字底边在控件顶部之上 */
+      if (gap < -6 || gap > 40) continue;
+      if (pr.right < r.left - 24 || pr.left > r.right + 24) continue;
+      if (looksHint(list[i].t)) continue;
+      var d = Math.abs(gap) * 2 + Math.abs(pr.left - r.left) * 0.2;
+      if (d < bd) { bd = d; best = list[i].t; }
+    }
+    return best;
+  }
+
+  function ctxText(el) {
+    var s = '';
+    try {
+      if (el.labels && el.labels.length) {
+        for (var i = 0; i < el.labels.length; i++) s += ' ' + (el.labels[i].innerText || '');
+      }
+    } catch (e) {}
+    s += ' ' + (el.getAttribute('placeholder') || '')
+       + ' ' + (el.name || '')
+       + ' ' + (el.id || '')
+       + ' ' + (el.getAttribute('aria-label') || '')
+       + ' ' + (el.getAttribute('title') || '')
+       + ' ' + (el.getAttribute('data-name') || '');
+    var p = el.parentElement;
+    if (p) {
+      var prev = el.previousElementSibling, c = 0;
+      while (prev && c < 3) {
+        if (!(prev.querySelector && prev.querySelector('input,select,textarea'))) {
+          s += ' ' + ((prev.innerText || prev.textContent || '').slice(0, 50));
+        }
+        prev = prev.previousElementSibling; c++;
+      }
+      var first = p.firstElementChild;
+      if (first && first !== el && !first.contains(el)
+          && !(first.querySelector && first.querySelector('input,select,textarea'))) {
+        s += ' ' + ((first.innerText || '').slice(0, 50));
+      }
+      for (var k = 0; k < p.childNodes.length; k++) {
+        if (p.childNodes[k].nodeType === 3) s += ' ' + p.childNodes[k].textContent;
+      }
+    }
+    return clean(s);
+  }
+
+  /* 向上两层补上下文：只收纯文本标签，绝不把相邻字段块混进来 */
+  function ctxUp(el, depth) {
+    var s = '', p = el.parentElement, d = 0;
+    while (p && d < depth) {
+      for (var k = 0; k < p.childNodes.length; k++) {
+        if (p.childNodes[k].nodeType === 3) s += ' ' + p.childNodes[k].textContent;
+      }
+      var prev = p.previousElementSibling;
+      if (prev && !(prev.querySelector && prev.querySelector('input,select,textarea'))) {
+        s += ' ' + ((prev.innerText || prev.textContent || '').slice(0, 40));
+      }
+      var fc = p.firstElementChild;
+      if (fc && !fc.contains(el)
+          && !(fc.querySelector && fc.querySelector('input,select,textarea'))) {
+        s += ' ' + ((fc.innerText || fc.textContent || '').slice(0, 40));
+      }
+      p = p.parentElement; d++;
+    }
+    return clean(s);
+  }
+
+  /* 单选/复选组：取组内共同祖先的文本（问题在选项前面），不受相邻字段干扰。
+     返回纯文本，不含 name；调用方自己决定要不要拼 name 去匹配。 */
+  function groupCtx(scope, g) {
+    var rs;
+    try { rs = scope.querySelectorAll('input[name="' + q(g) + '"]'); } catch (e) { return ''; }
+    if (!rs.length) return '';
+    var anc = rs[0].parentElement;
+    function allIn(a) {
+      for (var i = 0; i < rs.length; i++) if (!a.contains(rs[i])) return false;
+      return true;
+    }
+    while (anc && anc.parentElement && !allIn(anc)) anc = anc.parentElement;
+    var s = anc ? clean(anc.innerText || '') : '';
+    /* Element UI / Ant Design 那类结构里，题目文字是组容器的兄弟节点，得往外补一两层；
+       但一旦爬出本题的范围（容器里控件明显变多），就停手，否则会把整页标题带进来 */
+    var p = anc ? anc.parentElement : null, d = 0;
+    while (p && d < 2) {
+      var cnt = 0;
+      try { cnt = p.querySelectorAll('input,select,textarea').length; } catch (e) {}
+      if (cnt > rs.length + 2) break;
+      var prev = p.previousElementSibling;
+      if (prev && !(prev.querySelector && prev.querySelector('input,select,textarea'))) {
+        s += ' ' + clean(prev.innerText || '').slice(0, 30);
+      }
+      var fc = p.firstElementChild;
+      if (fc && rs[0] && !fc.contains(rs[0])
+          && !(fc.querySelector && fc.querySelector('input,select,textarea'))) {
+        s += ' ' + clean(fc.innerText || '').slice(0, 30);
+      }
+      for (var k = 0; k < p.childNodes.length; k++) {
+        if (p.childNodes[k].nodeType === 3) s += ' ' + p.childNodes[k].textContent;
+      }
+      p = p.parentElement; d++;
+    }
+    return clean(s).slice(0, 90);
+  }
+
+  function matchRule(text) {
+    for (var i = 0; i < RULES.length; i++) {
+      var key = RULES[i][0];
+      if (!D[key]) continue;
+      if (!RULES[i][1].test(text)) continue;
+      if (RULES[i][2] && RULES[i][2].test(text)) continue;
+      return key;
+    }
+    /* 内置规则都不中，再看自定义字段：别名长度 ≥2 且原文出现即算命中 */
+    for (var c = 0; c < CX.length; c++) {
+      var k2 = CX[c][0];
+      if (!D[k2]) continue;
+      var al = String(CX[c][1] || '').split(/[|/、，,;；]/);
+      for (var a = 0; a < al.length; a++) {
+        var w = clean(al[a]);
+        if (w.length >= 2 && text.indexOf(w) >= 0) return k2;
+      }
+    }
+    return null;
+  }
+
+  /* ---------- 占位符判定 ---------- */
+  var PH = /^(请选择|请选取|请选择一项|请选择省|请输入|--+|——+|please)/i;
+
+  /* ---------- 自定义下拉 ----------
+     Ant Design / Element / iView 这类控件的真身是「readonly input + 异步渲染的弹层」，
+     直接改 value 页面不认，必须点开 → 等弹层 → 点选项，所以单独走一条异步队列。
+     主循环只负责把待办登记到 ASYNC，循环跑完再一个个处理。 */
+  var ASYNC = [];
+  var DATES = [];       /* 日期 / 月份控件单独一队：要点开面板或回车提交，跟下拉不是一路 */
+  var TEXTKEY = /^(name|enName|phone|emergencyPhone|email|idcard|wechat|qq|studentId|portfolio|gpa|majorGpa|height|weight|className|tutor)$/;
+  var COMBO_CLS = /(^|[\s_-])(ant-select|ant-cascader|el-select|el-cascader|ivu-select|ivu-cascader|n-select|n-cascader|arco-select|layui-form-select|select2|chosen-container|vue-treeselect|react-select|semi-select|semi-cascader|semi-tree-select|semi-datepicker)/;
+  /* 这几种是「点击目标本身就是个壳」，里面没有 input，原生 select 被 display:none 藏了 */
+  var SHELL_CLS = /(^|[\s_-])(select2-selection|chosen-single|layui-select-title)(\s|$)/;
+  var OPT_SEL = '.ant-select-item-option,.ant-select-dropdown-menu-item,.el-select-dropdown__item,'
+    + '.el-select-dropdown li,.el-cascader-node,.ant-cascader-menu-item,'
+    + '.ivu-select-item,.n-base-select-option,.arco-select-option,.t-select-option,.semi-select-option,'
+    + '.layui-form-select dd,.select2-results__option,.chosen-results li,.react-select__option,'
+    + '.semi-select-option,.semi-cascader-option,.semi-tree-option,[role="option"],[role="menuitem"]';
+
+  function clsOf(n) {
+    if (!n || !n.className) return '';
+    var c = n.className;
+    if (typeof c !== 'string') c = c.baseVal || '';
+    return ' ' + String(c) + ' ';
+  }
+  /* 这个控件是不是「下拉组件」而不是普通输入框 */
+  function isCombo(el) {
+    var g = function (k) { try { return el.getAttribute(k) || ''; } catch (e) { return ''; } };
+    if (g('role') === 'combobox' || g('aria-haspopup') === 'listbox') return true;
+    var p = el, i;
+    for (i = 0; i < 5 && p && p.nodeType === 1; i++, p = p.parentElement) {
+      if (COMBO_CLS.test(clsOf(p))) return true;
+      var pr = '';
+      try { pr = p.getAttribute('role') || ''; } catch (e) {}
+      if (pr === 'combobox') return true;
+    }
+    return false;
+  }
+  /* 组件最外层容器（往上取最后一个命中的），以及真正接收点击的那个壳 */
+  function comboBox(el) {
+    var p = el, i, hit = null;
+    for (i = 0; i < 5 && p && p.nodeType === 1; i++, p = p.parentElement) {
+      if (COMBO_CLS.test(clsOf(p))) hit = p;
+    }
+    return hit || el.parentElement || el;
+  }
+  function comboTarget(el) {
+    var b = comboBox(el), t = null;
+    try {
+      t = b.querySelector('.ant-select-selector,.el-select__wrapper,.el-input,.ivu-select-selection,'
+        + '.n-base-selection,.arco-select-view,.select2-selection,.chosen-single,.layui-select-title,'
+        + '.semi-select,.semi-cascader,.semi-input-wrapper');
+    } catch (e) {}
+    return t || el;
+  }
+  /* 组件当前显示的值（没选时返回空串，占位符不算值） */
+  function comboValue(el) {
+    var b = comboBox(el), t = '', nodes = null, i;
+    try {
+      nodes = b.querySelectorAll('.ant-select-selection-item,.ant-select-selection-selected-value,'
+        + '.el-select__selected-item,.el-select__placeholder,.ivu-select-selected-value,'
+        + '.n-base-selection-label,.arco-select-view-value,.select2-selection__rendered,.chosen-single span,'
+        + '.semi-select-selection-text,.semi-cascader-selection,.semi-select-selection-placeholder');
+    } catch (e) { nodes = null; }
+    for (i = 0; nodes && i < nodes.length; i++) {
+      var s = clean(nodes[i].innerText || '');
+      if (s && !PH.test(s.replace(/\s/g, ''))) { t = s; break; }
+    }
+    if (!t) t = clean(el.value || '');
+    if (PH.test(t.replace(/\s/g, ''))) t = '';
+    return t;
+  }
+  /* 多选下拉（「期望工作地点」这类）选中的是 chip 标签，文本不在 input.value 里，
+     comboValue 会以为它是空的。第二遍点书签时于是又去点同一个城市 ——
+     而多选的点击是 toggle，正好把已经选好的取消掉。
+     这里把 chip 的文本单独读出来，只要有就把这个控件当成「已经有内容」。 */
+  function comboTagText(el) {
+    var b = comboBox(el), out = [], nodes = null, i;
+    try {
+      nodes = b.querySelectorAll('.semi-tag,.ant-select-selection-item,.ant-select-selection-overflow-item,'
+        + '.el-tag,.ivu-tag,.n-tag,.arco-tag,.arco-select-view-tag,.van-tag,'
+        + '[class*="selection-item"],[class*="selection-overflow-item"],[class*="select-tag"]');
+    } catch (e) { nodes = null; }
+    for (i = 0; nodes && i < nodes.length && i < 40; i++) {
+      var s = clean(nodes[i].innerText || '');
+      if (s && !PH.test(s.replace(/\s/g, ''))) out.push(s);
+    }
+    return out.join('、');
+  }
+  /* 类名兜底：chip 的类名各家一直在换（semi-tag / ufc-tag / …），清单永远追不完。
+     这里不认类名，只看「控件容器里除输入框外还有没有非占位符的可见文字」——
+     选中的「杭州」chip 不管套什么类名，文字总在容器里。 */
+  /* 边界要自己找，不能复用 comboBox()：它对没有内部 input 的 div 型下拉
+     会兜底到 parentElement，那是整个 form-item 行，会把外面的 label
+     （「最高学位」）圈进来，整个下拉就被误判成「已填」而永远不填。
+     这里从父层开始找最近一层真正的下拉容器，找不到就以控件自身为界。 */
+  function comboOwnBox(el) {
+    var p = el.parentElement, i;
+    for (i = 0; i < 6 && p && p.nodeType === 1; i++, p = p.parentElement) {
+      var c = '', ro = '';
+      try { c = String(p.className || ''); ro = String(p.getAttribute('role') || ''); } catch (e0) {}
+      if (COMBO_CLS.test(c) || ro === 'combobox' || ro === 'listbox') return p;
+    }
+    return el;
+  }
+  function comboTextLoose(el) {
+    var b = comboOwnBox(el), out = [], nodes = null, i;
+    try { nodes = b.querySelectorAll('span,div'); } catch (e) { return ''; }
+    for (i = 0; nodes && i < nodes.length && i < 60; i++) {
+      var n = nodes[i], s = '';
+      try {
+        if (n.querySelector && n.querySelector('input,textarea,select')) continue; /* 外壳层 */
+        if (!shown(n)) continue;
+        s = clean(n.innerText || '');
+      } catch (e2) { continue; }
+      if (!s || s.length > 24) continue;
+      if (PH.test(s.replace(/\s/g, ''))) continue;
+      /* 下拉框里的箭头「⌄」、必填星号「*」也是叶子文本，纯符号不算内容 */
+      if (!/[0-9A-Za-z\u4e00-\u9fff]/.test(s)) continue;
+      /* 只认叶子文本：子元素里还有字的都是包装层，会重复计还容易带上别的东西 */
+      var kids = n.children, leafWrap = false, c;
+      for (c = 0; kids && c < kids.length; c++) {
+        if (clean(kids[c].innerText || '')) { leafWrap = true; break; }
+      }
+      if (leafWrap) continue;
+      out.push(s);
+    }
+    return out.join('、');
+  }
+  /* 这个下拉/选择控件里是不是已经有内容了（单选文本值或多选标签都算） */
+  function comboFilled(el) {
+    try { if (clean(comboValue(el))) return true; } catch (e) {}
+    try { if (clean(comboTagText(el))) return true; } catch (e2) {}
+    try { if (clean(comboTextLoose(el))) return true; } catch (e3) {}
+    return false;
+  }
+  /* ---------- 认「普通 div 列表」型的选项 ----------
+     有些组件库（字节 Semi）的下拉不是浮层，也不是 role="option"：
+     选项就是紧贴控件下方、正常排布的一串 div。类名靠不住，只能靠「点完多出来的字」。 */
+  var LEAF_SEQ = 0;
+  function idxOf(e) {
+    try { if (!e.__rz_i) e.__rz_i = ++LEAF_SEQ; return e.__rz_i; } catch (x) { return 0; }
+  }
+  /* 当前可见的短文字叶子节点（选项一定是叶子，父容器会把整列文字连坐） */
+  function leafSnap(doc) {
+    var out = [], all, i;
+    try { all = doc.querySelectorAll('div,li,span,a,p,dd,td,label'); } catch (e) { return out; }
+    for (i = 0; i < all.length && i < 8000; i++) {
+      var e = all[i];
+      if (e.children && e.children.length) continue;
+      if (!shown(e)) continue;
+      var t = clean(e.innerText || '');
+      if (!t || t.length > 30) continue;
+      out.push(e);
+    }
+    return out;
+  }
+  /* 控件附近的短文字：优先「点击后新增的」，一个都没新增就退回「附近全部」，
+     最终仍由 pickOpt 按值比对来定，误捡的别的字不会造成错选 */
+  function candNear(el, before, onlyFresh) {
+    var doc = el.ownerDocument || document, r, all, i, j;
+    try { r = el.getBoundingClientRect(); } catch (e) { return []; }
+    var old = {};
+    for (j = 0; before && j < before.length; j++) old[idxOf(before[j])] = 1;
+    var fresh = [], loose = [];
+    try { all = doc.querySelectorAll('div,li,span,a,p,dd,td,label'); } catch (e2) { return []; }
+    for (i = 0; i < all.length && i < 8000; i++) {
+      var e = all[i];
+      if (e.children && e.children.length) continue;
+      if (!shown(e)) continue;
+      var t = clean(e.innerText || '');
+      if (!t || t.length > 30) continue;
+      var q;
+      try { q = e.getBoundingClientRect(); } catch (e3) { continue; }
+      /* 竖直：控件下方 0~620，或上方 0~220（有的面板向上弹） */
+      if (q.top < r.top - 220 || q.top > r.bottom + 620) continue;
+      /* 水平：和控件有重叠，左右各让 60px */
+      if (q.right < r.left - 60 || q.left > r.right + 60) continue;
+      /* 控件自己框里的字（占位符）不算 */
+      if (q.top >= r.top - 6 && q.bottom <= r.bottom + 6) continue;
+      var o = { el: e, t: t };
+      loose.push(o);
+      if (!old[idxOf(e)]) fresh.push(o);
+    }
+    if (fresh.length) return fresh;
+    return onlyFresh ? [] : loose;
+  }
+  function mouseIn(el, t) {
+    var w = W(el);
+    try { el.dispatchEvent(new w.MouseEvent(t, { bubbles: true, cancelable: true, view: w })); }
+    catch (e) {
+      try { el.dispatchEvent(new w.Event(t, { bubbles: true })); } catch (e2) {}
+    }
+  }
+  function tap(el) {
+    if (!el) return;
+    try { if (el.focus) el.focus(); } catch (e) {}
+    /* 有的组件只听 pointer 事件，有的只听 mouse 事件，都发一遍 */
+    try { if (W(el).PointerEvent) { mouseIn(el, 'pointerdown'); mouseIn(el, 'pointerup'); } } catch (e) {}
+    mouseIn(el, 'mousedown'); mouseIn(el, 'mouseup'); mouseIn(el, 'click');
+  }
+  /* 按坐标点：先算出元素中心那一像素上「真正被点到」的最里层节点，再往那儿发事件。
+     字节 Semi 的下拉选项、日历格子都只认这种点法，直接往文字节点上派事件是不响应的。 */
+  function tapHit(el) {
+    if (!el) return;
+    var d = el.ownerDocument || document, r = null, t = el, x = 0, y = 0;
+    try { r = el.getBoundingClientRect(); } catch (e) {}
+    if (r && r.width > 1 && r.height > 1) {
+      x = Math.round(r.left + r.width / 2);
+      y = Math.round(r.top + r.height / 2);
+      try {
+        var hit = d.elementFromPoint(x, y);
+        if (hit && hit.nodeType === 1) t = hit;
+      } catch (e2) {}
+    }
+    try { if (el.focus) el.focus(); } catch (e3) {}
+    var w = W(t);
+    function me(type) {
+      var o = { bubbles: true, cancelable: true, view: w, clientX: x, clientY: y };
+      try { t.dispatchEvent(new w.MouseEvent(type, o)); } catch (e4) {}
+    }
+    try {
+      if (w.PointerEvent) {
+        t.dispatchEvent(new w.PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+        t.dispatchEvent(new w.PointerEvent('pointerup', { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+      }
+    } catch (e5) {}
+    me('mousedown'); me('mouseup'); me('click');
+  }
+  function optText(o) {
+    var t = clean(o.innerText || o.textContent || '');
+    if (!t) { try { t = clean(o.getAttribute('title') || o.getAttribute('data-value') || ''); } catch (e) {} }
+    return t;
+  }
+  /* 当前页面上「看得见」的下拉选项（藏着的其它组件的面板会被 shown() 滤掉） */
+  function visibleOpts(d) {
+    d = d || document;
+    var out = [], nodes, i;
+    try { nodes = d.querySelectorAll(OPT_SEL); } catch (e) { nodes = []; }
+    var DATE_PANEL = '.semi-datepicker,.ant-picker-dropdown,.ant-calendar,.el-picker-panel,.el-date-picker,.el-date-range-picker,.ivu-date-picker,.t-date-picker,.layui-laydate';
+    for (i = 0; i < nodes.length; i++) {
+      var n = nodes[i], g = '';
+      if (!shown(n)) continue;
+      try { if (n.closest && n.closest(DATE_PANEL)) continue; } catch (e) {}
+      try { g = n.getAttribute('aria-disabled') || ''; } catch (e) { g = ''; }
+      if (g === 'true') continue;
+      if (/(^|\s)(is-disabled|ant-select-item-option-disabled|disabled)(\s|$)/.test(clsOf(n))) continue;
+      var t = optText(n);
+      if (!t || t.length > 80) continue;
+      out.push({ el: n, t: t });
+    }
+    return out;
+  }
+  /* 自家组件库的弹层没有统一类名：兜底找「挂在绝对定位浮层里的叶子文字」，
+     再用它跟值比对。浮层必须离控件不远，避免把页面正文的标题当成选项。 */
+  function looseOpts(el) {
+    var doc = el.ownerDocument || document, out = [], all, i, tr;
+    try { tr = el.getBoundingClientRect(); } catch (e) { return out; }
+    try { all = doc.querySelectorAll('div,li,span,a,p,dd'); } catch (e) { return out; }
+    for (i = 0; i < all.length && i < 5000; i++) {
+      var e = all[i];
+      if (e.children && e.children.length) continue;      /* 只要叶子，父容器会连坐 */
+      if (!shown(e)) continue;
+      var t = clean(e.innerText || '');
+      if (!t || t.length > 30) continue;
+      var p = e.parentElement, pos = '', hops = 0;
+      while (p && hops < 6) {
+        try { pos = p.ownerDocument.defaultView.getComputedStyle(p).position || ''; }
+        catch (e2) { pos = ''; }
+        if (pos === 'absolute' || pos === 'fixed') break;
+        p = p.parentElement; hops++;
+      }
+      if (!p || hops >= 6) continue;
+      var r;
+      try { r = p.getBoundingClientRect(); } catch (e3) { continue; }
+      if (!r.width && !r.height) continue;
+      if (r.bottom < tr.top - 500 || r.top > tr.bottom + 700) continue;
+      out.push({ el: e, t: t });
+    }
+    return out;
+  }
+  /* 归一：去空白 + 去掉尾部括号补充（「本科（学士）」→「本科」） */
+  function normBare(v) {
+    return String(v == null ? '' : v).replace(/\s/g, '')
+      .replace(/[（(\[【][^）)\]】]*[）)\]】]/g, '');
+  }
+  /* 选项比对的归一：在全角/半角、前后缀、标点上再宽一档，
+     否则「请选择学历」和「学历」、「（学士）本科」这种永远对不上。 */
+  function normOpt(v) {
+    var s = String(v == null ? '' : v);
+    try { s = s.normalize('NFKC'); } catch (e) {}
+    return s.replace(/[（(\[【「『][^）)\]】」』]*[）)\]】」』]/g, '')
+      .toLowerCase()
+      .replace(/^(请输入|请填写|请选择|输入|填写|请)/, '')
+      .replace(/[\s*＊:：()\[\]『』《》\-_—/、，,.。!！?？"'“”‘’|]/g, '')
+      .trim();
+  }
+  /* 从文本里解析数值区间：「10000-15000元/月」「10-15万」「3年以上」。
+     必须先在原文上解析再去归一 —— 先把连字符去掉的话「3-5年」会变成「35年」。 */
+  function rangeOf(t) {
+    var s = String(t == null ? '' : t).replace(/[－—–~～至到]/g, '-').replace(/[,，\s]/g, '');
+    var wan = /万/.test(s), a, b, m;
+    m = /(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)/.exec(s);
+    if (m) { a = parseFloat(m[1]); b = parseFloat(m[2]); }
+    else {
+      var up = /(\d+(?:\.\d+)?)以上/.exec(s);
+      if (up) { a = parseFloat(up[1]); b = 1e9; }
+      else {
+        var dn = /(\d+(?:\.\d+)?)(及以下|以下|以内)/.exec(s);
+        if (dn) { a = 0; b = parseFloat(dn[1]); }
+        else {
+          var one = /^(\d+(?:\.\d+)?)/.exec(s);
+          if (!one) return null;
+          a = parseFloat(one[1]); b = a;
+        }
+      }
+    }
+    if (wan) { a *= 10000; b *= 10000; }
+    if (!isFinite(a) || !isFinite(b)) return null;
+    return a <= b ? [a, b] : [b, a];
+  }
+  /* 在候选里挑最像的那个：完全等 → 选项含值 → 值含选项 → 数值区间重叠 */
+  function pickOpt(list, val) {
+    var vv = normOpt(val), i, best = null, bl = 0, t, rng;
+    if (!vv || !list || !list.length) return null;
+    for (i = 0; i < list.length; i++) if (normOpt(list[i].t) === vv) return list[i];
+    /* 同字异序也算命中：字节校招的「学历类型」选项是「统招全日制」，
+       而表单助手里存的是「全日制统招」—— 字全一样只是顺序不同，
+       下面三条（含/被含/区间）全都比不上，下拉就永远选不上。 */
+    var vs = vv.split('').sort().join('');
+    for (i = 0; i < list.length; i++) {
+      t = normOpt(list[i].t);
+      if (t.length >= 2 && t.length === vv.length && t.split('').sort().join('') === vs) return list[i];
+    }
+    /* 正向包含（选项比值长）：取「最接近」的那个，多出来的字最少。
+       以前取最长，结果「全日制」会选中「统招非全日制」而不是「统招全日制」。 */
+    for (i = 0; i < list.length; i++) {
+      t = normOpt(list[i].t);
+      if (t.length >= 2 && t.indexOf(vv) >= 0 && (!best || t.length < bl)) { best = list[i]; bl = t.length; }
+    }
+    if (best) return best;
+    /* 反向包含只在选项占值的大部分时才认，否则「某省某市」会被「某省」截胡，
+       连省市区联动都走不到 */
+    for (i = 0; i < list.length; i++) {
+      t = normOpt(list[i].t);
+      if (t.length >= 2 && vv.indexOf(t) >= 0 && t.length * 10 >= vv.length * 6 && t.length > bl) {
+        best = list[i]; bl = t.length;
+      }
+    }
+    if (best) return best;
+    /* 金额 / 年限这类选项写的是区间：「10-15万」对「10000-15000元/月」，
+       字符串怎么比都比不上，但语义是一回事。完整包住期望区间的优先，其次是重叠多的。 */
+    rng = rangeOf(val);
+    if (rng) {
+      var bsc = -1, bp = null, or2, ov, sc;
+      for (i = 0; i < list.length; i++) {
+        or2 = rangeOf(list[i].t);
+        if (!or2) continue;
+        ov = Math.min(rng[1], or2[1]) - Math.max(rng[0], or2[0]);
+        if (ov < 0) continue;
+        sc = (or2[0] <= rng[0] && or2[1] >= rng[1] ? 1e9 : 0) + ov;
+        if (sc > bsc) { bsc = sc; bp = list[i]; }
+      }
+      if (bp) return bp;
+    }
+    return null;
+  }
+  /* 「某省某市某县」「某省-某市-某县」→ 三级片段，用于省市区联动。
+     只拆看着像地址的值，否则「10-20万/年」这种会被拆成 10 / 20万 / 年 */
+  function segsOf(v) {
+    var s = String(v == null ? '' : v).replace(/\s/g, '').replace(/[、，,;；/|]/g, '-');
+    if (!/(省|自治区|特别行政区|市|自治州|地区|盟|县|区|旗)/.test(s)) return [];
+    var out = [], parts = s.split('-'), i;
+    for (i = 0; i < parts.length; i++) if (parts[i]) out.push(parts[i]);
+    if (out.length > 1) return out;
+    var re = /[^省市区县州旗盟]{1,12}?(?:省|自治区|特别行政区|自治州|地区|市|盟|县|区|旗)/g, m, o2 = [];
+    while ((m = re.exec(s))) o2.push(m[0]);
+    return o2.length > 1 ? o2 : out;
+  }
+  /* 枚举值的同义写法：主值选不中时按顺序再试这几个 */
+  var SYN = {
+    '全日制统招': ['统招全日制', '全日制', '统招', '普通全日制', '全日制普通高校', '普通高校全日制'],
+    '本科': ['大学本科', '本科生', '本科教育'],
+    '硕士': ['硕士研究生'],
+    '学士': ['学士学位'],
+    '群众': ['普通群众', '无'],
+    '共青团员': ['团员'],
+    '中共党员': ['党员', '中国共产党党员'],
+    '身份证': ['居民身份证', '二代身份证'],
+    '未婚': ['单身'],
+    '健康': ['良好', '健康良好'],
+    '男': ['男性'],
+    '女': ['女性'],
+    '汉族': ['汉'],
+    '全职（校园招聘）': ['全职', '校园招聘'],
+    /* 薪资：网申下拉常按年薪分档，月薪区间要能对上等价的年薪档 */
+    '10000-15000元/月': ['1-1.5万/月', '1万-1.5万/月', '10-15万/年', '10万-15万/年', '10k-15k', '10000-15000'],
+    '10-20万/年': ['10万-20万/年', '10~20万/年'],
+    '是': ['接受', '同意', '有'],
+    '否': ['不接受', '不同意', '没有']
+  };
+  function candOf(v) {
+    var out = [], a, i;
+    /* 值里用 ; 分隔表示「按优先级依次尝试」，比如求职信息来源：
+       学校 → 官网 → 公众号 → 招聘网站。哪个选项存在就用哪个 */
+    var parts = String(v == null ? '' : v).split(';');
+    for (i = 0; i < parts.length; i++) {
+      var p = parts[i].replace(/^\s+|\s+$/g, '');
+      if (!p) continue;
+      out.push(p);
+      a = SYN[normBare(p)];
+      if (a) for (var j = 0; j < a.length; j++) out.push(a[j]);
+    }
+    if (!out.length) out.push(v);
+    return out;
+  }
+  function waitOpts(d, cb) {
+    var n = 0;
+    (function tick() {
+      var L = visibleOpts(d);
+      if (L.length || n >= 30) { cb(L); return; }
+      n++; setTimeout(tick, 40);
+    })();
+  }
+  /* 有些下拉点开的是「弹窗选取器」：里面一个搜索框 + 一堆勾选项 + 确定按钮。
+     地区选择（生源地/户口所在地/期望城市）基本都是这种。 */
+  function press(el, k) {
+    var w = W(el);
+    try {
+      el.dispatchEvent(new w.KeyboardEvent('keydown', { key: k, code: k, keyCode: k === 'Enter' ? 13 : 27, which: k === 'Enter' ? 13 : 27, bubbles: true }));
+      el.dispatchEvent(new w.KeyboardEvent('keyup', { key: k, code: k, keyCode: k === 'Enter' ? 13 : 27, which: k === 'Enter' ? 13 : 27, bubbles: true }));
+    } catch (e) {}
+  }
+  function btnOf(root, re) {
+    var bs, i;
+    try { bs = root.querySelectorAll('button,[role="button"],a,span,div'); } catch (e) { return null; }
+    for (i = 0; i < bs.length; i++) {
+      var b = bs[i];
+      if (!shown(b)) continue;
+      var t = clean(b.innerText || '').replace(/\s/g, '');
+      if (!re.test(t)) continue;
+      /* 只认最里层那个，外层容器也算「确定」会点错 */
+      if (b.querySelector('button,[role="button"]')) continue;
+      return b;
+    }
+    return null;
+  }
+  function pickerBox(doc) {
+    var ins, i, d = 0, b, btn;
+    try { ins = doc.querySelectorAll('input'); } catch (e) { return null; }
+    for (i = 0; i < ins.length; i++) {
+      var ph = ins[i].getAttribute('placeholder') || '';
+      if (!/^(搜索|请输入搜索|search)/i.test(ph)) continue;
+      if (!shown(ins[i])) continue;
+      b = ins[i].parentElement; d = 0;
+      while (b && d < 8) {
+        btn = btnOf(b, /^(确定|确认|完成|选好了)$/);
+        if (btn) return { input: ins[i], btn: btn, box: b };
+        b = b.parentElement; d++;
+      }
+    }
+    return null;
+  }
+  /* 在弹窗里搜地名，点中结果，再点确定 */
+  function usePicker(pk, val, cb) {
+    var doc = pk.input.ownerDocument || document;
+    var segs = segsOf(val), tries = [], i;
+    for (i = segs.length - 1; i >= 0; i--) tries.push(segs[i]);
+    if (!tries.length) tries.push(val);
+    var idx = 0;
+    function hits(q) {
+      var out = [], all, j, k, ch, deeper, qq = normBare(q);
+      try { all = pk.box.querySelectorAll('*'); } catch (e) { return out; }
+      for (j = 0; j < all.length; j++) {
+        var e = all[j];
+        if (!shown(e)) continue;
+        if (normBare(e.innerText || '') !== qq) continue;
+        deeper = false; ch = e.children;
+        for (k = 0; k < ch.length; k++) {
+          if (normBare(ch[k].innerText || '') === qq) { deeper = true; break; }
+        }
+        if (deeper) continue;          /* 只留最里层，否则会点到整块容器 */
+        out.push({ el: e, t: qq });
+      }
+      return out;
+    }
+    function attempt() {
+      if (idx >= tries.length) { cb(''); return; }
+      var q = tries[idx++];
+      try { pk.input.focus(); } catch (e) {}
+      protoSet(pk.input, q);
+      fire(pk.input);
+      setTimeout(function () {
+        press(pk.input, 'Enter');
+        setTimeout(function () {
+          var hs = hits(q);
+          if (!hs.length) { attempt(); return; }
+          tap(hs[0].el);
+          setTimeout(function () {
+            tap(pk.btn);
+            setTimeout(function () { cb(q); }, 80);
+          }, 150);
+        }, 420);
+      }, 120);
+    }
+    attempt();
+  }
+  function closeCombo(el) {
+    var w = W(el), d = el.ownerDocument || document;
+    try {
+      var ev = new w.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true });
+      (d.activeElement || el).dispatchEvent(ev);
+    } catch (e) {}
+    if (visibleOpts(d).length) {
+      try { mouseIn(d.body || el, 'mousedown'); mouseIn(d.body || el, 'mouseup'); } catch (e2) {}
+    }
+    try { if (el.blur) el.blur(); } catch (e3) {}
+  }
+  /* 值不在候选项里时的退路：枚举里给了「其他 / 其它」就选它。
+     证书这类字段本来就写不出用户的全部证书名，用户的说法是「没有就选其他」。 */
+  function otherOpt(L) {
+    for (var i = 0; i < (L || []).length; i++) {
+      if (/^(其他|其它|暂无|没有|无|other)$/i.test(clean(L[i].t))) return L[i];
+    }
+    return null;
+  }
+  /* 有些长着「文本框」样子的控件其实是带建议列表的选择器（证书名称、技能标签、奖项）：
+     手打进去会被组件回滚，只能点开列表选一项；列表里没有我们的值就退而选「其他」。 */
+  function suggestChoose(el, val, cb) {
+    var doc = el.ownerDocument || document, done = false;
+    function fin(ok, t) {
+      if (done) return; done = true;
+      /* 关面板点空白处，别用 Escape —— 会连刚选好的值一起抹掉 */
+      try { tap(doc.body); } catch (e) {}
+      cb(ok, '', t);
+    }
+    function opts() {
+      var L = visibleOpts(doc);
+      return L.length ? L : looseOpts(el);
+    }
+    function pickFrom(rc) {
+      var L = opts(), p = null, cs = candOf(val), i;
+      for (i = 0; i < cs.length; i++) { p = pickOpt(L, cs[i]); if (p) break; }
+      if (p) { tapHit(p.el); return setTimeout(function () { fin(true, p.t); }, 240); }
+      var o = otherOpt(L);
+      if (o) { tapHit(o.el); return setTimeout(function () { fin(true, o.t); }, 240); }
+      if (rc < 2 && !L.length) return setTimeout(function () { pickFrom(rc + 1); }, 200);
+      fin(false);
+    }
+    tap(el);
+    setTimeout(function () {
+      if (!opts().length) { try { tap(comboBox(el) || el); } catch (e) {} }
+      setTimeout(function () { pickFrom(0); }, 220);
+    }, 300);
+  }
+  function chooseCombo(el, val, cb) {
+    var doc = el.ownerDocument || document, done = false, got = '';
+    var box = null;
+    try { box = comboBox(el) || el; } catch (e) { box = el; }
+    function fin(ok, part, picked) { if (done) return; done = true; closeCombo(el); cb(ok, part, picked); }
+    function shownVal() { try { return clean(comboValue(box) || ''); } catch (e) { return ''; } }
+    /* 点选项。先按元素气泡派事件（多数组件认这个）；一点反应都没有时，
+       再按屏幕坐标点一次（有些组件只认真实坐标命中的最里层节点）。
+       两次之间看「控件显示的值有没有变」，变了就不再点，避免多选被点成反选。 */
+    function optTap(node, next) { tap(node); setTimeout(next, 90); }
+    function step(sg, idx) {
+      var p = pickOpt(visibleOpts(doc), sg[idx]);
+      if (!p) { fin(idx > 0, got); return; }
+      got = sg[idx];
+      if (idx + 1 >= sg.length) {
+        optTap(p.el, function () {
+          /* 点完最后一段菜单还开着，说明下面还有一级（省/市/区），得让人手选 */
+          fin(true, visibleOpts(doc).length ? got : '');
+        });
+        return;
+      }
+      optTap(p.el, function () { setTimeout(function () { step(sg, idx + 1); }, 150); });
+    }
+    function go(L, rc) {
+      var cs = candOf(val), i;
+      for (i = 0; i < cs.length; i++) {
+        var p = pickOpt(L, cs[i]);
+        if (p) { optTap(p.el, function () { fin(true, '', p.t); }); return; }
+      }
+      /* 上一个下拉的面板还在做淡出动画时，这里拿到的往往是「别人的选项」，
+         自己的选项要晚一帧才挂上去。以前这里直接判失败，于是紧挨着的两个下拉
+         （期望工作地点 → 学历类型）里后一个常常选不上。再等几拍重取。 */
+      rc = rc || 0;
+      if (rc < 3) { return setTimeout(function () { go(visibleOpts(doc), rc + 1); }, 110); }
+      var sg = segsOf(val);
+      if (sg.length > 1) { step(sg, 0); return; }
+      var o = otherOpt(visibleOpts(doc));
+      if (o) { optTap(o.el, function () { fin(true, '', o.t); }); return; }
+      fin(false);
+    }
+    /* 内联面板（选项就是贴在控件下方的一串普通 div）点第二次会把面板关掉，
+       所以顺序必须是：点开 → 标准选择器找 → 就地取「新增文字」→ 实在没有才点外壳重试 */
+    function tryNear(onlyFresh) {
+      var LN = candNear(el, before, onlyFresh), csN = candOf(val), hN = null, iN;
+      for (iN = 0; iN < csN.length; iN++) { hN = pickOpt(LN, csN[iN]); if (hN) break; }
+      if (!hN) return false;
+      /* 多选组件点完还开着，属正常，别当成没选中 */
+      optTap(hN.el, function () { fin(true, '', hN.t); });
+      return true;
+    }
+    var before = leafSnap(doc);
+    function openSelf() {
+    tap(el);
+    waitOpts(doc, function (L) {
+      if (L.length) { go(L); return; }
+      if (tryNear(true)) return;
+      /* 有的组件点 input 不弹，得点外壳再试一次 */
+      tap(comboTarget(el));
+      waitOpts(doc, function (L2) {
+        if (L2.length) { go(L2); return; }
+        if (tryNear(false)) return;
+        /* 自家组件的弹层没有标准类名：按「浮层里的叶子文字」再试一次 */
+        var L3 = looseOpts(el), cs3 = candOf(val), hit = null, i3;
+        for (i3 = 0; i3 < cs3.length; i3++) { hit = pickOpt(L3, cs3[i3]); if (hit) break; }
+        if (hit) { optTap(hit.el, function () { fin(true, '', hit.t); }); return; }
+        /* 兜底：弹窗选取器（搜索 + 勾选 + 确定） */
+        var pk = pickerBox(doc);
+        if (pk) {
+          usePicker(pk, val, function (got2) { fin(!!got2, ''); });
+          return;
+        }
+        fin(false);
+      });
+    });
+    }
+    /* 上一个控件的面板还在淡出时，waitOpts 会立刻拿着「别人的选项」返回，
+       于是紧挨着的下一个下拉被判「没有这一项」。先点空白把旧面板关掉再开自己的。 */
+    if (visibleOpts(doc).length) {
+      try { tap(doc.body); } catch (e) {}
+      setTimeout(openSelf, 130);
+    } else {
+      openSelf();
+    }
+  }
+  /* 组件内的 input 往往只能拿到「请选择」这种占位符，得回到组件外层取真标签 */
+  function comboLabel(el, key) {
+    var lb = labelText(el), b, lb2;
+    if (lb && !PH.test(lb.replace(/\s/g, ''))) return lb;
+    try {
+      b = comboBox(el);
+      lb2 = labelText(b);
+      if (lb2 && lb2 !== lb && !PH.test(lb2.replace(/\s/g, ''))) return lb2;
+    } catch (e) {}
+    return clean(ctxText(el)).slice(0, 24) || LABELOF(key);
+  }
+  /* 页面上当前可见的输入控件，按文档顺序排列。
+     用来给日期队列记一个「位置序号」：React 重建经历块时元素会被换成新节点，
+     旧引用随之失效，但同一位置的序号不变，处理日期前可以按序号找回新节点。 */
+  function liveFields(doc) {
+    var out = [], all, i;
+    try { all = (doc || document).querySelectorAll('input,textarea'); } catch (e) { return out; }
+    for (i = 0; i < all.length && i < 2500; i++) {
+      try {
+        var t = (all[i].getAttribute('type') || '').toLowerCase();
+        if (all[i].disabled) continue;
+        if (['hidden','submit','button','reset','file','image','password'].indexOf(t) >= 0) continue;
+        if (!shown(all[i])) continue;
+        out.push(all[i]);
+      } catch (e2) {}
+    }
+    return out;
+  }
+  function pushDate(el, key, val) {
+    /* 经历块里的日期元素可能在入队前就已经被 React 换掉；收集候选时记下的
+       __rzOrd 是旧节点仍能提供的位置信息，优先用它，其次才现场查。 */
+    var ord = (typeof el.__rzOrd === 'number') ? el.__rzOrd : -1;
+    if (ord < 0) {
+      try { ord = liveFields(el.ownerDocument || document).indexOf(el); } catch (eOrd) {}
+    }
+    for (var q = 0; q < DATES.length; q++) {
+      var qe = DATES[q].el;
+      try {
+        if (qe === el) return;
+        /* 外壳 div 先入队时算不准左右序号，内层 input 后到，键值要一起更新 */
+        if (qe.contains(el)) {
+          DATES[q].el = el; DATES[q].k = key; DATES[q].val = val;
+          DATES[q].l = comboLabel(el, key); DATES[q].ord = ord;
+          return;
+        }
+        if (el.contains(qe)) return;
+      } catch (e) {}
+    }
+    DATES.push({ el: el, k: key, val: val, l: comboLabel(el, key), ord: ord });
+  }
+
+  function runDates(cb) {
+    var i = 0;
+    /* 按「入队时记下的位置序号」把失效的旧节点换回页面上的新节点。
+       第一遍填空白表单时，前面写公司名/职位会触发 React 重建经历块，
+       日期框被换成新节点；队列里存的旧引用已经脱离文档，点它等于点空气。
+       序号对不上时再按标签文字找，最后才退到「文档里第一个还是空的日期框」。 */
+    function resolveEl(it) {
+      var e = it.el, alive = false;
+      try {
+        alive = !!e && shown(e) && (e.isConnected === true ||
+          !!(e.ownerDocument && e.ownerDocument.documentElement.contains(e)));
+      } catch (e0) {}
+      if (alive) return e;
+      var pool = liveFields((e && e.ownerDocument) || document), cand = null, j;
+      if (it.ord >= 0 && pool[it.ord]) cand = pool[it.ord];
+      if (!cand) {
+        var want = clean(it.l || '');
+        for (j = 0; j < pool.length; j++) {
+          if (want && clean(labelText(pool[j])) === want) { cand = pool[j]; break; }
+        }
+      }
+      /* 再退一步：字节那两个框读不到独立标签，只能靠「还是空的 + 标签里有时间/日期」认，
+         取离原序号最近的那个，避免开始/结束互串。 */
+      if (!cand) {
+        var best = null, bd = 1e9;
+        for (j = 0; j < pool.length; j++) {
+          var p = pool[j];
+          if (clean(p.value || '')) continue;
+          var t = '';
+          try { t = ctxText(p) + ' ' + upLabel(p) + ' ' + labelText(p); } catch (e5) { t = ''; }
+          if (!/(时间|日期|起止)/.test(t)) continue;
+          var used = false;
+          for (var u = 0; u < DATES.length; u++) { if (DATES[u] !== it && DATES[u].el === p) { used = true; break; } }
+          if (used) continue;
+          var d = Math.abs(j - (it.ord >= 0 ? it.ord : j));
+          if (d < bd) { bd = d; best = p; }
+        }
+        cand = best;
+      }
+      if (cand) it.el = cand;
+      return it.el;
+    }
+    function done(it, ok) {
+      if (ok) RES.filled.push({ k: it.k, l: it.l, v: String(it.val).slice(0, 40), el: it.el });
+      else RES.failed.push({ l: it.l, r: '日期框没写进去「' + it.val + '」' });
+      setTimeout(next, 180);
+    }
+    var next = function () {
+      if (i >= DATES.length) { tr('dates-end'); cb(); return; }
+      var it = DATES[i++];
+      var tries = 0;
+      tr('date:' + it.k);
+      if (RES._ttl) RES._ttl('正在填时间 ' + i + '/' + DATES.length + '…');
+      var attempt = function () {
+        resolveEl(it);
+        var dm = /(\d{4})-(\d{1,2})/.exec(String(it.val || ''));
+        var have = String(it.el && it.el.value || '').replace(/[^\d]/g, '');
+        var want = dm ? dm[1] + (dm[2].length === 1 ? '0' + dm[2] : dm[2]) : '';
+        if (want && have.indexOf(want) === 0) { done(it, true); return; }
+        /* 同一个道理：日期控件也可能「点了没反应、回调不来」，
+           卡住就把这一项判失败，别把后面那几对时间一起拖死。 */
+        var finDone = false, wdD = null;
+        var fin = function (ok) {
+          if (finDone) return;
+          finDone = true;
+          try { clearTimeout(wdD); } catch (e0) {}
+          /* 落空就再来一次：第一遍填表的当下，整个经历区块往往还在重建/重排，
+             点开面板的那一下会正好落在中间态上。等它安定下来再走一遍通常就过了。 */
+          if (!ok && tries++ < 1) { setTimeout(attempt, 460); return; }
+          done(it, ok);
+        };
+        wdD = setTimeout(function () { fin(false); }, 9000);
+        try { fillDate(it.el, it.val, fin); } catch (e) { fin(false); }
+      };
+      attempt();
+    };
+    next();
+  }
+
+  function runCombo(cb) {
+    var i = 0;
+    (function next() {
+      if (i >= ASYNC.length) { RES.busy = 0; cb(); return; }
+      var it = ASYNC[i++];
+      /* 轮到它时控件里已经有内容了（用户先填过，或刚被同一个组件的上一项填好）——
+         不要再点。多选下拉的点击是 toggle，点一下就把已选的取消掉，
+         这正是「第二遍点书签，期望工作地点反而没了」的原因。 */
+      if (!it.sg && comboFilled(it.el)) { RES.skipped++; setTimeout(next, 60); return; }
+      tr('combo:' + it.k);
+      if (RES._ttl) RES._ttl('正在填下拉 ' + i + '/' + ASYNC.length + '…');
+      var run1 = it.sg
+        ? function (cb2) { suggestChoose(it.el, it.val, cb2); }
+        : function (cb2) { chooseCombo(it.el, it.val, cb2); };
+      /* 看门狗：自研「下拉」偶尔点开后不给选项、回调永远不回来。
+         一个卡住，后面排队的日期框就全被堵死 —— 字节教育经历起止时间一直空着，
+         根因就在这里：队列停在某个下拉上，日期那一批根本没轮到。
+         宁可判这一项失败，也必须让队列继续往下走。 */
+      var settled = false;
+      var wd = setTimeout(function () { tr('combo-timeout:' + it.k); handle(false); }, 7000);
+      function handle(ok, part, picked) {
+        if (settled) return;
+        settled = true;
+        try { clearTimeout(wd); } catch (e0) {}
+        if (!ok) {
+          /* 同一个控件的内外两层会各进一次队列：外层已经填上了，内层再填一遍就找不到选项，
+             于是报一条假的「下拉里没有」。失败时先看一眼控件现在的值是不是已经对了。 */
+          var now = '';
+          try { now = clean(comboValue(comboBox(it.el) || it.el) || ''); } catch (e) {}
+          var csx = candOf(it.val), jx;
+          for (jx = 0; jx < csx.length; jx++) {
+            if (now && now.indexOf(String(csx[jx]).replace(/\s/g, '')) >= 0) { ok = true; picked = csx[jx]; break; }
+          }
+        }
+        if (ok) {
+          RES.filled.push({ k: it.k, l: it.l, v: String(picked || it.val).slice(0, 40), el: it.el });
+          if (part) RES.failed.push({ l: it.l, r: '只填到「' + part + '」，下一级请手动选' });
+        } else {
+          /* 一个下拉在 DOM 里可能是好几层（外层容器 + 内层 selection/input），
+             上层已经填成功时，下层再填一遍必然找不到选项。同一字段已经成功过就不再报。 */
+          var already = false;
+          for (var q = 0; q < RES.filled.length; q++) {
+            if (RES.filled[q].k === it.k) { already = true; break; }
+          }
+          if (!already) RES.failed.push({ l: it.l, r: '下拉里没有「' + it.val + '」这一项' });
+        }
+        setTimeout(next, 120);
+      }
+      run1(function (ok, part, picked) { handle(ok, part, picked); });
+    })();
+  }
+
+  /* ---------- 各类控件的写入 ---------- */
+  function selOnce(el, v) {
+    var opts = el.options || [], best = null, loose = null, rev = null, i;
+    var vb = normBare(v), vv = String(v).replace(/\s/g, '');
+    if (!vb) return false;
+    for (i = 0; i < opts.length; i++) {
+      var o = opts[i];
+      var tb = normBare(o.text || ''), ov = String(o.value == null ? '' : o.value).replace(/\s/g, '');
+      if (!tb || o.disabled) continue;
+      if (PH.test(tb)) continue;
+      if (ov === vv || tb === vb) { best = o; break; }
+      if (!loose && tb.indexOf(vb) >= 0) loose = o;
+      /* 反向包含只在选项占值的大部分时才认，避免「某省某市」被「某省」截胡 */
+      if (tb.length >= 2 && vb.indexOf(tb) >= 0 && tb.length * 10 >= vb.length * 6
+          && (!rev || tb.length > rev.n)) {
+        rev = { o: o, n: tb.length };
+      }
+    }
+    var pick = best || loose || (rev && rev.o);
+    if (!pick) return false;
+    protoSet(el, pick.value);
+    return true;
+  }
+  function setSelect(el, v) {
+    var cs = candOf(v);
+    for (var i = 0; i < cs.length; i++) if (selOnce(el, cs[i])) return true;
+    return false;
+  }
+
+  function setRadio(scope, g, v) {
+    var rs;
+    try { rs = scope.querySelectorAll('input[type=radio][name="' + q(g) + '"]'); } catch (e) { return false; }
+    for (var i = 0; i < rs.length; i++) {
+      var r = rs[i], t = '';
+      if (r.labels && r.labels.length) t = r.labels[0].innerText || '';
+      if (!t && r.parentElement) t = r.parentElement.innerText || '';
+      if (!t) t = r.value || '';
+      t = t.replace(/\s/g, '');
+      if (t.indexOf(v) >= 0 || r.value === v) {
+        /* 已经是选中状态就别再点一次：有些组件把 click 做成 toggle */
+        if (r.checked) return true;
+        try { r.click(); } catch (e) {}
+        if (!r.checked) { r.checked = true; fire(r); }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /* 单个复选框：值是"是"就勾上，"否"则保持不勾 */
+  function setCheckboxOnce(el, v) {
+    var want = YES.test(v) ? true : NO.test(v) ? false : null;
+    if (want === null) return false;
+    if (el.checked === want) return true;
+    if (want) { try { el.click(); } catch (e) {} }
+    if (el.checked !== want) { el.checked = want; fire(el); }
+    return true;
+  }
+
+  /* 复选框组：把「安康、韩城」这种按分隔符拆开逐项勾选 */
+  function setCheckboxGroup(scope, g, v) {
+    var rs;
+    try { rs = scope.querySelectorAll('input[type=checkbox][name="' + q(g) + '"]'); } catch (e) { return 0; }
+    var parts = String(v).split(/[、,，/;；\s]+/).filter(function (x) { return x; });
+    var hit = 0;
+    for (var i = 0; i < rs.length; i++) {
+      var r = rs[i], t = labelText(r).replace(/\s/g, '');
+      for (var j = 0; j < parts.length; j++) {
+        if (t && (t.indexOf(parts[j]) >= 0 || parts[j].indexOf(t) >= 0)) {
+          if (!r.checked) { try { r.click(); } catch (e) {} }
+          if (!r.checked) { r.checked = true; fire(r); }
+          hit++;
+          break;
+        }
+      }
+    }
+    return hit;
+  }
+
+  /* 日期/数字按控件类型与占位符格式化 */
+  function fmtFor(el, val) {
+    /* 分号表示「按优先级依次尝试」（如 期望薪资 / 求职渠道）：
+       下拉里会逐个试选项，落到文本框时只取第一段，别把整串塞进去 */
+    val = String(val == null ? '' : val).split(';')[0].replace(/^\s+|\s+$/g, '');
+    var type = (el.getAttribute('type') || '').toLowerCase();
+    var ph = (el.getAttribute('placeholder') || '') + ' ' + (el.getAttribute('data-format') || '');
+    if (type === 'date')   return /^\d{4}-\d{2}$/.test(val) ? val + '-01' : val;
+    if (type === 'month')  return String(val).slice(0, 7);
+    if (type === 'datetime-local') return /^\d{4}-\d{2}-\d{2}$/.test(val) ? val + 'T00:00' : val;
+    if (type === 'number') return String(val).replace(/[^\d.\-]/g, '');
+    if (/yyyy-mm(?!-dd)/i.test(ph)) return String(val).slice(0, 7);
+    var m = String(val).match(/^(\d{4})-(\d{2})(?:-(\d{2}))?$/);
+    if (m && /年/.test(ph)) return m[1] + '年' + m[2] + '月' + (m[3] ? m[3] + '日' : '');
+    if (/\//.test(ph) && m) return m[1] + '/' + m[2] + (m[3] ? '/' + m[3] : '');
+    return val;
+  }
+
+  /* 日期写进纯文本框时该写成什么样：YYYY-MM 还是 YYYY-MM-DD。
+     优先看框自己的提示（placeholder / data-format），
+     没提示就看框里原来的值是什么格式 —— 原来只到月就写到月。
+     都没有就写到月：国内网申的起止时间基本都是「2023-09」这种。 */
+  function dateTextFor(el, val) {
+    var s = String(val == null ? '' : val);
+    var m = /^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/.exec(s);
+    if (!m) return fmtFor(el, s);
+    var ym = m[1] + '-' + (m[2].length === 1 ? '0' + m[2] : m[2]);
+    var ph = (el.getAttribute('placeholder') || '') + ' ' + (el.getAttribute('data-format') || '');
+    var cur = String(el.value || '');
+    var wantDay = false;
+    if (/yyyy-mm-dd/i.test(ph)) wantDay = true;
+    else if (/年/.test(ph) && /日/.test(ph)) wantDay = true;
+    else if (cur && /\d{4}-\d{1,2}-\d{1,2}/.test(cur)) wantDay = true;
+    else if (cur && /\d{4}-\d{1,2}/.test(cur)) wantDay = false;
+    else if (!cur && !ph) wantDay = false;
+    if (!wantDay) return ym;
+    return fmtFor(el, s);
+  }
+
+  /* 同一行里若有 2~3 个输入框，返回 el 是从左数第几个（0 起）；不是这种结构返回 -1 */
+  /* 控件属于哪个区块：教育 / 经历。
+     「起止时间」这种标签在教育区是「入学-毕业」，在经历区是某段经历的时间，不能混。
+
+     v40 重写的理由（真实字节校招页上查出来的）：
+     页面左侧有一列 sticky 的区块指示器，显示当前滚到的区块名，视口坐标几乎不变。
+     用「视觉上离控件最近的标题」判区块，滚到哪个区块就判成哪个 ——
+     页面停在别处时，教育区的日期框被判成「项目区」，于是一整段被静默丢掉，
+     用户看到的现象就是「第一遍压根没填，滚到那一块再点一次才填上」。
+     现在换两条都稳的判据：
+       ① 就近特征词：控件上下几百像素内，谁离得近谁说了算（学校/学历/在校 vs 公司/职位/项目）
+       ② 区块标题：按「文档坐标」找上方最近的标题，并排除 position:sticky/fixed 的侧栏指示器
+     两条都判不出就返回 ''（不知道就不拦）—— 宁可多填一个，也别整段丢掉。 */
+  var ZEDU = /(学校|院校|学院|专业|学历|学位|班级|学号|在校|就读|入学|毕业|绩点|排名|教育)/;
+  var ZEXP = /(公司|单位|职位|岗位|职务|部门|担任|职责|团队|项目名称|项目角色|项目描述|工作内容|工作经历|实习经历|项目经历)/;
+
+  /* 往上找几层，看有没有 sticky/fixed 的祖先（左侧那块区块指示器就是 sticky） */
+  function stickyUp(pe) {
+    var p = pe, hop = 0;
+    while (p && p.nodeType === 1 && hop < 5) {
+      var pos = '';
+      try { pos = ((p.ownerDocument && p.ownerDocument.defaultView) || window).getComputedStyle(p).position || ''; } catch (e) {}
+      if (pos === 'sticky' || pos === 'fixed') return true;
+      p = p.parentElement; hop++;
+    }
+    return false;
+  }
+
+  function zoneOf(el) {
+    var doc = (el && el.ownerDocument) || document, r, list, i, pe, pr, t, dy;
+    try { r = el.getBoundingClientRect(); } catch (e0) { return ''; }
+    if (!r || !r.width) return '';
+    var cy = r.top + r.height / 2;
+    /* ① 就近特征词 */
+    var ed = 1e9, ex = 1e9;
+    try { list = geoCands(doc); } catch (e1) { list = null; }
+    if (list) {
+      for (i = 0; i < list.length; i++) {
+        pe = list[i].n.parentElement;
+        if (!pe) continue;
+        try { pr = pe.getBoundingClientRect(); } catch (e2) { continue; }
+        if (!pr.width || !pr.height) continue;
+        dy = Math.abs(pr.top + pr.height / 2 - cy);
+        if (dy > 460) continue;
+        t = list[i].t;
+        var isE = ZEDU.test(t), isX = ZEXP.test(t);
+        if (isE && !isX) { if (dy < ed) ed = dy; }
+        else if (isX && !isE) { if (dy < ex) ex = dy; }
+      }
+    }
+    if (ed < 1e9 && ed < ex) return 'edu';
+    if (ex < 1e9) return 'exp';
+    /* ② 特征词没结论，退到区块标题（文档坐标 + 排除 sticky 侧栏） */
+    return zoneByHead(el);
+  }
+
+  function zoneByHead(el) {
+    var doc = (el && el.ownerDocument) || document, wk, tn, best = '', bd = 1e9, scy = 0, cr, cTop;
+    try { scy = ((doc.defaultView) || window).scrollY || 0; } catch (e0) {}
+    try { cr = el.getBoundingClientRect(); } catch (e1) { return ''; }
+    if (!cr) return '';
+    cTop = cr.top + scy;
+    try {
+      wk = doc.createTreeWalker(doc.body || doc.documentElement, 4, null, false);
+      while ((tn = wk.nextNode())) {
+        var t = (tn.nodeValue || '').replace(/\s/g, '');
+        if (!t || t.length > 12) continue;
+        var k = '';
+        if (/(教育经历|教育背景|教育信息|教育情况|学历信息|教育及培训)/.test(t)) k = 'edu';
+        else if (/(实习经历|工作经历|实践经历|职业经历|工作经验|实习经验)/.test(t)) k = 'intern';
+        else if (/(项目经历|项目经验|项目实践|主要项目|科研项目|代表项目)/.test(t)) k = 'project';
+        if (!k) continue;
+        var pe = tn.parentNode;
+        if (!pe) continue;
+        try { if (!shown(pe)) continue; } catch (e2) { continue; }
+        if (stickyUp(pe)) continue;          /* 左侧 sticky 区块指示器不算 */
+        var pr;
+        try { pr = pe.getBoundingClientRect(); } catch (e3) { continue; }
+        if (!pr.width || !pr.height) continue;
+        var pC = pr.top + scy + pr.height / 2;
+        if (pC > cTop + 24) continue;        /* 标题在控件下方，不算 */
+        var d = cTop - pC;
+        if (d < bd) { bd = d; best = k; }
+      }
+    } catch (e4) {}
+    return best;
+  }
+
+  /* 教育经历的起止时间框里留着旧值时，返回该用哪个键去改写；
+     不是这一对、或者旧值其实是对的，就返回 ''（照旧跳过，不动用户手填的东西）。 */
+  function staleDateKey(el, tag) {
+    if (tag !== 'input') return '';
+    if (zoneOf(el) !== 'edu') return '';
+    var row = rowInputs(el), idx = -1, i, lab = '', key, k;
+    for (i = 0; i < row.length; i++) if (row[i] === el) idx = i;
+    if (idx < 0) return '';
+    for (i = 0; i < row.length; i++) {
+      lab += ' ' + (upLabel(row[i]) || '') + ' ' + (labelText(row[i]) || '') + ' ' + (ctxText(row[i]) || '');
+    }
+    k = matchRule(lab);
+    if (k !== 'enrollDate' && k !== 'graduateDate') return '';
+    key = (idx === 0) ? 'enrollDate' : (idx === 1) ? 'graduateDate' : k;
+    var cur = String(el.value || ''), want = String(D[key] || '');
+    var cm = /(\d{4})\D?(\d{1,2})/.exec(cur), wm = /(\d{4})\D?(\d{1,2})/.exec(want);
+    if (!wm) return '';
+    if (cm && cm[1] === wm[1] && cm[2] === wm[2]) return '';   /* 值已经是对的，别动 */
+    return key;
+  }
+
+  function dateRowIdx(el) {
+    var doc = el.ownerDocument || document, all, i, row = [], r0;
+    try { r0 = el.getBoundingClientRect(); } catch (e) { return -1; }
+    if (!r0.width) return -1;
+    try { all = doc.querySelectorAll('input'); } catch (e2) { return -1; }
+    for (i = 0; i < all.length && i < 400; i++) {
+      var e = all[i], ty = (e.getAttribute('type') || '').toLowerCase();
+      if (['hidden', 'checkbox', 'radio', 'file', 'submit', 'button', 'image', 'reset'].indexOf(ty) >= 0) continue;
+      var r;
+      try { r = e.getBoundingClientRect(); } catch (e3) { continue; }
+      if (!r.width) continue;
+      if (Math.abs(r.top - r0.top) > 6) continue;
+      if (Math.abs(r.height - r0.height) > 10) continue;
+      row.push(e);
+    }
+    if (row.length < 2 || row.length > 3) return -1;
+    row.sort(function (a, b) { return a.getBoundingClientRect().left - b.getBoundingClientRect().left; });
+    for (i = 0; i < row.length; i++) if (row[i] === el) return i;
+    return -1;
+  }
+
+  /* 同一行的输入框（上下对齐、控件高度相近），按从左到右排好 */
+  function rowInputs(el) {
+    var doc = (el && el.ownerDocument) || document, all, i, row = [], r0;
+    try { r0 = el.getBoundingClientRect(); } catch (e) { return row; }
+    if (!r0.width) return row;
+    try { all = doc.querySelectorAll('input,textarea'); } catch (e2) { return row; }
+    for (i = 0; i < all.length && i < 400; i++) {
+      var e2 = all[i], ty = (e2.getAttribute('type') || '').toLowerCase();
+      if (['hidden', 'checkbox', 'radio', 'file', 'submit', 'button', 'image', 'reset'].indexOf(ty) >= 0) continue;
+      var r;
+      try { r = e2.getBoundingClientRect(); } catch (e3) { continue; }
+      if (!r.width) continue;
+      if (Math.abs(r.top - r0.top) > 6) continue;
+      if (Math.abs(r.height - r0.height) > 10) continue;
+      row.push(e2);
+    }
+    row.sort(function (a, b) {
+      try { return a.getBoundingClientRect().left - b.getBoundingClientRect().left; } catch (e4) { return 0; }
+    });
+    return row;
+  }
+
+  /* 标签只写在左格上方时，右格在版面上够不到它（水平不重叠）→ 整行都认不出来。
+     借同行兄弟框的标签用。 */
+  function rowSharedLabel(el) {
+    var row = rowInputs(el), i, t;
+    for (i = 0; i < row.length; i++) {
+      if (row[i] === el) continue;
+      t = upLabel(row[i]) || labelText(row[i]) || geoLabel(row[i]);
+      if (t && matchRule(t)) return t;
+    }
+    return '';
+  }
+
+  /* 版面兜底：一行里正好两个框，且这行上方写着「起止时间」之类 → 左入学、右毕业。
+     返回该框在同行里的序号（0 起），不适用返回 -1。 */
+  var PAIR_RE = /(起止时间|起止年月|起止日期|就读时间|在校时间)/;
+  function datePairRow(el) {
+    var row = rowInputs(el);
+    if (row.length !== 2) return -1;
+    var doc = (el && el.ownerDocument) || document, list = geoCands(doc);
+    if (!list || !list.length) return -1;
+    var r0, lft, rgt;
+    try {
+      r0 = el.getBoundingClientRect();
+      lft = Math.min(row[0].getBoundingClientRect().left, row[1].getBoundingClientRect().left);
+      rgt = Math.max(row[0].getBoundingClientRect().right, row[1].getBoundingClientRect().right);
+    } catch (e) { return -1; }
+    if (!r0.width) return -1;
+    for (var i = 0; i < list.length; i++) {
+      var pe = list[i].n.parentElement, pr;
+      if (!pe) continue;
+      try { pr = pe.getBoundingClientRect(); } catch (e2) { continue; }
+      if (!pr.width || !pr.height) continue;
+      var gap = r0.top - pr.bottom;          /* 文字底边在框顶之上 */
+      if (gap < -8 || gap > 70) continue;
+      if (pr.right < lft - 8 || pr.left > rgt + 8) continue;
+      if (!PAIR_RE.test(list[i].t)) continue;
+      for (var j = 0; j < row.length; j++) if (row[j] === el) return j;
+      return -1;
+    }
+    return -1;
+  }
+
+  function isEmpty(el, tag) {
+    if (el.getAttribute('contenteditable') === 'true') return !clean(el.innerText);
+    if (tag === 'select') {
+      var so = el.options[el.selectedIndex];
+      if (!so) return true;
+      var st = (so.text || '').replace(/\s/g, '');
+      var sv = so.value || '';
+      return !sv || PH.test(st);
+    }
+    /* 下拉组件选了值之后，文本不一定写进 input.value，得看组件自己的展示节点 */
+    if (isCombo(el)) return !comboValue(el);
+    return !clean(el.value);
+  }
+
+  /* ---------- 收集文档（含同源 iframe） ---------- */
+  var docs = [document];
+  var frames = document.querySelectorAll('iframe,frame');
+  for (var f = 0; f < frames.length; f++) {
+    try {
+      var cd = frames[f].contentDocument;
+      if (cd && cd.body && cd.querySelectorAll) docs.push(cd);
+    } catch (e) { RES.cross++; }
+  }
+
+  /* ---------- 折叠区块清点 ----------
+     不少网申把「教育经历 / 实习经历」整块收起来，控件还在 DOM 里但尺寸为 0，
+     扫描会整段跳过 —— 用户看到的是「这块怎么没填」，其实只是没展开。
+     这里只清点、绝不点：猜「哪个是展开按钮」风险太大（点错一次可能是提交或跳页），
+     所以把数字摆给用户，让他展开后再点一次。 */
+  var hiddenReq = 0;
+  for (var hi = 0; hi < docs.length; hi++) {
+    var hEls;
+    try { hEls = docs[hi].querySelectorAll('input,textarea,select'); } catch (e) { continue; }
+    for (var hj = 0; hj < hEls.length && hj < 1500; hj++) {
+      var he = hEls[hj];
+      if (he.disabled) continue;
+      var hty = (he.getAttribute('type') || '').toLowerCase();
+      if (hty === 'hidden' || hty === 'file' || hty === 'submit' || hty === 'button'
+          || hty === 'image' || hty === 'reset' || hty === 'radio' || hty === 'checkbox') continue;
+      if (shown(he)) continue;
+      if (!(he.getAttribute('required') != null || he.getAttribute('aria-required') === 'true')) continue;
+      hiddenReq++;
+    }
+  }
+  if (hiddenReq >= 2) RES.hiddenReq = hiddenReq;
+
+  /* v42：主扫描整体延后到「经历块补足」之后执行。
+     不少网申页（字节就是）默认只显示一段实习、一段项目，第二段起要手点「+ 添加」；
+     资料里有 6 段项目、页面上只有 1 个框，多出来的 5 段永远填不上 ——
+     用户看到的是「第二段实习怎么没填」，其实页面压根没有那个框。
+     不需要补块时 ensureBlocks 会同步回调，行为和以前完全一样。 */
+  function runScanAndFinish() {
+  /* ---------- 主循环 ---------- */
+  var seenK = {};
+  for (var di = 0; di < docs.length; di++) {
+    var doc = docs[di], els;
+    try { els = doc.querySelectorAll('input,textarea,select,[contenteditable="true"],[role="combobox"],'
+      + '.select2-selection,.chosen-single,.layui-select-title'); }
+    catch (e) { continue; }
+    if (!els || !els.length) continue;
+    var seenG = {};
+
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      try {
+        if (el.disabled) continue;
+        var tag = el.tagName.toLowerCase();
+        var type = (el.getAttribute('type') || '').toLowerCase();
+
+        if (tag === 'input' && ['hidden','submit','button','reset','file','image','password'].indexOf(type) >= 0) continue;
+        /* 反爬蜜罐：给机器人准备的假输入框，人看不见也填不了，填了反而被标记成爬虫。
+           两种典型长相：tabindex=-1 挪出键盘焦点链、name 带 hp_/honeypot/trap。 */
+        if (tag === 'input' && type !== 'radio' && type !== 'checkbox') {
+          var hpName = String(el.getAttribute('name') || '') + ' ' + String(el.id || '');
+          if (/hp[_-]|honeypot|_trap|trap_/i.test(hpName)) continue;
+          if (el.getAttribute('tabindex') === '-1' && !isCombo(el)) continue;
+        }
+        /* readonly 的 input 两种：日期控件（点开是日历，填不了）和下拉组件（点开才出选项）。
+           自家写的组件库往往没有任何 select/combobox 特征类名，只能靠「只读」这个特征放行，
+           真点开发现是日历的话后面会自己放弃，不会乱填。 */
+        var combo = false, ro = !!el.readOnly;
+        var role = (el.getAttribute('role') || '').toLowerCase();
+        if (tag !== 'select' && type !== 'radio' && type !== 'checkbox') {
+          var shell = SHELL_CLS.test(clsOf(el));
+          if (isCombo(el) && (ro || role === 'combobox' || shell)) combo = true;
+          else if (ro && type !== 'date' && type !== 'month') combo = true;
+          else if (ro) continue;
+        }
+        if (!shown(el)) continue;
+
+        /* --- 单选 / 复选 --- */
+        if (type === 'radio' || type === 'checkbox') {
+          var g = el.name || '';
+          var grp = [el];
+          if (g) {
+            try { grp = doc.querySelectorAll('input[type=' + type + '][name="' + q(g) + '"]'); }
+            catch (e) { grp = [el]; }
+          }
+          if (!grp.length) grp = [el];
+
+          /* 单个复选框（没有同组兄弟）：按提示文本判断勾不勾，如「是否接受调剂」 */
+          if (type === 'checkbox' && grp.length <= 1) {
+            var ck = matchRule(ctxText(el) + ' ' + ctxUp(el, 3));
+            if (DIAG) { RES.diag.push({ l: labelText(el) || clean(ctxText(el)).slice(0, 24), v: el.checked ? '已勾选' : '', k: ck || '' }); continue; }
+            if (!ck) continue;
+            if (setCheckboxOnce(el, D[ck]) && YES.test(D[ck])) {
+              RES.filled.push({ k: ck, l: labelText(el) || ck, v: '已勾选' });
+            }
+            continue;
+          }
+
+          if (!g) continue;
+          var gk = di + '|' + type + '|' + g;
+          if (seenG[gk]) continue;
+          seenG[gk] = 1;
+
+          var gctx = groupCtx(doc, g);
+          var gkey = matchRule(gctx + ' ' + g);
+          if (!gkey && grp[0]) {
+            /* 题目文字可能压根不在 DOM 关系里，按版面找左边那行字 */
+            var gl0 = geoLabel(grp[0]);
+            if (gl0) gkey = matchRule(gl0 + ' ' + g);
+          }
+          if (DIAG) { RES.diag.push({ l: clean(gctx).slice(0, 30), v: '', k: gkey || '' }); continue; }
+          if (!gkey) continue;
+
+          if (type === 'radio') {
+            if (setRadio(doc, g, D[gkey])) RES.filled.push({ k: gkey, l: clean(gctx).slice(0, 24) || gkey, v: D[gkey] });
+          } else {
+            var n = setCheckboxGroup(doc, g, D[gkey]);
+            if (n) RES.filled.push({ k: gkey, l: clean(gctx).slice(0, 24) || gkey, v: D[gkey] });
+          }
+          continue;
+        }
+
+        /* --- 已填内容跳过 ---
+           教育经历的起止时间是成对字段，值直接来自简历资料。
+           框里若留的是上一次运行写进去的旧值（资料改了 / 之前用的还是示例数据），
+           会被永远跳过 —— 用户看到的现象就是「填不上」。
+           这一对值对不上就改写，并在面板上写明改了什么。 */
+        var forceKey = '';
+        if (!DIAG && !isEmpty(el, tag)) {
+          forceKey = staleDateKey(el, tag);
+          if (!forceKey) { RES.skipped++; continue; }
+          if (RES.overwrite.length < 20) {
+            RES.overwrite.push(forceKey + '：' + String(el.value || '') + ' → '
+              + String(D[forceKey] || '').replace(/-\d\d$/, '').slice(0, 10));
+          }
+        }
+
+        /* --- 匹配字段 --- */
+        var ctx = ctxText(el);
+        var key = matchRule(ctx);
+        /* ctx 什么都读不到时，再用 labelText 兜底（labels / label[for] / closest('label') / nearLabel）。
+           不能直接拼进 ctx：nearLabel 取的是「父容器的上一个兄弟」，row 布局下会读到上一行标签，
+           把「最高学位」的下拉认成「婚姻状况」。 */
+        if (!key) key = matchRule(labelText(el));
+        var geo = '';
+        /* 版面标签比「往上爬到的整块文字」准：后者常把相邻字段一起带进来。
+           所以先按位置找，再退回爬文本。 */
+        if (!key) { geo = geoLabel(el); if (geo) key = matchRule(geo); }
+        /* 标签在正上方的排版（字节 / Semi Design 那种），左侧同一行找不到 */
+        if (!key) { var up = upLabel(el); if (up) key = matchRule(up); }
+        if (!key) key = matchRule(ctx + ' ' + ctxUp(el, 2));
+        /* 「起止时间」是并排两个框，标签只写在左格上方，右格版面上够不到 → 整行都认不出该填什么。
+           两条兜底：① 借同行兄弟框的标签；② 这一行上方写着「起止时间」就按左右当成入学/毕业。 */
+        if (!key) { var sh = rowSharedLabel(el); if (sh) key = matchRule(sh); }
+        if (!key) { var pr2 = datePairRow(el); if (pr2 >= 0) key = (pr2 === 0) ? 'enrollDate' : 'graduateDate'; }
+
+        /* 旧值要改写时，用判定出来的键（按同行左右顺序），别用标签猜出来的 */
+        if (forceKey) key = forceKey;
+
+        if (DIAG) {
+          var dv = tag === 'select'
+            ? (el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : '')
+            : (el.getAttribute('contenteditable') === 'true' ? el.innerText : el.value);
+          var dl = labelText(el) || clean(ctx).slice(0, 30);
+          if (dl) RES.diag.push({ l: dl, v: clean(dv).slice(0, 26), k: key || '' });
+          continue;
+        }
+
+        /* 多段经历模式下，「公司名称 / 职位名称 / 项目名称 / 项目角色」主扫描本来就不认
+           （RULES 里没这些规则，它们由下面的经历逻辑按段对位填写）。
+           以前会一条条进「未识别」，段数一多面板全是噪音，用户以为漏填了。 */
+        if (O.exp && !key) {
+          var _ul0 = clean(labelText(el) || upLabel(el) || geo || '');
+          if (_ul0 && /^(公司|单位|企业)(名称|全称)?\s*\*?$|^(实习|工作)单位\s*\*?$|^所属(公司|单位|企业)\s*\*?$/
+            .test(_ul0)) continue;
+          if (_ul0 && /^职位(名称)?\s*\*?$|^岗位(名称)?\s*\*?$|^担任?角色\s*\*?$|^项目角色\s*\*?$/.test(_ul0)) continue;
+          if (_ul0 && /^项目(名称|标题|课题)\s*\*?$|^项目\/?课题\s*\*?$|^项目所属\s*\*?$/.test(_ul0)) continue;
+        }
+
+        if (!key) {
+          var ul = labelText(el);
+          if (!ul || PH.test(ul.replace(/\s/g, ''))) ul = geo || upLabel(el) || geoLabel(el) || clean(ctx).slice(0, 30);
+          /* 连标签都读不出来的字段最需要被看见，否则面板上等于没发生 */
+          if (!ul) ul = '(无标签 ' + tag + ' #' + String(el.id || el.name || '?').slice(0, 14) + ')';
+          if (RES.unmatched.length < 60) RES.unmatched.push(ul);
+          continue;
+        }
+
+        /* 「起止时间」这种一行两个框：左边是开始、右边是结束。
+           页面还会在这行底下写一句「无准确的毕业时间可填写预计毕业时间」，
+           标签识别经常被那句提示抢走，导致两个框都被认成毕业时间 —— 这里按左右顺序纠正。 */
+        if (key === 'enrollDate' || key === 'graduateDate') {
+          var zNow = zoneOf(el);
+          /* 经历区块里的「起止时间」是多段经历的时间，别拿入学日期去填。
+             只有「明确判定为经历区」才拦；判不出来（长表单 + sticky 侧栏）就照填 ——
+             之前就是这里 continue 掉的，而且面板上连一条记录都不留，
+             用户只看到「第一遍压根没填，滚到那一块再点一次才填上」。 */
+          if (zNow === 'exp') {
+            /* 这一格归「实习/项目时间」字段管（下面那段经历逻辑会填）。
+               但「交给别人填」不等于「填上了」：资料里没有这段时间、或者那段经历
+               的框没认出来，都会让它一直空着。所以先记下来，
+               等日期队列跑完由 checkSpanWait() 回读核对，空的说清楚原因。 */
+            if (SPAN_WAIT.length < 40) {
+              SPAN_WAIT.push({
+                el: el,
+                ord: (typeof el.__rzOrd === 'number') ? el.__rzOrd : -1,
+                lab: clean(labelText(el) || upLabel(el) || '起止时间') || '起止时间',
+                why: ''
+              });
+            }
+            continue;
+          }
+          var ridx = dateRowIdx(el);
+          if (ridx === 0) key = 'enrollDate';
+          else if (ridx === 1) key = 'graduateDate';
+        }
+
+        var val = D[key], ok = false, sugQ = false;
+        /* 日期控件一律排到日期队列：要异步点开面板再回车，同步写完会被回滚。
+           例外：纯文本框型的日期（type=text 且不是只读）压根没有日历面板，
+           直接打字就成 —— 字节教育经历的「起止时间」就是这种框，
+           走日期队列要空等面板、找不到面板还会被误判成「没写进去」。 */
+        if (isDateKey(key) && tag === 'input' && key !== 'birthday') {
+          var dtx = (el.getAttribute('type') || '').toLowerCase();
+          if (dtx !== 'date' && dtx !== 'month' && dtx !== 'datetime-local' && !el.readOnly) {
+            var dval = dateTextFor(el, val), ddoc = el.ownerDocument || document, ins = false;
+            try { if (el.focus) el.focus(); } catch (eF) {}
+            try { try { el.select(); } catch (eS1) {} ins = ddoc.execCommand('insertText', false, String(dval)); } catch (eX) {}
+            if (!ins || String(el.value || '') !== String(dval)) protoSet(el, dval);
+            var dchk = String(el.value || '').replace(/[^\d]/g, '');
+            var dwant = String(val || '').replace(/[^\d]/g, '').slice(0, 6);
+            if (dchk && dwant && dchk.indexOf(dwant) === 0) {
+              RES.filled.push({ k: key, l: labelText(el) || key, v: String(dval).slice(0, 40), el: el });
+              continue;
+            }
+            /* 没留住就老实排进日期队列，让它走面板那条路再试一次 */
+          }
+          pushDate(el, key, val); continue;
+        }
+        /* 开了多段经历模式时，经历类字段交给下面的 exp 逻辑按顺序对位，
+           否则表单里三个「工作内容」会全被填成第一段的描述 */
+        if (O.exp && /^(exp|prj)\d_/.test(key)) continue;
+
+        /* 手机号、邮箱这些本来就是文本框，只是组件库给外层加了 role=combobox：
+           能写字就照常写字，别当区号下拉点掉 */
+        if (combo && TEXTKEY.test(key)) {
+          var tw0 = (el.getAttribute('type') || '').toLowerCase();
+          if (el.tagName === 'INPUT' && !el.readOnly
+              && /^(text|tel|search|number|email|url|)$/.test(tw0)) {
+            combo = false;
+          } else {
+            RES.failed.push({ l: comboLabel(el, key), r: '这格是下拉（如区号），没替你选' });
+            continue;
+          }
+        }
+
+        /* 下拉组件：先登记，等主循环跑完再一个个点开选（弹层是异步渲染的） */
+        if (combo) {
+          /* 日期类：点开是日历或月份滚轮，得单独处理 */
+          if (isDateKey(key)) { pushDate(el, key, val); continue; }
+          /* 已经有内容就不动它。多选下拉（期望工作地点）的已选项是 chip 标签，
+             不写在 input.value 里，扫描阶段看不出「已填」，
+             等到真的去点才把已选的城市 toggle 掉 —— 用户要的就是「有内容就别碰」。 */
+          if (comboFilled(el)) { RES.skipped++; continue; }
+          /* 组件外层 div 和里面的 input 会同时命中，只留一个，优先留里面的 input（点它最准） */
+          var dup = false, cid = null;
+          try { cid = comboBox(el); } catch (e) {}
+          for (var z = 0; z < ASYNC.length; z++) {
+            var pe = ASYNC[z].el, pid = null;
+            try { pid = comboBox(pe); } catch (e) {}
+            try {
+              if (pe === el) { dup = true; break; }
+              /* 只有「同一个字段」才可能是内外两层重复。
+                 以前不看 key 就按组件容器判重：字节教育经历里「学历类型」和「学历」
+                 是两个挨着的下拉、容器同一个，后一个直接被当成重复吞掉 ——
+                 于是它既不填也不报错，面板上连一条失败都看不到。 */
+              if (ASYNC[z].k !== key) continue;
+              /* 同一个下拉的内外层未必是祖先/后代（Semi 里是兄弟节点），
+                 按「它们各自归属的组件容器」判断才准，否则一个控件会进两次队列，
+                 第一遍填上、第二遍报一条假的「没有这一项」 */
+              if (cid && pid && cid === pid) { dup = true; break; }
+              if (pe.contains(el)) { ASYNC[z].el = el; dup = true; break; }
+              if (el.contains(pe)) { dup = true; break; }
+            } catch (e) {}
+          }
+          if (!dup) ASYNC.push({ el: el, k: key, val: val, l: comboLabel(el, key) });
+          continue;
+        }
+        /* 省 / 市 / 区 几个 select 联动时，按顺序取「某省某市某县」里对应的那一段 */
+        if (tag === 'select') {
+          seenK[key] = (seenK[key] || 0) + 1;
+          var hit = seenK[key] - 1, sgv = segsOf(val);
+          if (sgv.length > 1 && hit < sgv.length) {
+            val = sgv[hit];
+            ok = setSelect(el, val);
+            if (!ok && hit > 0) { val = sgv[0]; ok = setSelect(el, val); }
+          }
+          if (!ok) ok = setSelect(el, val);
+        } else if (el.getAttribute('contenteditable') === 'true') {
+          try { el.innerText = val; fire(el); ok = true; } catch (e) {}
+        } else {
+          var tv = fmtFor(el, val);
+          protoSet(el, tv);
+          ok = true;
+          /* 有「文本框」样子的受控控件（证书名称、技能标签）写完立刻被回滚成空：
+             它不是真文本框，得点开建议列表选一项。先记下来，等主循环跑完再处理。
+             只认「被清空」这一种：手机号那种自动去空格的格式化不算回滚。 */
+          if (String(tv || '') && !String(el.value || '').trim()) {
+            ok = false;
+            sugQ = true;
+            ASYNC.push({ el: el, k: key, val: val, l: labelText(el) || LABELOF(key), sg: 1 });
+          }
+        }
+
+        if (ok) RES.filled.push({ k: key, l: labelText(el) || LABELOF(key), v: String(val).slice(0, 40), el: el });
+        else if (!sugQ) RES.failed.push({ l: labelText(el) || LABELOF(key), r: '下拉里没有「' + val + '」这一项' });
+      } catch (e) {}
+    }
+  }
+
+  function LABELOF(k) {
+    for (var c = 0; c < CX.length; c++) {
+      if (CX[c][0] === k) return String(CX[c][1] || k).split(/[|/、，,;；]/)[0];
+    }
+    if (/^exp\d_/.test(k)) return k.replace(/^exp(\d)_/, '实习$1·');
+    if (/^prj\d_/.test(k)) return k.replace(/^prj(\d)_/, '项目$1·');
+    return k;
+  }
+
+  /* ---------- 可选：多段经历（实习 / 项目分开对位） ---------- */
+  if (O.exp && !DIAG) {
+    (function () {
+      var R_ORG   = [/((公司|单位|企业)(名称|全称)?|实习单位|工作单位|所属(公司|单位)|项目所属)/, /(学校|院校|推荐|紧急)/];
+      var R_TITLE = [/(项目名称|实习项目|项目课题|项目\/?课题|项目标题)/, /(学校|课程|专业)/];
+      var R_ROLE  = [/(职位|岗位|职务|担任角色|角色|承担角色|项目角色)/, /(应聘|意向|期望|申请|描述|内容)/];
+      var R_START = [/(开始时间|起始时间|入职时间|开始日期|项目开始)/, null];
+      var R_END   = [/(结束时间|离职时间|截止时间|结束日期|项目结束)/, null];
+      var R_SPAN  = [/(项目时间|项目起止|起止时间|时间区间|起止日期)/, null];
+      var R_DESC  = [/(描述|工作内容|工作描述|实习内容|职责描述|主要职责|业绩描述|项目描述|项目内容|项目职责|项目介绍|项目成果|项目业绩)/, /(自我|个人|简介)/];
+
+      /* 页面把「实习」和「项目」分成两节时，按所在节归位，别串到一起 */
+      var HP = /(项目经历|项目经验|项目实践|主要项目|科研项目|代表项目)/;
+      var HI = /(实习经历|工作经历|实践经历|职业经历|工作履历|实习经验|工作经验)/;
+      var HEADS = [];
+      try {
+        var wk = document.createTreeWalker(document.body || document.documentElement, 4, null, false), tn;
+        while ((tn = wk.nextNode())) {
+          var st = (tn.nodeValue || '').replace(/\s/g, '');
+          if (!st || st.length > 12) continue;
+          var a1 = HP.test(st), b1 = HI.test(st);
+          if (a1 && b1) continue;            /* 「工作及项目经历」这种不算分节 */
+          var kd = a1 ? 'project' : (b1 ? 'intern' : '');
+          if (!kd) continue;
+          var pe = tn.parentNode;
+          try { if (!pe || !shown(pe)) continue; } catch (e) { continue; }
+          HEADS.push({ el: pe, kind: kd });
+        }
+      } catch (e) {}
+
+      function secKind(el) {
+        var best = '';
+        for (var i = 0; i < HEADS.length; i++) {
+          var r = 0;
+          try { r = HEADS[i].el.compareDocumentPosition(el); } catch (e) { continue; }
+          if (r & 4) best = HEADS[i].kind;   /* el 在这个标题之后 */
+        }
+        return best;
+      }
+
+      var cands = [];
+      var all = document.querySelectorAll('input,textarea');
+      /* 记下每个候选在「当前可见控件」里的位置。之后填公司名/职位会触发 React
+         重建经历块，旧节点虽然脱离文档，但这个序号仍可用来找回同一位置的新节点。 */
+      var liveBefore = liveFields(document);
+      for (var a = 0; a < all.length; a++) {
+        var e2 = all[a];
+        try {
+          if (e2.disabled || !shown(e2)) continue;
+          if (clean(e2.value)) continue;
+          if (['hidden','submit','button','file','password'].indexOf((e2.getAttribute('type') || '').toLowerCase()) >= 0) continue;
+          /* 标签在控件正上方的排版（字节 Semi），ctxText / ctxUp 都读不到，得补 upLabel */
+          var ct2 = ctxText(e2) + ' ' + nearLabel(e2) + ' ' + ctxUp(e2, 2)
+            + ' ' + upLabel(e2) + ' ' + labelText(e2);
+          /* 智联、字节的「开始/结束时间」都是 readonly：只能点开日历选。
+             以前在这里把所有只读框一刀切掉，导致它们根本进不了 DATES 队列。
+             只读框仅放行明确是经历时间的，其余只读下拉仍不混进经历对位。 */
+          if (e2.readOnly && !/(开始时间|起始时间|入职时间|开始日期|项目开始|结束时间|离职时间|截止时间|结束日期|项目结束|项目时间|项目起止|起止时间|时间区间|起止日期)/.test(ct2)) continue;
+          try { e2.__rzOrd = liveBefore.indexOf(e2); } catch (eOrd) {}
+          cands.push({ el: e2, t: ct2, k: secKind(e2) });
+        } catch (e) {}
+      }
+      /* 规则是 [命中正则, 排除正则]，排除正则可能为 null */
+      function hit(rule, t) {
+        return rule[0].test(t) && !(rule[1] && rule[1].test(t));
+      }
+      function fieldOf(t) {
+        if (hit(R_DESC, t))  return 'desc';
+        if (hit(R_SPAN, t))  return 'span';
+        if (hit(R_TITLE, t)) return 'title';
+        if (hit(R_ROLE, t))  return 'role';
+        if (hit(R_ORG, t))   return 'org';
+        if (hit(R_END, t))   return 'end';
+        if (hit(R_START, t)) return 'start';
+        return '';
+      }
+      /* 字节的实习/项目经历只在两个框上方写一个「起止时间」，左右两框没有各自的标签。
+         原来两个都被认成 span，于是左框被塞进「2025.07 - 2026.01」整串、右框被塞下一段经历，
+         组件立刻回退。这里按「同一行、同一标签」配成一对，左边是开始、右边是结束。 */
+      function rowPairOf(cel) {
+        var r0, cy0, out = [], i;
+        try { r0 = cel.getBoundingClientRect(); } catch (e) { return out; }
+        if (!r0 || r0.height < 2) return out;
+        cy0 = r0.top + r0.height / 2;
+        for (i = 0; i < cands.length; i++) {
+          var o = cands[i].el;
+          if (o === cel) continue;
+          /* 只找「同样是时间区间」的同伴：右框的标签常常读不到（标签只在左侧第一格上方），
+             所以不能要求两边文本相等，按类型 + 同一行配对即可。 */
+          if (fieldOf(nearText(o)) !== 'span') continue;
+          var r;
+          try { r = o.getBoundingClientRect(); } catch (e2) { continue; }
+          if (!r || r.width < 2 || r.height < 2) continue;
+          if (Math.abs((r.top + r.height / 2) - cy0) > 12) continue;
+          out.push(o);
+        }
+        return out;
+      }
+      function pairKind(cel, ty) {
+        try { if (cel.__rzPair && (ty === '' || ty === 'span')) return cel.__rzPair; } catch (e0) {}
+        if (ty !== 'span') return ty;
+        var row = rowPairOf(cel);
+        if (row.length !== 1) return ty;      /* 只有正好两个框才是一对起止 */
+        var arr = row.concat([cel]), a, b;
+        try {
+          a = arr[0].getBoundingClientRect(); b = arr[1].getBoundingClientRect();
+        } catch (e) { return ty; }
+        if (!a || !b) return ty;
+        return a.left <= b.left ? (arr[0] === cel ? 'start' : 'end')
+                                : (arr[1] === cel ? 'start' : 'end');
+      }
+      /* 先在所有候选里统一配对，再回填时查表。
+         逐个元素现场找同伴会有偏差（右框常读不到标签，两侧判断不对称），
+         这里只按「同为区间类型 + 同一行」一次扫完，左右排序后标记 start/end。 */
+      function markSpanPairs() {
+        var prim = [], i, j;
+        for (i = 0; i < cands.length; i++) {
+          if (fieldOf(cands[i].t) === 'span') prim.push(cands[i].el);
+        }
+        function cy(e) {
+          try { var r = e.getBoundingClientRect(); return r.top + r.height / 2; } catch (e2) { return -9999; }
+        }
+        for (i = 0; i < prim.length; i++) {
+          var cel = prim[i];
+          if (cel.__rzPair) continue;
+          var group = [cel], y0 = cy(cel);
+          for (j = 0; j < cands.length; j++) {
+            var o = cands[j].el;
+            if (o === cel || o.__rzPair) continue;
+            /* 右框经常读不到标签（标签只在左框上方），fieldOf 为空也要收进来；
+               同一行的其他正常字段（职位/公司等）类型明确，不会被误配。 */
+            var ot = fieldOf(cands[j].t);
+            if (ot && ot !== 'span') continue;
+            if (Math.abs(cy(o) - y0) > 12) continue;
+            group.push(o);
+          }
+          if (group.length !== 2) continue;
+          group.sort(function (a, b) {
+            try { return a.getBoundingClientRect().left - b.getBoundingClientRect().left; } catch (e3) { return 0; }
+          });
+          try { group[0].__rzPair = 'start'; group[1].__rzPair = 'end'; } catch (e4) {}
+        }
+      }
+
+      try { markSpanPairs(); } catch (e) {}
+
+      var POOL = { intern: {}, project: {}, none: {} };
+      function add(kd, f, el) { (POOL[kd][f] = POOL[kd][f] || []).push(el); }
+
+      /* 第一轮：描述框，它决定这页到底有没有经历块 */
+      for (var c1 = 0; c1 < cands.length; c1++) {
+        if (!hit(R_DESC, cands[c1].t)) continue;
+        add(cands[c1].k || 'none', 'desc', cands[c1].el);
+        cands[c1].used = 1;
+      }
+      /* 第二轮：其余字段。已分节的按所在节归位；
+         没分节的必须排在某个描述框之前，否则「公司名称」这种问你现在在哪上班的字段也会被当成实习单位 */
+      for (var c2 = 0; c2 < cands.length; c2++) {
+        if (cands[c2].used) continue;
+        var f2 = pairKind(cands[c2].el, fieldOf(cands[c2].t));
+        if (!f2) continue;
+        var k2 = cands[c2].k;
+        if (k2) { add(k2, f2, cands[c2].el); continue; }
+        var descs = (POOL.none.desc || []).concat(POOL.intern.desc || [], POOL.project.desc || []);
+        for (var dI = 0; dI < descs.length; dI++) {
+          if (cands[c2].el.compareDocumentPosition(descs[dI]) & 4) { add('none', f2, cands[c2].el); break; }
+        }
+      }
+
+      function pack(pre, max) {
+        var out = [];
+        for (var p = 1; p <= max; p++) {
+          var org = clean(D[pre + p + '_company'] || D[pre + p + '_org'] || '');
+          var ttl = clean(D[pre + p + '_title'] || '');
+          if (!org && !ttl) break;
+          var raw = String(D[pre + p + '_time'] || '');
+          var sp = raw.split('-');
+          var s0 = clean(sp[0] || '').replace(/\./g, '-'), s1 = clean(sp[1] || '').replace(/\./g, '-');
+          if (/至今|现在|now/i.test(s1)) s1 = '';
+          out.push({
+            org: org, title: ttl, role: clean(D[pre + p + '_role'] || ''),
+            start: s0, end: s1, span: clean(raw),
+            desc: clean(D[pre + p + '_desc'] || ''), key: pre + p
+          });
+        }
+        return out;
+      }
+      var INTERN = pack('exp', 8), PROJ = pack('prj', 8);
+
+      /* 写一个格子：时间框只认年月日，其余原样写。块对位与全局排队共用这一段 */
+      /* 给某个起止时间框记下「为什么没填上」，checkSpanWait() 回读时用 */
+      function spanWhy(cell, why) {
+        for (var sw = 0; sw < SPAN_WAIT.length; sw++) {
+          if (SPAN_WAIT[sw].el === cell) { SPAN_WAIT[sw].why = why; return; }
+        }
+      }
+
+      function putCell(cell, d, kk, mv) {
+        if (!cell) {
+          if (kk === 'start' || kk === 'end') {
+            RES.failed.push({ l: '第 ' + (d.key || '') + ' 段经历', r: '页面上的起止时间框没认出来，没填' });
+          }
+          return false;
+        }
+        if (!mv) {
+          /* 两种要分清：① 资料里压根没填这段时间（exp1_time / prj1_time 空着）；
+             ② 填了但拆不出年月 —— 最常见是「2026.01 - 至今」，「至今」不是日期。
+             以前一律说「资料里没有」，用户回去翻资料发现明明写着，白跑一趟。
+             两种以前都是静默 return false，用户连点三遍也不知道是该去补资料。 */
+          if (kk === 'start' || kk === 'end') {
+            var miss = String(d.span || d.time || '').trim()
+              ? '资料里 ' + (d.key || '') + '_time 是「' + String(d.span || d.time).slice(0, 24)
+                + '」，拆不出具体年月（「至今」要换成具体截止日期），这个框没填'
+              : '资料里没有 ' + (d.key || '') + '_time 这段时间，去表单助手里补上再点一次';
+            RES.failed.push({ l: labelText(cell) || '起止时间', r: miss });
+            spanWhy(cell, miss);
+          }
+          return false;
+        }
+        if (kk === 'start' || kk === 'end') {
+          var ct = (cell.getAttribute('type') || '').toLowerCase();
+          if ((ct === 'date' || ct === 'month') && !/^\d{4}-\d{2}(-\d{2})?$/.test(mv)) {
+            RES.failed.push({ l: labelText(cell), r: '只有年份「' + mv + '」，请手动选月份' });
+            return false;
+          }
+        }
+        if (kk === 'start' || kk === 'end') {
+          /* 经历里的时间也是日期控件：同步写完会被组件回滚，统一排进日期队列走「打字→回车」 */
+          pushDate(cell, d.key + '_' + kk, mv);
+          return true;
+        }
+        try {
+          protoSet(cell, fmtFor(cell, mv));
+          RES.filled.push({ k: d.key + '_' + kk, l: labelText(cell), v: String(mv).slice(0, 40) });
+          return true;
+        } catch (e) {}
+        return false;
+      }
+
+      /* ---------- 块优先 ----------
+         按类型全局排队有个硬伤：某一段少认出一个字段（比如「项目名称」没标签），
+         后面每一段都会整体串一位 —— 第一段的描述会写进第二段的「单位」里。
+         所以先把页面切成一块块重复容器，块内各认各的类型：缺哪种都不连累别的段。 */
+      function nearText(el) {
+        var t = '';
+        try { t = labelText(el) || ''; } catch (e) {}
+        if (!t) { try { t = upLabel(el) || ''; } catch (e) {} }
+        if (!t) { try { t = ctxUp(el, 1) || ''; } catch (e) {} }
+        return t;
+      }
+      /* 最近的一个「正好含一个描述框」的祖先 = 一段经历 */
+      function cntIn(A) {
+        var c = 0;
+        for (var i = 0; i < cands.length; i++) {
+          try { if (A.contains(cands[i].el)) c++; } catch (e) {}
+        }
+        return c;
+      }
+      function blockOf(el) {
+        var p = el.parentNode, hop = 0;
+        while (p && p.nodeType === 1 && hop < 8) {
+          /* 描述框自己的父级只有它一个字段，得往上找到「一段经历」那一层：
+             至少要含两个候选字段，且只含一个描述框 */
+          try {
+            if (p.querySelectorAll('textarea').length === 1 && cntIn(p) >= 2) return p;
+          } catch (e) {}
+          p = p.parentNode; hop++;
+        }
+        return null;
+      }
+      var BLKS = [];
+      try {
+        for (var bi = 0; bi < cands.length; bi++) {
+          var cel = cands[bi].el, host = blockOf(cel);
+          if (!host) continue;
+          var rec = null;
+          for (var bj = 0; bj < BLKS.length; bj++) if (BLKS[bj].host === host) { rec = BLKS[bj]; break; }
+          if (!rec) { rec = { host: host, kind: cands[bi].k || secKind(host) || '', f: {} }; BLKS.push(rec); }
+          var ty = pairKind(cel, fieldOf(nearText(cel)));
+          if (ty && !rec.f[ty]) rec.f[ty] = cel;
+        }
+        /* 连单位/名称都认不出的块不可信，退回全局排队 */
+        var keepB = [];
+        for (var bk = 0; bk < BLKS.length; bk++) if (BLKS[bk].f.org || BLKS[bk].f.title) keepB.push(BLKS[bk]);
+        BLKS = keepB;
+      } catch (e) { BLKS = []; }
+
+      function fillByBlock() {
+        var done = 0;
+        for (var n = 0; n < BLKS.length; n++) {
+          var b = BLKS[n], kd = b.kind || '', ni = 0;
+          for (var q = 0; q < n; q++) if ((BLKS[q].kind || '') === kd) ni++;
+          var list = kd === 'intern' ? INTERN : (kd === 'project' ? PROJ : INTERN.concat(PROJ));
+          var d = list[ni];
+          if (!d) continue;
+          var map = { org: d.org, title: d.title, role: d.role, start: d.start, end: d.end, desc: d.desc };
+          for (var kk in map) putCell(b.f[kk], d, kk, map[kk]);
+          done++;
+        }
+        return done;
+      }
+
+      function fill(kd, list) {
+        var P = POOL[kd], hasAny = false;
+        if (!P || !list.length) return;
+        for (var f in P) { if (P[f] && P[f].length) hasAny = true; }
+        if (!hasAny) return;
+        for (var n = 0; n < list.length; n++) {
+          var d = list[n];
+          var map = { org: d.org, title: d.title, role: d.role, start: d.start, end: d.end, span: d.span, desc: d.desc };
+          for (var kk in map) {
+            /* 资料里没有这个字段的值：最常见是「这段时间压根没填进资料」
+               （exp1_time / prj1_time 空着）。以前这里静默 continue，
+               用户看到的就是这一块的时间框一直空着，连点三遍也没线索 ——
+               页面上明明有框、资料里却没值，必须说一声该去补什么。 */
+            if (!map[kk] && (kk === 'start' || kk === 'end') && P[kk] && P[kk][n]) {
+              /* 分清「资料里没填这段时间」和「填了但拆不出年月」：
+                 后者最常见是「2026.01 - 至今」——「至今」不是日期，
+                 以前一律说「资料里没有」，用户回去翻资料才发现明明写着，白跑一趟。 */
+              var miss = String(d.time || '').trim()
+                ? '资料里 ' + (d.key || '') + '_time 是「' + String(d.time).slice(0, 24)
+                  + '」，拆不出具体年月（「至今」要换成具体截止日期），这个框没填'
+                : '资料里没有 ' + (d.key || '') + '_time 这段时间，去表单助手里补上再点一次';
+              RES.failed.push({ l: labelText(P[kk][n]) || '起止时间', r: miss });
+              spanWhy(P[kk][n], miss);
+              continue;
+            }
+            if (!map[kk] || !P[kk] || !P[kk][n]) continue;
+            putCell(P[kk][n], d, kk, map[kk]);
+          }
+        }
+      }
+
+      /* 页面上是一块一块的重复容器时，先按块对位；对上了就别再走全局排队（会重复写一遍） */
+      var byBlk = 0;
+      try { if (BLKS.length) byBlk = fillByBlock(); } catch (e) { byBlk = 0; }
+      if (!byBlk) {
+        if (HEADS.length) {
+          fill('intern', INTERN);
+          fill('project', PROJ);
+        } else {
+          /* 没分节：实习在前、项目在后，按顺序对位到同一批块 */
+          fill('none', INTERN.concat(PROJ));
+        }
+      }
+    })();
+  }
+
+  /* v42：书签是代码快照。问一句后端「线上最新引擎是哪个版本」，落后就记进 RES.newer，
+     面板上提示用户去更新 —— 以前每次引擎升级都得靠人工提醒「记得重装书签」，
+     而用户自己根本看不出落后了几个版本。
+     用 XHR 不用 fetch：书签是 ES5 代码，得在老浏览器里也能跑。
+     跨域被页面 CSP 拦了就静默失败：提示不出来而已，绝不影响填表本身。 */
+  function checkVer() {
+    try {
+      var GATE = 'https://resume-autofill-gate.onrender.com';
+      var x = new XMLHttpRequest();
+      x.open('GET', GATE + '/ver', true);
+      x.onload = function () {
+        try {
+          var j = JSON.parse(x.responseText || '{}');
+          if (j && j.version && verNum(j.version) > verNum(ENGINE_VER)) {
+            RES.newer = j.version;
+            tr('引擎有新版 ' + j.version + '，当前 ' + ENGINE_VER);
+            /* 版本查询可能比填表流程晚返回，那时面板已经画完了，补画一次 */
+            try { panel(); } catch (eP) {}
+          }
+        } catch (e2) {}
+      };
+      x.onerror = function () {};
+      x.send();
+    } catch (e1) {}
+  }
+  function verNum(v) { var m = String(v || '').match(/v(\d+)/); return m ? +m[1] : 0; }
+
+
+  /* 经历区起止时间核对：主循环把这些框交给经历逻辑填，这里等日期队列跑完后
+     回读一遍。填上了记一笔「起止时间 = 2025-07」；还是空的按 putCell 留下的原因
+     报出来（资料缺字段 / 框没认出来），不再无声无息。 */
+  function checkSpanWait() {
+    for (var i = 0; i < SPAN_WAIT.length; i++) {
+      var w = SPAN_WAIT[i], el = w.el, v = '';
+      try {
+        if (!el || !el.isConnected) {
+          var pool = liveFields(document);
+          if (w.ord >= 0 && pool[w.ord]) el = pool[w.ord];
+        }
+      } catch (e0) {}
+      try { v = String((el && el.value) || '').trim(); } catch (e1) {}
+      if (v) {
+        if (RES.handled.length < 20) RES.handled.push(w.lab + ' = ' + v.slice(0, 12));
+        continue;
+      }
+      if (RES.failed.length < 40) {
+        RES.failed.push({ l: w.lab, r: w.why || '经历区的起止时间没填上（资料里可能没有这段时间）' });
+      }
+    }
+  }
+
+  /* 收尾回读核对：写完 ≠ 填上。
+     受控组件会把值回滚成空、或者只接受「从下拉/日历里点」的值，
+     以前这些照算「已填」，用户以为填好了、提交时才发现是空的。
+     这里统一读回来一遍，把虚的从「已填」挪到「失败」里说清楚。 */
+  function verifyFilled() {
+    var i, keep = [], bad = [];
+    for (i = 0; i < RES.filled.length; i++) {
+      var f = RES.filled[i], el = f.el, tag = '', ty = '';
+      if (!el || !el.tagName) { keep.push(f); continue; }
+      tag = el.tagName;
+      if (tag !== 'INPUT' && tag !== 'TEXTAREA') { keep.push(f); continue; }
+      ty = String(el.getAttribute('type') || 'text').toLowerCase();
+      if (ty === 'checkbox' || ty === 'radio' || ty === 'file' || ty === 'hidden') { keep.push(f); continue; }
+      try { if (!shown(el)) { keep.push(f); continue; } } catch (e) { keep.push(f); continue; }
+      if (!String(el.value || '').trim()) { bad.push(f); continue; }
+      keep.push(f);
+    }
+    if (!bad.length) return;
+    RES.filled = keep;
+    for (i = 0; i < bad.length && RES.failed.length < 40; i++) {
+      RES.failed.push({ l: bad[i].l, r: '写进去了，但控件又把值清空了（这类得手动点选）' });
+    }
+  }
+
+  /* ---------- 结果清单（右下角面板） ---------- */
+  function panel() {
+    if (O.quiet) return;
+    try {
+      var old = document.getElementById('__rz_rep');
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      if (!document.body) return;
+
+      var host = document.createElement('div');
+      host.id = '__rz_rep';
+      host.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;width:320px;max-width:calc(100vw - 32px);';
+      var sh = null;
+      try { sh = host.attachShadow ? host.attachShadow({ mode: 'open' }) : null; } catch (e) { sh = null; }
+      var root = sh || host;
+
+      function mk(t, css, txt) {
+        var n = document.createElement(t);
+        if (css) n.style.cssText = css;
+        if (txt != null) n.textContent = txt;
+        return n;
+      }
+
+      var box = mk('div', 'font:13px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;'
+        + 'color:#fff;background:#1a1917;border-radius:11px;box-shadow:0 12px 40px rgba(0,0,0,.34);overflow:hidden;');
+      var head = mk('div', 'display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;');
+      var dot = mk('span', 'width:7px;height:7px;border-radius:50%;flex:0 0 7px;background:'
+        + (DIAG ? '#60a5fa' : RES.sample ? '#f59e0b' : RES.filled.length ? '#4ade80' : '#f59e0b') + ';');
+      var ttl = mk('div', 'flex:1;font-weight:600;',
+        DIAG ? '页面字段清单 · ' + RES.diag.length + ' 个'
+          : (RES._addTip ? RES._addTip : RES.busy ? '正在填下拉 ' + ASYNC.length + ' 个…'
+             : RES.sample ? '⚠ 示例资料（不是你的）· 已填 ' + RES.filled.length + ' 项'
+             : '已填 ' + RES.filled.length + ' 项'));
+      var sub = mk('div', 'font-size:11px;color:rgba(255,255,255,.48);', '点击展开');
+      /* 把标题暴露出来，队列每处理一项就改一次，用户能看出「它还在动」 */
+      RES._ttl = function (s) { try { ttl.textContent = s; } catch (eT0) {} };
+      var x = mk('button', 'all:unset;display:inline-block;cursor:pointer;padding:0 4px;font-size:15px;color:rgba(255,255,255,.5);', '×');
+      x.addEventListener('click', function (ev) { ev.stopPropagation(); if (host.parentNode) host.parentNode.removeChild(host); });
+      head.appendChild(dot); head.appendChild(ttl); head.appendChild(sub); head.appendChild(x);
+
+      var body = mk('div', 'padding:0 12px 12px;max-height:300px;overflow:auto;');
+
+      var stat = [];
+      if (DIAG) {
+        stat.push('共扫描 ' + RES.diag.length + ' 个控件，可复制后发我');
+      } else {
+        stat.push('已填 ' + RES.filled.length);
+        if (RES.unmatched.length) stat.push('未识别 ' + RES.unmatched.length);
+        if (RES.failed.length) stat.push('无匹配项 ' + RES.failed.length);
+        if (RES.skipped) stat.push('跳过 ' + RES.skipped);
+      }
+      if (RES.cross) stat.push('跨域 iframe ' + RES.cross + ' 个');
+      body.appendChild(mk('div', 'font-size:12px;color:rgba(255,255,255,.62);padding:2px 0 8px;',
+        '引擎 ' + (RES.ver || '?') + ' · ' + stat.join(' · ')));
+      /* 书签里带的还是示例人物的资料，得说清楚，不然用户以为填进去的是自己的 */
+      if (!DIAG && RES.sample) {
+        body.appendChild(mk('div', 'font-size:12px;color:#ffcf7a;line-height:1.6;padding:2px 0 6px;',
+          '当前填的是示例人物（张小明）的资料，不是你自己的。要填真实资料，请在本地那份表单助手里重新生成一次书签。'));
+      }
+      /* 书签是快照：落后线上几个版本时用户自己看不出来，这里明说 */
+      if (!DIAG && RES.newer && verNum(RES.newer) > verNum(RES.ver)) {
+        body.appendChild(mk('div', 'font-size:12px;color:#ffcf7a;line-height:1.6;padding:2px 0 6px;',
+          '这个书签是 ' + RES.ver + '，线上已经是 ' + RES.newer
+          + '。最近修过的几个问题都在新版里——请打开你下载到电脑本地的那份「简历填表助手」重新生成'
+          + '（在公开网页上直接生成，用的可能是网页当时的资料，别搞错）。'));
+      }
+      /* 折叠区块里的必填框扫不到，用户只会觉得「这块没填」，得说清楚是没展开而不是没认出来 */
+      if (!DIAG && RES.hiddenReq) {
+        body.appendChild(mk('div', 'font-size:12px;color:#ffcf7a;line-height:1.6;padding:2px 0 6px;',
+          '还有 ' + RES.hiddenReq + ' 个必填框收在折叠区块里（看不见就没法填），把上面那些区块展开后再点一次书签。'));
+      }
+
+      function listBlock(title, arr, fmt) {
+        if (!arr.length) return;
+        body.appendChild(mk('div', 'font-size:11px;color:rgba(255,255,255,.45);margin:8px 0 3px;letter-spacing:.04em;', title));
+        for (var i = 0; i < arr.length && i < 24; i++) {
+          body.appendChild(mk('div', 'font-size:12px;color:#e6e1d8;line-height:1.6;padding-left:1px;', '· ' + fmt(arr[i])));
+        }
+        if (arr.length > 24) body.appendChild(mk('div', 'font-size:11px;color:rgba(255,255,255,.4);', '…还有 ' + (arr.length - 24) + ' 项'));
+      }
+
+      if (DIAG) {
+        listBlock('标签 = 当前值 → 命中的字段', RES.diag, function (o) {
+          return o.l + ' = ' + (o.v || '（空）') + (o.k ? '  →  ' + o.k : '  →  ？');
+        });
+      } else {
+        listBlock('已改写（原来是旧值）', RES.overwrite, function (s) { return s; });
+        listBlock('由实习/项目时间填写', RES.handled, function (s) { return s; });
+        listBlock('未识别字段（复制发我，可补规则）', RES.unmatched, function (s) { return s; });
+        listBlock('已识别但没填进去', RES.failed, function (o) { return o.l + '：' + o.r; });
+        listBlock('已填明细', RES.filled, function (o) { return o.k + ' = ' + o.v; });
+      }
+
+      var bar = mk('div', 'display:flex;gap:7px;margin-top:11px;');
+      var bCopy = mk('button', 'all:unset;display:inline-block;cursor:pointer;flex:1;text-align:center;background:#fff;color:#1a1917;'
+        + 'border-radius:6px;padding:7px 0;font-size:12px;font-weight:600;', '复制清单');
+      bCopy.addEventListener('click', function () {
+        var lines = [];
+        if (DIAG) {
+          lines.push('【页面字段清单 ' + RES.diag.length + ' 个】');
+          for (var i = 0; i < RES.diag.length; i++) {
+            var o = RES.diag[i];
+            lines.push(o.l + ' = ' + (o.v || '') + (o.k ? ' → ' + o.k : ' → 未匹配'));
+          }
+        } else {
+          lines.push('【已填 ' + RES.filled.length + ' 项】');
+          for (var a = 0; a < RES.filled.length; a++) lines.push(RES.filled[a].k + ' = ' + RES.filled[a].v);
+          if (RES.overwrite.length) { lines.push(''); lines.push('【已改写】' + RES.overwrite.join('；')); }
+          if (RES.handled.length) { lines.push(''); lines.push('【由实习/项目时间填写】' + RES.handled.length + ' 个'); }
+          if (RES.unmatched.length) { lines.push(''); lines.push('【未识别 ' + RES.unmatched.length + ' 项】' + RES.unmatched.join('、')); }
+          if (RES.failed.length) {
+            lines.push('');
+            lines.push('【无匹配项】');
+            for (var b = 0; b < RES.failed.length; b++) lines.push(RES.failed[b].l + '：' + RES.failed[b].r);
+          }
+        }
+        var txt = lines.join('\n');
+        function fb() {
+          var ta = document.createElement('textarea');
+          ta.value = txt;
+          ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+          document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); } catch (e) {}
+          document.body.removeChild(ta);
+        }
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).catch(fb);
+          else fb();
+        } catch (e) { fb(); }
+        bCopy.textContent = '已复制 ✓';
+        setTimeout(function () { bCopy.textContent = '复制清单'; }, 1600);
+      });
+      bar.appendChild(bCopy);
+
+      var bHide = mk('button', 'all:unset;display:inline-block;cursor:pointer;background:rgba(255,255,255,.12);color:#fff;'
+        + 'border-radius:6px;padding:7px 13px;font-size:12px;', '收起');
+      bHide.addEventListener('click', function () { body.style.display = 'none'; sub.textContent = '点击展开'; });
+      bar.appendChild(bHide);
+      body.appendChild(bar);
+
+      head.addEventListener('click', function () {
+        var open = body.style.display !== 'none';
+        body.style.display = open ? 'none' : 'block';
+        sub.textContent = open ? '点击展开' : '点击收起';
+      });
+
+      box.appendChild(head); box.appendChild(body);
+      root.appendChild(box);
+      document.body.appendChild(host);
+      setTimeout(function () {
+        if (body.style.display !== 'none' && document.getElementById('__rz_rep')) {
+          body.style.display = 'none'; sub.textContent = '点击展开';
+        }
+      }, 9000);
+    } catch (e) {}
+  }
+
+  /* 示例资料终局警告：真实事故是用户在网页上点了「填入示例」再生成书签，
+     把张小明（浙江大学/2022-09/城市微更新）填进了字节招聘页，自己的资料还在本地版里。
+     面板 9 秒会自动收起，必须再给一个关不掉的醒目提示。 */
+  function sampleToast() {
+    try {
+      var old = document.getElementById('__rz_sample_warn');
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      var d = document.createElement('div');
+      d.id = '__rz_sample_warn';
+      d.textContent = '⚠ 刚填进页面的是示例人物（张小明）的资料，不是你的！'
+        + '学校、起止时间、项目全是他的。请用你下载到电脑本地的那份「简历填表助手」重新生成书签，再点一次。';
+      d.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:2147483647;'
+        + 'max-width:min(560px,calc(100vw - 32px));background:#b8433a;color:#fff;'
+        + 'font:13px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;'
+        + 'padding:11px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.3);text-align:center;';
+      var x = document.createElement('span');
+      x.textContent = ' ✕';
+      x.style.cssText = 'cursor:pointer;opacity:.85;margin-left:6px;font-weight:600;';
+      x.onclick = function () { if (d.parentNode) d.parentNode.removeChild(d); };
+      d.appendChild(x);
+      document.body.appendChild(d);
+      setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 20000);
+    } catch (eT) {}
+  }
+
+  /* 有下拉组件待填：先亮个面板，再一个个点开选，全填完刷新一次结果 */
+  /* 版本比对不阻塞填表：异步发出去，结果回来时面板自己会补一条提示 */
+  if (!DIAG) checkVer();
+
+  if ((ASYNC.length || DATES.length) && !DIAG) {
+    RES.busy = 1;
+    panel();
+    runCombo(function () {
+      runDates(function () {
+        try { checkSpanWait(); } catch (e) {}
+        try { verifyFilled(); } catch (e) {}
+        try { panel(); } catch (e) {}
+        try { if (RES.sample && RES.filled.length) sampleToast(); } catch (eT) {}
+      });
+    });
+  } else {
+    try { verifyFilled(); } catch (e) {}
+    panel();
+    try { if (RES.sample && RES.filled.length) sampleToast(); } catch (eT) {}
+  }
+  }
+
+  /* v42：先按资料段数把「添加经历」点到够，再扫描。
+     DIAG（只看不填）不点按钮 —— 诊断模式下不该改动页面。 */
+  if (DIAG) { runScanAndFinish(); }
+  else {
+    try {
+      ensureBlocks(function () {
+        try { runScanAndFinish(); }
+        catch (e) { RES.failed.push({ l: '主扫描', r: String((e && e.message) || e) }); }
+      });
+    } catch (e) {
+      /* 补块逻辑自己出错也不能拦住填表：退回直接扫描 */
+      try { runScanAndFinish(); } catch (e2) {}
+    }
+  }
+  /* ---------- v42：按资料段数补足页面上的经历块 ---------- */
+
+  /* 资料里有几段经历：exp1..exp4 / prj1..prj6，取最后一个有值的段号 */
+  function segCount(pre) {
+    var n = 0;
+    for (var i = 1; i <= 8; i++) {
+      var v = D[pre + i + '_company'] || D[pre + i + '_org'] || D[pre + i + '_title'];
+      if (String(v || '').trim()) n = i;
+    }
+    return n;
+  }
+
+  /* 数段数专用的标签读取：直接取父容器里第一个子元素。
+     不能用 labelText —— 字段排在区块标题正下方时，nearLabel 的第一条路径
+     （父容器的上一个兄弟）会把 <h3>实习经历</h3> 当成标签返回，
+     整段经历就一个都数不到，引擎反而误判「页面没有经历」去点添加按钮。 */
+  function blockLabel(el) {
+    var p = el.parentElement;
+    if (!p) return '';
+    var fc = p.firstElementChild;
+    if (fc && fc !== el && !fc.contains(el)
+        && !(fc.querySelector && fc.querySelector('input,select,textarea'))) {
+      return clean(fc.innerText || '');
+    }
+    return '';
+  }
+
+  /* 页面上现在有几段：按「公司名称 / 项目名称」这类标签的可见输入框数。
+     每段经历只有一个单位名框，数它比数容器稳（容器 class 名各站都不一样）。 */
+  function countBlocksOnPage(kind) {
+    var n = 0, all = document.querySelectorAll('input,textarea');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      try { if (!shown(el)) continue; } catch (e) { continue; }
+      var t = clean(blockLabel(el) || labelText(el) || upLabel(el) || geoLabel(el) || '');
+      if (!t) continue;
+      var ok = kind === 'project'
+        ? /^(项目名称|项目标题|项目课题|项目\/?课题|所属项目|项目所属|代表项目)/
+        : /^(公司|单位|企业)(名称|全称)?\s*\*?$|^(实习|工作)单位\s*\*?$|^所属(公司|单位)\s*\*?$/;
+      if (ok.test(t)) n++;
+    }
+    return n;
+  }
+
+  /* 找「添加经历」按钮：文字像添加、是个按钮、可见、且能看出属于哪个区。
+     工作经历区不点 —— 用户是学生，资料里没有正式工作经历。 */
+  function addBtnsFor(kind) {
+    var out = [], seen = {};
+    var btns = document.querySelectorAll('button,a,[role="button"]');
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      try { if (!shown(b)) continue; } catch (e) { continue; }
+      var t = clean(b.textContent || '');
+      if (!t || t.length > 8) continue;
+      if (!/^[＋+\s-]*(添加|新增)(一?段|经历|实习|项目)?\s*$|^add\s*more$/i.test(t)) continue;
+      var host = addHostOf(b);
+      if (!host) continue;
+      var ht = clean(host.textContent || '').slice(0, 80);
+      var isP = /项目/.test(ht);
+      var isI = /(实习|实践)/.test(ht);
+      if (kind === 'project' ? isP : (isI && !isP)) {
+        var k = t + ':' + (b.getAttribute('class') || '') + ':' + (b.id || '');
+        if (!seen[k]) { seen[k] = 1; out.push(b); }
+      }
+    }
+    return out;
+  }
+
+  /* 按钮属于哪个区块：往上找最近的、文本里带区块标题的祖先 */
+  function addHostOf(el) {
+    var p = el;
+    for (var i = 0; i < 10 && p; i++) {
+      p = p.parentElement;
+      if (!p) break;
+      if (p === document.body || p === document.documentElement) break;
+      var t = clean(p.textContent || '');
+      /* 以前文本超过 400 字就 break。字节这种「左边区块标题、右边字段」的版式，
+         区块容器把字段提示也算进 textContent，很容易超 400 字，
+         结果「＋ 添加」按钮一个都找不到，6 段项目永远只有第 1 段。
+         现在继续往上找，只挡住整页级别的容器。 */
+      if (t.length > 3000) continue;
+      if (/(实习经历|工作经历|项目经历|实践经验|职业经历|科研项目|主要项目)/.test(t)) return p;
+    }
+    return null;
+  }
+
+  /* 「没有实习经历」勾着的话，实习区整段不渲染，添加按钮也不存在 —— 先取消。
+     只认「已勾选 + 文字是没有/无/暂无 + 实习|工作|项目|实践」，不碰别的复选框。 */
+  function uncheckNoExp(cb) {
+    var hit = null;
+    var boxes = document.querySelectorAll('input[type="checkbox"]');
+    for (var i = 0; i < boxes.length; i++) {
+      var b = boxes[i];
+      try {
+        if (!b.checked) continue;
+        /* 标签可能在 label 元素、紧邻的文字节点、父容器里（字节是「☑ 没有实习经历」内联一行），
+           挨个试，别只认一条路 —— 认不出来实习区就整段不渲染，后面全填不上。 */
+        var cands = [];
+        try { if (b.labels && b.labels.length) cands.push(b.labels[0].textContent); } catch (eL) {}
+        try { if (b.nextElementSibling) cands.push(b.nextElementSibling.textContent); } catch (eS) {}
+        try { if (b.parentElement) cands.push(b.parentElement.textContent); } catch (eP) {}
+        try { cands.push(labelText(b) || '', upLabel(b) || '', b.getAttribute('aria-label') || ''); } catch (eT) {}
+        var got = false;
+        for (var ci = 0; ci < cands.length && !got; ci++) {
+          var tt = clean(cands[ci] || '').slice(0, 40);
+          if (/(没有|无|暂无).{0,6}(实习|工作|项目|实践)/.test(tt)) got = true;
+        }
+        if (got) { hit = b; break; }
+      } catch (e) {}
+    }
+    if (!hit) { cb(); return; }
+    try { hit.click(); } catch (e) {}
+    tr('取消勾选「' + clean(labelText(hit) || upLabel(hit) || '没有实习经历').slice(0, 12) + '」');
+    /* 取消勾选后区块是异步渲染出来的，多等一拍再数段数 */
+    setTimeout(cb, 900);
+  }
+
+  /* 点一下添加，然后轮询等新块真的出现（React 渲染是异步的，点完立刻数还是旧的）。
+     等不到就当作没点成 —— 绝不硬点多点。 */
+  function clickAdd(btn, before, kind, cb) {
+    try { btn.click(); } catch (e) {}
+    var t0 = Date.now();
+    (function poll() {
+      var now = 0;
+      try { now = countBlocksOnPage(kind); } catch (e) {}
+      if (now > before || Date.now() - t0 > 2500) { cb(now > before); return; }
+      setTimeout(poll, 130);
+    })();
+  }
+
+  function ensureBlocks(cb) {
+    var done = function () { try { cb(); } catch (e) {} };
+    if (!O.exp) { done(); return; }
+    var need = { intern: segCount('exp'), project: segCount('prj') };
+    if (need.intern <= 1 && need.project <= 1) { done(); return; }
+    var cur = { intern: 0, project: 0 };
+    try { cur = { intern: countBlocksOnPage('intern'), project: countBlocksOnPage('project') }; } catch (e) {}
+    var todo = [];
+    if (cur.intern < need.intern) todo.push({ kind: 'intern', left: need.intern - cur.intern });
+    if (cur.project < need.project) todo.push({ kind: 'project', left: need.project - cur.project });
+    if (!todo.length) { done(); return; }
+    RES.busy = 1;
+    RES._addTip = '正在补经历块（实习 ' + need.intern + ' 段 / 项目 ' + need.project + ' 段）…';
+    tr('补块：需要实习 ' + need.intern + ' 段、项目 ' + need.project + ' 段，页面现有 '
+      + cur.intern + ' / ' + cur.project);
+    try { panel(); } catch (e) {}
+    uncheckNoExp(function () {
+      var idx = 0;
+      (function step() {
+        if (idx >= todo.length) {
+          RES.busy = 0;
+          RES._addTip = '';
+          try { panel(); } catch (e) {}
+          done();
+          return;
+        }
+        var t = todo[idx];
+        var btns = addBtnsFor(t.kind);
+        if (!btns.length) {
+          /* 找不到添加按钮就不硬点：点错一次可能是提交或跳页。
+             记一条失败，让用户知道这几段得手动加。 */
+          RES.failed.push({
+            l: (t.kind === 'project' ? '项目' : '实习') + '第 ' + (t.left + 1) + ' 段起',
+            r: '页面上没找到「添加' + (t.kind === 'project' ? '项目' : '实习') + '」按钮，这几段得手动加'
+          });
+          idx++;
+          step();
+          return;
+        }
+        var before = 0;
+        try { before = countBlocksOnPage(t.kind); } catch (e) {}
+        clickAdd(btns[0], before, t.kind, function (grew) {
+          if (grew) {
+            t.left--;
+            tr('点了添加按钮，' + t.kind + ' 块 +1（还差 ' + t.left + ' 段）');
+          } else {
+            tr('点了添加按钮但页面没多出块，停手不硬点');
+          }
+          if (t.left > 0 && grew) { step(); }
+          else { idx++; step(); }
+        });
+      })();
+    });
+  }
+
+  try { RES.data = D; } catch (e) {}
+  try { if (typeof window !== 'undefined') window.__RZ = RES; } catch (e) {}
+  /* 控制台留一行诊断摘要：出问题时用户复制这一行发回来，
+     就能看到引擎跑到哪一步、哪些字段没认出来、哪些写不进去。 */
+  try {
+    console.log('[填表助手] ' + ENGINE_VER + ' ' + JSON.stringify({
+      trace: TRACE.slice(-24),
+      unmatched: RES.unmatched, failed: RES.failed
+    }));
+  } catch (e1) {}
+  return RES;
+}
+</script>
 <script>
 /* =====================================================================
    1. 数据与面板定义
    ===================================================================== */
 const DEFAULTS = JSON.parse(document.getElementById('resume-data').textContent);
+
+/* ---------- 经历段（实习 / 项目） ----------
+   段数不再写死：实习默认 2 段、项目默认 6 段，卡片底部「+ 加一段」最多加到 8 段
+   （引擎 pack('exp'|'prj', 8) 的上限），最后一段也能删掉。
+   段数记在 DATA.exp_count / prj_count 里，重新打开页面不会丢；
+   就算没记，只要某段的公司/名称有值，也会自动按有值的段数显示。 */
+const SEG_META = {
+  exp: { base: 2, max: 8, cn: '实习',
+         head: [['company', '单位'], ['title', '岗位'], ['role', '角色'], ['time', '时间'], ['desc', '描述']] },
+  prj: { base: 6, max: 8, cn: '项目',
+         head: [['title', '名称'], ['org', '所属'], ['role', '角色'], ['time', '时间'], ['desc', '描述']] }
+};
+function derivedSegN(pre) {
+  const m = SEG_META[pre];
+  let n = 0;
+  for (let i = 1; i <= m.max; i++) {
+    const v = DATA[pre + i + '_company'] || DATA[pre + i + '_org'] || DATA[pre + i + '_title'];
+    if (String(v || '').trim()) n = i;
+  }
+  return n;
+}
+function segN(pre) {
+  const m = SEG_META[pre];
+  const stored = parseInt(DATA[pre + '_count'], 10) || 0;
+  const n = Math.max(stored, derivedSegN(pre)) || m.base;
+  return Math.min(Math.max(n, 1), m.max);
+}
+function segFields(pre, i) {
+  return SEG_META[pre].head.map(([suf, lab]) => [pre + i + '_' + suf, SEG_META[pre].cn + i + ' · ' + lab]);
+}
+function groupFields(g) {
+  if (!g.seg) return g.fields;
+  const out = [];
+  for (let i = 1; i <= segN(g.seg); i++) segFields(g.seg, i).forEach(f => out.push(f));
+  return out;
+}
+function segBar(pre) {
+  const m = SEG_META[pre];
+  const n = segN(pre);
+  const bar = document.createElement('div');
+  bar.className = 'segbar';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'segadd';
+  if (n >= m.max) { btn.disabled = true; btn.textContent = '最多 ' + m.max + ' 段'; }
+  else {
+    btn.textContent = '+ 加一段' + m.cn + '（第 ' + (n + 1) + ' 段）';
+    btn.addEventListener('click', () => {
+      if (segN(pre) >= m.max) return;
+      DATA[pre + '_count'] = segN(pre) + 1;
+      saveData(); render(); renderHealth(); refreshBookmarks();
+      toast('已加到第 ' + segN(pre) + ' 段，生成书签时会按顺序填进网申表单');
+    });
+  }
+  bar.appendChild(btn);
+  const tip = document.createElement('span');
+  tip.className = 'segtip';
+  tip.textContent = '加出来的段会按顺序对应网申表单里的第几段经历';
+  bar.appendChild(tip);
+  return bar;
+}
 
 const GROUPS = [
   { title: '基本信息', fields: [
@@ -921,34 +4057,8 @@ const GROUPS = [
     ['jobType','求职类型'], ['availableDate','到岗时间'], ['portfolio','作品集链接'],
     ['transferAccept','接受调剂'], ['transferCities','可接受工作地点'], ['tripartite','可签三方']
   ]},
-  { title: '实习经历', fields: [
-    ['exp1_company','实习1 · 单位'], ['exp1_title','实习1 · 岗位'],
-    ['exp1_role','实习1 · 角色'], ['exp1_time','实习1 · 时间'],
-    ['exp1_desc','实习1 · 描述'],
-    ['exp2_company','实习2 · 单位'], ['exp2_title','实习2 · 岗位'],
-    ['exp2_role','实习2 · 角色'], ['exp2_time','实习2 · 时间'],
-    ['exp2_desc','实习2 · 描述']
-  ]},
-  { title: '项目经历', fields: [
-    ['prj1_title','项目1 · 名称'], ['prj1_org','项目1 · 所属'],
-    ['prj1_role','项目1 · 角色'], ['prj1_time','项目1 · 时间'],
-    ['prj1_desc','项目1 · 描述'],
-    ['prj2_title','项目2 · 名称'], ['prj2_org','项目2 · 所属'],
-    ['prj2_role','项目2 · 角色'], ['prj2_time','项目2 · 时间'],
-    ['prj2_desc','项目2 · 描述'],
-    ['prj3_title','项目3 · 名称'], ['prj3_org','项目3 · 所属'],
-    ['prj3_role','项目3 · 角色'], ['prj3_time','项目3 · 时间'],
-    ['prj3_desc','项目3 · 描述'],
-    ['prj4_title','项目4 · 名称'], ['prj4_org','项目4 · 所属'],
-    ['prj4_role','项目4 · 角色'], ['prj4_time','项目4 · 时间'],
-    ['prj4_desc','项目4 · 描述'],
-    ['prj5_title','项目5 · 名称'], ['prj5_org','项目5 · 所属'],
-    ['prj5_role','项目5 · 角色'], ['prj5_time','项目5 · 时间'],
-    ['prj5_desc','项目5 · 描述'],
-    ['prj6_title','项目6 · 名称'], ['prj6_org','项目6 · 所属'],
-    ['prj6_role','项目6 · 角色'], ['prj6_time','项目6 · 时间'],
-    ['prj6_desc','项目6 · 描述']
-  ]},
+  { title: '实习经历', seg: 'exp'},
+  { title: '项目经历', seg: 'prj'},
   { title: '证书与语言', fields: [
     ['certName','证书名称'], ['language','语言'], ['languageLevel','精通程度'], ['languageScore','分数']
   ]},
@@ -1031,7 +4141,14 @@ const PH = {
 };
 
 const LABELS = {};
-GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
+GROUPS.forEach(g => {
+  if (g.seg) {
+    const m = SEG_META[g.seg];
+    for (let i = 1; i <= m.max; i++) segFields(g.seg, i).forEach(([k, l]) => { LABELS[k] = l; });
+  } else {
+    g.fields.forEach(([k, l]) => { LABELS[k] = l; });
+  }
+});
 
 /* =====================================================================
    2. 填表核心
@@ -3382,7 +6499,7 @@ function applyResume(D, O) {
         }
         return out;
       }
-      var INTERN = pack('exp', 4), PROJ = pack('prj', 6);
+      var INTERN = pack('exp', 8), PROJ = pack('prj', 8);
 
       /* 写一个格子：时间框只认年月日，其余原样写。块对位与全局排队共用这一段 */
       function putCell(cell, d, kk, mv) {
@@ -3959,9 +7076,17 @@ function healthCheck() {
   if (g('enrollDate') && g('graduateDate') && g('enrollDate') >= g('graduateDate'))
     add('err', '入学时间晚于毕业时间');
 
-  const s1 = parseSpan(g('exp1_time')), s2 = parseSpan(g('exp2_time'));
-  if (s1 && s2 && s1.end && s2.start && s1.end > s2.start)
-    add('warn', '经历1 结束（' + g('exp1_time').split('-')[1] + '）晚于 经历2 开始，时间重叠');
+  const esp = [];
+  for (let ei = 1; ei <= SEG_META.exp.max; ei++) {
+    const t = g('exp' + ei + '_time');
+    const r = t ? parseSpan(t) : null;
+    if (r) esp.push({ i: ei, r, raw: t });
+  }
+  for (let ej = 1; ej < esp.length; ej++) {
+    const a = esp[ej - 1], b = esp[ej];
+    if (a.r.end && b.r.start && a.r.end > b.r.start)
+      add('warn', '实习' + a.i + ' 结束（' + String(a.raw).split('-')[1] + '）晚于 实习' + b.i + ' 开始，时间重叠');
+  }
 
   if (g('currentCity') && g('address')) {
     const a = provOf(g('currentCity')), b = provOf(g('address'));
@@ -3993,7 +7118,7 @@ function renderSaveTip() {
   var old = document.getElementById('save-tip');
   if (old) old.remove();
 
-  var filled = GROUPS.some(g => g.fields.some(f =>
+  var filled = GROUPS.some(g => groupFields(g).some(f =>
     f[0] !== 'age' && String(DATA[f[0]] || '').trim()));
   if (!filled || tipOff()) return;
 
@@ -4045,7 +7170,7 @@ function renderHealth() {
     box = document.getElementById('health');
   }
   if (!box) return;
-  const blank = GROUPS.every(g => g.fields.every(f =>
+  const blank = GROUPS.every(g => groupFields(g).every(f =>
     f[0] === 'age' || !String(DATA[f[0]] || '').trim()));
   const list = blank ? [] : healthCheck();
   const errs  = list.filter(x => x.lv === 'err').length;
@@ -4104,8 +7229,41 @@ function render() {
     const grid = document.createElement('div');
     grid.className = 'grid';
 
-    g.fields.forEach(([key, label]) => {
-      const isLong = LONG.has(key);
+    const segPre = g.seg || '';
+    const segTotal = segPre ? segN(segPre) : 0;
+    let segShown = 0;
+    groupFields(g).forEach(([key, label]) => {
+      const si = segPre ? parseInt(key.slice(segPre.length), 10) || 0 : 0;
+      if (segPre && si !== segShown) {
+        segShown = si;
+        if (si > 1) {
+          const sh = document.createElement('div');
+          sh.className = 'seghead';
+          const sb = document.createElement('b');
+          sb.textContent = SEG_META[segPre].cn + ' ' + si;
+          sh.appendChild(sb);
+          if (si === segTotal) {
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'segdel';
+            del.textContent = '删掉这段';
+            del.addEventListener('click', () => {
+              const cur = segN(segPre);
+              if (cur <= 1) return;
+              const ks = SEG_META[segPre].head.map(x => segPre + cur + '_' + x[0]);
+              const has = ks.some(k => String(DATA[k] || '').trim());
+              if (has && !confirm('第 ' + cur + ' 段里已经填了内容，删掉就找不回了，确定？')) return;
+              ks.forEach(k => { delete DATA[k]; });
+              DATA[segPre + '_count'] = cur - 1;
+              saveData(); render(); renderHealth(); refreshBookmarks();
+              toast('已删掉第 ' + cur + ' 段');
+            });
+            sh.appendChild(del);
+          }
+          grid.appendChild(sh);
+        }
+      }
+      const isLong = LONG.has(key) || (!!segPre && key.endsWith('_desc'));
       const isTodo = TODO.has(key);
       const f = document.createElement('div');
       f.className = 'f' + (isLong ? ' wide' : '');
@@ -4174,6 +7332,7 @@ function render() {
     });
 
     card.appendChild(grid);
+    if (g.seg) card.appendChild(segBar(g.seg));
     box.appendChild(card);
   });
 
@@ -4320,6 +7479,74 @@ function toAscii(src) {
 
 /* 进书签的代码要尽量短：删掉注释行和行首缩进，能省掉四分之一体积。
    只在「剪完还能被 JS 解析」时才采用，否则退回原文，不会因为压缩把功能弄坏。 */
+/* =====================================================================
+   引擎版本：稳定版 / 测试版
+   页面里那段 applyResume 就是稳定版（默认）；测试版源码以纯文本存在页面底部
+   #eng-test 里，只在「生成书签」时取用，本页面不执行它。
+   切换只影响生成出来的书签，不影响这个页面本身。
+   ===================================================================== */
+var ENG_STORE = 'resume_engine_pick';
+var ENG_TEXT_ID = 'eng-test';
+function engText() {
+  var el = document.getElementById(ENG_TEXT_ID);
+  var t = el ? (el.textContent || '') : '';
+  return t.length > 1000 ? t : '';
+}
+function engVer(src) {
+  var m = String(src || '').match(/ENGINE_VER\s*=\s*'(v\d+)'/);
+  return m ? m[1] : '?';
+}
+function engId() {
+  var id = '';
+  try { id = localStorage.getItem(ENG_STORE) || ''; } catch (e) {}
+  /* 选了测试版但源码没跟着走（比如老离线文件）就回落稳定版，别让人拿到空书签 */
+  if (id === 'test' && !engText()) id = 'stable';
+  return id === 'test' ? 'test' : 'stable';
+}
+function engSrc(which) {
+  var id = which || engId();
+  if (id === 'test') { var t = engText(); if (t) return t; }
+  return applyResume.toString();
+}
+function engLabel(which) {
+  var id = which || engId();
+  return (id === 'test' ? '测试版 ' : '稳定版 ') + engVer(engSrc(id));
+}
+function applyEngUI() {
+  var id = engId();
+  var bs = document.querySelectorAll('#eng-pick [data-eng]');
+  for (var i = 0; i < bs.length; i++) {
+    var on = bs[i].getAttribute('data-eng') === id;
+    bs[i].className = on ? 'engbtn on' : 'engbtn';
+    bs[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  var vs = document.getElementById('eng-v-stable');
+  if (vs) vs.textContent = engVer(applyResume.toString());
+  var vt = document.getElementById('eng-v-test');
+  if (vt) vt.textContent = engVer(engText()) === '?' ? 'v43' : engVer(engText());
+
+  var v = engVer(engSrc(id));
+  var b = document.getElementById('btn-install');
+  if (b) b.textContent = '安装填表书签 · ' + v;
+  var t = document.getElementById('install-title');
+  if (t) t.textContent = '安装填表书签 · ' + v;
+  var tip = document.getElementById('eng-tip');
+  if (tip) tip.textContent = id === 'test'
+    ? '测试版新修了「添加经历」「学历/下拉不填」的问题，还没在大厂表单上长期验证；遇到问题点左边切回稳定版。'
+    : '稳定版在最常见的网申表单上验证过，建议默认用它。';
+}
+function setEngine(id) {
+  var want = id === 'test' ? 'test' : 'stable';
+  if (want === 'test' && !engText()) { toast('这份文件里没有测试版引擎，只能用稳定版'); return; }
+  try { localStorage.setItem(ENG_STORE, want); } catch (e) {}
+  applyEngUI();
+  refreshBookmarks();
+  toast(want === 'test'
+    ? '已切到' + engLabel('test') + '，点「安装填表书签」重装一次'
+    : '已切回' + engLabel('stable'));
+  try { window.trackEvent && window.trackEvent('engine-' + want); } catch (e) {}
+}
+
 function minifyFn(src) {
   const out = [];
   let inBlock = false;
@@ -4352,7 +7579,7 @@ const SHORT_KEYS = new Set([
   'targetJob','targetJob2','targetCity','expectSalary','jobType','availableDate','portfolio'
 ]);
 
-function buildScript(opts) {
+function buildScript(opts, engWhich) {
   opts = opts || {};
   const payload = {};
   Object.keys(DATA).forEach(k => {
@@ -4378,14 +7605,15 @@ function buildScript(opts) {
 
   const src = '(function(){var D=' + JSON.stringify(payload)
     + ';var O=' + JSON.stringify(flags)
-    + ';var F=' + minifyFn(applyResume.toString())
+    + ';var F=' + minifyFn(engSrc(engWhich))
     + ';F(D,O);})();';
   /* 整体转成 ASCII：URL 里不再出现中文，encodeURIComponent 不会膨胀成 3 倍，也更不容易被乱码 */
   return toAscii(src);
 }
 
 function payloadHash() {
-  const s = buildScript({});
+  /* 固定按稳定版算：切换引擎只换书签内容、不算「资料改过」，否则提示条会乱闪 */
+  const s = buildScript({}, 'stable');
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
   return h.toString(36);
@@ -4414,12 +7642,12 @@ function refreshBookmarks() {
   if (sp) sp.textContent = full;
 
   const fn = document.getElementById('bm-filename');
-  if (fn) fn.textContent = '简历填表书签.html';
+  if (fn) fn.textContent = '简历填表书签-' + engVer(engSrc()) + '.html';
 
   const s = document.getElementById('bm-status');
   if (s) {
     s.className = 'status';
-    s.textContent = '书签已就绪 · ' + (full.length / 1024).toFixed(1) + ' KB';
+    s.textContent = '书签已就绪 · ' + engLabel() + ' · ' + (full.length / 1024).toFixed(1) + ' KB';
   }
 
   /* 通用版：数据一变就同步进度条和引导条 */
@@ -4444,6 +7672,7 @@ function bookmarksFile() {
   const now = Math.floor(Date.now() / 1000);
   const line = (name, script) =>
     '    <DT><A HREF="javascript:' + encodeURIComponent(script) + '" ADD_DATE="' + now + '">' + name + '</A>\n';
+  const ver = engVer(engSrc());
   return [
     '<!DOCTYPE NETSCAPE-Bookmark-file-1>',
     '<!-- 简历填表助手 v' + DATA_VERSION + ' -->',
@@ -4451,8 +7680,8 @@ function bookmarksFile() {
     '<TITLE>Bookmarks</TITLE>',
     '<H1>Bookmarks</H1>',
     '<DL><p>',
-    line('简历填表·完整版', buildScript({ exp: true })),
-    line('简历填表·精简版', buildScript({ short: true })),
+    line('简历填表·完整版 ' + ver, buildScript({ exp: true })),
+    line('简历填表·精简版 ' + ver, buildScript({ short: true })),
     '</DL><p>'
   ].join('\n');
 }
@@ -4482,7 +7711,7 @@ document.getElementById('btn-copyall').addEventListener('click', async () => {
   const lines = [];
   GROUPS.forEach(g => {
     lines.push('【' + g.title + '】');
-    g.fields.forEach(([k, label]) => {
+    groupFields(g).forEach(([k, label]) => {
       const v = (DATA[k] || '').trim();
       if (v) lines.push(label + '：' + v);
     });
@@ -4682,12 +7911,20 @@ document.getElementById('banner-dl').addEventListener('click', doInstall);
 /* 版本号直接印在按钮/弹窗上：书签是「装了就一直用」的东西，
    老版本会在浏览器里一直跑到天荒地老 —— 得让用户在复制前就知道拿到的是哪版，
    装完跑一次面板上也会显示同款版本号，两处对得上才算升级成功。 */
-var UI_VER = (String(applyResume).match(/ENGINE_VER\s*=\s*'(v\d+)'/) || [0, '?'])[1];
+/* 版本号直接印在按钮/弹窗上：书签是「装了就一直用」的东西，
+   老版本会在浏览器里一直跑到天荒地老 —— 得让用户在复制前就知道拿到的是哪版。 */
+var UI_VER = engVer(engSrc());
+applyEngUI();
 (function () {
-  var b = document.getElementById('btn-install');
-  if (b) b.textContent = '安装填表书签 · ' + UI_VER;
-  var t = document.getElementById('install-title');
-  if (t) t.textContent = '安装填表书签 · ' + UI_VER;
+  var pick = document.getElementById('eng-pick');
+  if (!pick) return;
+  pick.addEventListener('click', function (ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest('[data-eng]') : null;
+    if (!b) return;
+    var id = b.getAttribute('data-eng');
+    if (id === engId()) return;
+    setEngine(id);
+  });
 })();
 const installEl = document.getElementById('install');
 function openInstall() {
@@ -5463,8 +8700,16 @@ const SAMPLE = {
 };
 
 function allKeys() {
+  /* 进度统计只数「有内容的段」：空段不算进分母，加了空段进度条不会往下掉 */
   const out = [];
-  GROUPS.forEach(g => g.fields.forEach(f => { if (f[0] !== 'age') out.push(f[0]); }));
+  GROUPS.forEach(g => {
+    const fs = g.seg ? segFields(g.seg, 0) && (function () {
+      const n = derivedSegN(g.seg), a = [];
+      for (let i = 1; i <= n; i++) segFields(g.seg, i).forEach(f => a.push(f));
+      return a;
+    })() : g.fields;
+    fs.forEach(f => { if (f[0] !== 'age') out.push(f[0]); });
+  });
   return out;
 }
 
@@ -6112,5 +9357,6 @@ window.addEventListener('focus', function () {
   if (!wasCallback) setTimeout(ghWarm, 1500);
 })();
 </script>
+
 </body>
 </html>
