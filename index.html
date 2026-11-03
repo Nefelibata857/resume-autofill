@@ -431,6 +431,16 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #tut .vtip b{font-weight:600;color:#5f4520;}
 /* 未解锁时下载按钮弱化一点，解锁后恢复常态 */
 #btn-dl.locked{opacity:.85;}
+/* 资料套件门：没登录或没点星时整块盖住，跟下载门同一套判定（登录 + 点星） */
+#profiles{position:relative}
+#pf-gate{position:absolute;left:0;right:0;top:0;bottom:0;z-index:5;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  background:rgba(255,255,255,.9);border-radius:11px;padding:16px}
+#pf-gate[hidden]{display:none!important}
+#pf-gate .pfg-b{font-size:14.5px;font-weight:600;color:#5f4520;margin-bottom:6px}
+#pf-gate .pfg-p{font-size:12.5px;line-height:1.85;color:#8a7a5c;margin:0 0 12px;max-width:470px}
+#profiles.locked .prow{opacity:.32}
+#profiles.locked .ptip{opacity:.32}
 
 /* 建议存一份到本地：贴在进度卡片底部，不挡操作 */
 .stip{position:relative;margin-top:12px;padding:11px 34px 11px 13px;
@@ -553,6 +563,14 @@ window.trackEvent = function (name, data) {
       </div>
       <p class="ptip">当前用的是「<b id="pf-cur">默认资料</b>」。每套资料独立保存，
         生成书签 / 下载文件用的就是当前这一套；切换或改完数据后要重新生成书签。</p>
+      <div id="pf-gate" hidden>
+        <div>
+          <div class="pfg-b">🔒 登录 GitHub 并点星后解锁</div>
+          <p class="pfg-p">资料套件和「下载表单助手到本地」一样，要先登录 GitHub 并给项目点个 star。
+            登录只用来确认点星，不读取、不上传你的任何资料。</p>
+          <button class="primary" id="pf-gate-go" type="button">登录 GitHub 解锁</button>
+        </div>
+      </div>
     </section>
 
     <div id="groups"></div>
@@ -4066,6 +4084,7 @@ function curPF() {
 
 function switchProfile(id) {
   if (!id || id === PF.active) return;
+  if (!pfUnlocked()) { pfGateGo(); renderProfiles(); return; }   /* 没登录/没点星：引导去解锁，不切换 */
   saveData();                      /* 旧套件先存盘，别丢改动 */
   PF.active = id;
   var p = curPF();
@@ -4077,6 +4096,7 @@ function switchProfile(id) {
 }
 
 function newProfile() {
+  if (!pfUnlocked()) { pfGateGo(); return; }
   saveData();
   var n = 1;
   PF.list.forEach(function (p) { if (/^副本/.test(p.name)) n++; });
@@ -4089,6 +4109,7 @@ function newProfile() {
 }
 
 function renameProfile() {
+  if (!pfUnlocked()) { pfGateGo(); return; }
   var p = curPF();
   if (!p) return;
   var nm = window.prompt('给这套资料起个名字（比如「建筑设计师」「营销策划」）', p.name);
@@ -4098,6 +4119,7 @@ function renameProfile() {
 }
 
 function delProfile() {
+  if (!pfUnlocked()) { pfGateGo(); return; }
   if (PF.list.length <= 1) { toast('只剩一套了，删不掉'); return; }
   var p = curPF();
   if (!p) return;
@@ -4788,9 +4810,10 @@ function offlinePatch(html) {
     + '}catch(e){}'
     + 'document.documentElement.setAttribute("data-offline","1");'
     + '})();';
-  /* 离线用不上的东西藏掉：教程视频要联网、下载入口在本地文件里也没有意义 */
+  /* 离线用不上的东西藏掉：教程视频要联网、下载入口在本地文件里也没有意义、资料套件门同理 */
   var add = '<style id="offline-css">html[data-offline] #tut,html[data-offline] #btn-dl,'
-    + 'html[data-offline] #ghbar,html[data-offline] #btn-ghout{display:none!important}</style>'
+    + 'html[data-offline] #ghbar,html[data-offline] #btn-ghout,html[data-offline] #pf-gate'
+    + '{display:none!important}</style>'
     + '<script id="offline-boot">' + boot + '<\/script>\n';
   var at = html.search(/<\/head>/i);
   if (at < 0) return '';
@@ -5965,6 +5988,34 @@ function uiDl() {
   var out = document.getElementById('btn-ghout');
   if (out) out.hidden = !ghLogged();
   if (on) ghBar(null);
+  uiProfiles();          /* 资料套件和下载门同一套状态，这里一起刷新 */
+}
+
+/* ---------- 资料套件门（v42）：跟下载门同一套判定 —— ① 登录 GitHub；② 给仓库点过 star。
+   好处是「投不同岗位换一套资料」这个进阶功能也要点星才能用，和下载表单助手一个待遇。
+   离线版（下载到本地那个文件）不设门：那种环境打不开 GitHub，不能把人关在自己电脑外。 */
+function pfUnlocked() {
+  if (document.documentElement.hasAttribute('data-offline')) return true;
+  return canDownload();
+}
+
+function pfGateGo() {
+  if (!ghLogged()) return ghLogin();
+  if (!ghStarred()) {
+    ghBar('star');
+    try { window.open(GH_REPO_URL, '_blank'); } catch (e) {}
+    return;
+  }
+  uiProfiles();
+}
+
+function uiProfiles() {
+  var card = document.getElementById('profiles');
+  var gate = document.getElementById('pf-gate');
+  if (!card || !gate) return;
+  var on = pfUnlocked();
+  gate.hidden = on;
+  card.classList.toggle('locked', !on);
 }
 
 function ghAuthUrl() {
@@ -6247,9 +6298,13 @@ window.dlTool = dlTool; window.offlinePatch = offlinePatch;
 window.ghLogged = ghLogged; window.ghLogin = ghLogin; window.ghWho = ghWho;
 window.ghParseHash = ghParseCallback; window.ghFinish = ghFinish; window.ghBackHome = ghBackHome; window.ghBar = ghBar;
 window.uiDl = uiDl; window.canDownload = canDownload; window.ghCallback = ghCallback;
+window.uiProfiles = uiProfiles; window.pfUnlocked = pfUnlocked; window.pfGateGo = pfGateGo;
 
 /* ---------- 多套资料 UI ---------- */
 (function () {
+  /* 整块盖住的解锁层：点哪儿都算「去解锁」，和点下载按钮一个行为 */
+  var gate = document.getElementById('pf-gate');
+  if (gate) gate.addEventListener('click', pfGateGo);
   var sel = document.getElementById('pf-select');
   if (sel) sel.addEventListener('change', function () { switchProfile(sel.value); });
   var bNew = document.getElementById('pf-new');
@@ -6266,6 +6321,7 @@ renderHealth();
 refreshBookmarks();
 syncBanner();
 renderProfiles();
+uiProfiles();
 
 document.getElementById('btn-dl').addEventListener('click', () => {
   if (!ghLogged()) return ghLogin();
