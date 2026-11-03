@@ -1040,7 +1040,7 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v42';
+  var ENGINE_VER = 'v43';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER,
              overwrite: [], handled: [], sample: 0, newer: '' };
   /* 经历区（实习/项目）的起止时间框：主循环认出来后会交给下面的经历块逻辑填，
@@ -2089,6 +2089,14 @@ function applyResume(D, O) {
     var vv = normOpt(val), i, best = null, bl = 0, t, rng;
     if (!vv || !list || !list.length) return null;
     for (i = 0; i < list.length; i++) if (normOpt(list[i].t) === vv) return list[i];
+    /* 同字异序也算命中：字节校招的「学历类型」选项是「统招全日制」，
+       而表单助手里存的是「全日制统招」—— 字全一样只是顺序不同，
+       下面三条（含/被含/区间）全都比不上，下拉就永远选不上。 */
+    var vs = vv.split('').sort().join('');
+    for (i = 0; i < list.length; i++) {
+      t = normOpt(list[i].t);
+      if (t.length >= 2 && t.length === vv.length && t.split('').sort().join('') === vs) return list[i];
+    }
     /* 正向包含（选项比值长）：取「最接近」的那个，多出来的字最少。
        以前取最长，结果「全日制」会选中「统招非全日制」而不是「统招全日制」。 */
     for (i = 0; i < list.length; i++) {
@@ -3173,6 +3181,11 @@ function applyResume(D, O) {
             try { pid = comboBox(pe); } catch (e) {}
             try {
               if (pe === el) { dup = true; break; }
+              /* 只有「同一个字段」才可能是内外两层重复。
+                 以前不看 key 就按组件容器判重：字节教育经历里「学历类型」和「学历」
+                 是两个挨着的下拉、容器同一个，后一个直接被当成重复吞掉 ——
+                 于是它既不填也不报错，面板上连一条失败都看不到。 */
+              if (ASYNC[z].k !== key) continue;
               /* 同一个下拉的内外层未必是祖先/后代（Semi 里是兄弟节点），
                  按「它们各自归属的组件容器」判断才准，否则一个控件会进两次队列，
                  第一遍填上、第二遍报一条假的「没有这一项」 */
@@ -3936,11 +3949,16 @@ function applyResume(D, O) {
   /* 按钮属于哪个区块：往上找最近的、文本里带区块标题的祖先 */
   function addHostOf(el) {
     var p = el;
-    for (var i = 0; i < 6 && p; i++) {
+    for (var i = 0; i < 10 && p; i++) {
       p = p.parentElement;
       if (!p) break;
+      if (p === document.body || p === document.documentElement) break;
       var t = clean(p.textContent || '');
-      if (t.length > 400) break;
+      /* 以前文本超过 400 字就 break。字节这种「左边区块标题、右边字段」的版式，
+         区块容器把字段提示也算进 textContent，很容易超 400 字，
+         结果「＋ 添加」按钮一个都找不到，6 段项目永远只有第 1 段。
+         现在继续往上找，只挡住整页级别的容器。 */
+      if (t.length > 3000) continue;
       if (/(实习经历|工作经历|项目经历|实践经验|职业经历|科研项目|主要项目)/.test(t)) return p;
     }
     return null;
@@ -3955,15 +3973,26 @@ function applyResume(D, O) {
       var b = boxes[i];
       try {
         if (!b.checked) continue;
-        var t = clean(labelText(b) || upLabel(b) || (b.parentNode && b.parentNode.textContent) || '');
-        if (t.length > 30) t = t.slice(0, 30);
-        if (/(没有|无|暂无).{0,4}(实习|工作|项目|实践)/.test(t)) { hit = b; break; }
+        /* 标签可能在 label 元素、紧邻的文字节点、父容器里（字节是「☑ 没有实习经历」内联一行），
+           挨个试，别只认一条路 —— 认不出来实习区就整段不渲染，后面全填不上。 */
+        var cands = [];
+        try { if (b.labels && b.labels.length) cands.push(b.labels[0].textContent); } catch (eL) {}
+        try { if (b.nextElementSibling) cands.push(b.nextElementSibling.textContent); } catch (eS) {}
+        try { if (b.parentElement) cands.push(b.parentElement.textContent); } catch (eP) {}
+        try { cands.push(labelText(b) || '', upLabel(b) || '', b.getAttribute('aria-label') || ''); } catch (eT) {}
+        var got = false;
+        for (var ci = 0; ci < cands.length && !got; ci++) {
+          var tt = clean(cands[ci] || '').slice(0, 40);
+          if (/(没有|无|暂无).{0,6}(实习|工作|项目|实践)/.test(tt)) got = true;
+        }
+        if (got) { hit = b; break; }
       } catch (e) {}
     }
     if (!hit) { cb(); return; }
     try { hit.click(); } catch (e) {}
-    tr('取消勾选「' + clean(labelText(hit) || upLabel(hit) || '没有实习经历') + '」');
-    setTimeout(cb, 500);
+    tr('取消勾选「' + clean(labelText(hit) || upLabel(hit) || '没有实习经历').slice(0, 12) + '」');
+    /* 取消勾选后区块是异步渲染出来的，多等一拍再数段数 */
+    setTimeout(cb, 900);
   }
 
   /* 点一下添加，然后轮询等新块真的出现（React 渲染是异步的，点完立刻数还是旧的）。
