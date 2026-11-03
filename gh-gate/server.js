@@ -50,6 +50,8 @@ const ALLOW = (process.env.ALLOW_ORIGINS || 'https://nefelibata857.github.io').s
 const STAR_REPO = (process.env.STAR_REPO || 'Nefelibata857/resume-autofill').trim();
 const WANT = STAR_REPO.toLowerCase();
 const UA = 'resume-autofill-gate';
+/* 线上工具页地址：/ver 用它反查「最新引擎是哪个版本」 */
+const PAGES_URL = (process.env.PAGES_URL || 'https://nefelibata857.github.io/resume-autofill/').trim();
 
 /* ---------- 点星名单（webhook 推送，零 API 调用） ---------- */
 
@@ -187,6 +189,31 @@ app.get('/', (req, res) => res.json({
   knownStars: knownStars.size,        /* 名单里已经有几个人（webhook 记的 + 启动时读回来的） */
   persist: !!GH_TOKEN                 /* 能不能把名单写回仓库 */
 }));
+
+/* ---------- 引擎版本查询 ----------
+   书签是「装了就一直用」的代码快照：引擎从 v39 修到 v41，用户手里的书签
+   还是旧代码，而他自己完全看不出落后了几个版本 —— 每次都得靠人工提醒
+   「去重装书签」。跑的时候问一句线上最新版本，落后就在面板上提示。
+   Pages 页面 230KB，没必要每次真拉，内存里缓存 5 分钟。 */
+const verCache = { at: 0, v: '' };
+app.get('/ver', async (req, res) => {
+  if (verCache.v && Date.now() - verCache.at < 5 * 60 * 1000) {
+    return res.json({ version: verCache.v, cached: 1 });
+  }
+  try {
+    const r = await fetch(PAGES_URL, { headers: { 'User-Agent': UA, 'Cache-Control': 'no-cache' } });
+    const t = await r.text();
+    const m = t.match(/ENGINE_VER\s*=\s*'(v\d+)'/);
+    if (m && m[1]) {
+      verCache.at = Date.now();
+      verCache.v = m[1];
+      return res.json({ version: m[1] });
+    }
+    res.json({ version: verCache.v || '', err: 'not_found' });
+  } catch (e) {
+    res.json({ version: verCache.v || '', err: String((e && e.message) || e) });
+  }
+});
 
 /* ---------- 点星检查 ---------- */
 

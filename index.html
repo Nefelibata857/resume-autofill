@@ -143,6 +143,14 @@ button.primary:hover{background:#000;}
 .tip{font-size:12px;color:var(--sub);line-height:1.7;}
 .tip b{color:#4a463f;font-weight:500;}
 .linkbtn{font-size:12px;padding:0;border:none;background:none;color:var(--gold);text-decoration:underline;cursor:pointer;}
+/* 多套资料（v42） */
+.prow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}
+.prow select{flex:1;min-width:150px;padding:8px 10px;border:1px solid #e0d6c2;border-radius:8px;
+  background:#fff;font-size:13px;color:#3a332a}
+.prow button{padding:8px 12px;border:1px solid #e0d6c2;border-radius:8px;background:#fff;
+  font-size:12px;color:#6b5f4a;cursor:pointer}
+.prow button:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-soft)}
+.ptip{font-size:12px;color:#8a7a5c;margin:10px 0 0;line-height:1.7}
 .linkbtn:hover{background:none;border:none;color:#8a6a35;}
 
 pre.script{
@@ -503,6 +511,7 @@ window.trackEvent = function (name, data) {
   <span class="ws"><b>1</b>在下面填你自己的信息（只存在本机浏览器）</span>
   <span class="ws"><b>2</b>点右上「下载书签文件」</span>
   <span class="ws"><b>3</b>Ctrl+Shift+O 导入书签，以后点一下书签就自动填</span>
+  <span class="ws"><b>?</b>手边没资料？<button class="linkbtn" id="hello-sample" type="button">先填份示例看看效果</button>（随时可撤销）</span>
   <button class="x" id="hello-x">知道了，关掉</button>
 </div></div>
 
@@ -532,6 +541,18 @@ window.trackEvent = function (name, data) {
       </p>
 
       <div id="parse-result"></div>
+    </section>
+
+    <section class="card" id="profiles">
+      <h2>资料套件<span class="sub">投不同岗位用不同版本，一键切换</span></h2>
+      <div class="prow">
+        <select id="pf-select" title="切换资料套件"></select>
+        <button id="pf-new" type="button">另存为新套件</button>
+        <button id="pf-rename" type="button">重命名</button>
+        <button id="pf-del" type="button">删除</button>
+      </div>
+      <p class="ptip">当前用的是「<b id="pf-cur">默认资料</b>」。每套资料独立保存，
+        生成书签 / 下载文件用的就是当前这一套；切换或改完数据后要重新生成书签。</p>
     </section>
 
     <div id="groups"></div>
@@ -987,9 +1008,9 @@ GROUPS.forEach(g => g.fields.forEach(([k, l]) => { LABELS[k] = l; }));
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v41';
+  var ENGINE_VER = 'v42';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER,
-             overwrite: [], handled: [], sample: 0 };
+             overwrite: [], handled: [], sample: 0, newer: '' };
   /* 经历区（实习/项目）的起止时间框：主循环认出来后会交给下面的经历块逻辑填，
      这里先记下来，等日期队列跑完回读一遍——填上了报喜，还是空的必须说清为什么，
      不能再像以前那样 silently 丢掉了事。 */
@@ -2881,6 +2902,12 @@ function applyResume(D, O) {
   }
   if (hiddenReq >= 2) RES.hiddenReq = hiddenReq;
 
+  /* v42：主扫描整体延后到「经历块补足」之后执行。
+     不少网申页（字节就是）默认只显示一段实习、一段项目，第二段起要手点「+ 添加」；
+     资料里有 6 段项目、页面上只有 1 个框，多出来的 5 段永远填不上 ——
+     用户看到的是「第二段实习怎么没填」，其实页面压根没有那个框。
+     不需要补块时 ensureBlocks 会同步回调，行为和以前完全一样。 */
+  function runScanAndFinish() {
   /* ---------- 主循环 ---------- */
   var seenK = {};
   for (var di = 0; di < docs.length; di++) {
@@ -3008,6 +3035,17 @@ function applyResume(D, O) {
           var dl = labelText(el) || clean(ctx).slice(0, 30);
           if (dl) RES.diag.push({ l: dl, v: clean(dv).slice(0, 26), k: key || '' });
           continue;
+        }
+
+        /* 多段经历模式下，「公司名称 / 职位名称 / 项目名称 / 项目角色」主扫描本来就不认
+           （RULES 里没这些规则，它们由下面的经历逻辑按段对位填写）。
+           以前会一条条进「未识别」，段数一多面板全是噪音，用户以为漏填了。 */
+        if (O.exp && !key) {
+          var _ul0 = clean(labelText(el) || upLabel(el) || geo || '');
+          if (_ul0 && /^(公司|单位|企业)(名称|全称)?\s*\*?$|^(实习|工作)单位\s*\*?$|^所属(公司|单位|企业)\s*\*?$/
+            .test(_ul0)) continue;
+          if (_ul0 && /^职位(名称)?\s*\*?$|^岗位(名称)?\s*\*?$|^担任?角色\s*\*?$|^项目角色\s*\*?$/.test(_ul0)) continue;
+          if (_ul0 && /^项目(名称|标题|课题)\s*\*?$|^项目\/?课题\s*\*?$|^项目所属\s*\*?$/.test(_ul0)) continue;
         }
 
         if (!key) {
@@ -3360,10 +3398,15 @@ function applyResume(D, O) {
           return false;
         }
         if (!mv) {
-          /* 最常见的一种：资料里压根没有这段时间（exp1_time / prj1_time 空着）。
-              以前这里静默 return false，用户连点三遍也不知道是该去补资料。 */
+          /* 两种要分清：① 资料里压根没填这段时间（exp1_time / prj1_time 空着）；
+             ② 填了但拆不出年月 —— 最常见是「2026.01 - 至今」，「至今」不是日期。
+             以前一律说「资料里没有」，用户回去翻资料发现明明写着，白跑一趟。
+             两种以前都是静默 return false，用户连点三遍也不知道是该去补资料。 */
           if (kk === 'start' || kk === 'end') {
-            var miss = '资料里没有 ' + (d.key || '') + '_time 这段时间，去表单助手里补上再点一次';
+            var miss = String(d.span || d.time || '').trim()
+              ? '资料里 ' + (d.key || '') + '_time 是「' + String(d.span || d.time).slice(0, 24)
+                + '」，拆不出具体年月（「至今」要换成具体截止日期），这个框没填'
+              : '资料里没有 ' + (d.key || '') + '_time 这段时间，去表单助手里补上再点一次';
             RES.failed.push({ l: labelText(cell) || '起止时间', r: miss });
             spanWhy(cell, miss);
           }
@@ -3466,7 +3509,13 @@ function applyResume(D, O) {
                用户看到的就是这一块的时间框一直空着，连点三遍也没线索 ——
                页面上明明有框、资料里却没值，必须说一声该去补什么。 */
             if (!map[kk] && (kk === 'start' || kk === 'end') && P[kk] && P[kk][n]) {
-              var miss = '资料里没有 ' + (d.key || '') + '_time 这段时间，去表单助手里补上再点一次';
+              /* 分清「资料里没填这段时间」和「填了但拆不出年月」：
+                 后者最常见是「2026.01 - 至今」——「至今」不是日期，
+                 以前一律说「资料里没有」，用户回去翻资料才发现明明写着，白跑一趟。 */
+              var miss = String(d.time || '').trim()
+                ? '资料里 ' + (d.key || '') + '_time 是「' + String(d.time).slice(0, 24)
+                  + '」，拆不出具体年月（「至今」要换成具体截止日期），这个框没填'
+                : '资料里没有 ' + (d.key || '') + '_time 这段时间，去表单助手里补上再点一次';
               RES.failed.push({ l: labelText(P[kk][n]) || '起止时间', r: miss });
               spanWhy(P[kk][n], miss);
               continue;
@@ -3491,6 +3540,34 @@ function applyResume(D, O) {
       }
     })();
   }
+
+  /* v42：书签是代码快照。问一句后端「线上最新引擎是哪个版本」，落后就记进 RES.newer，
+     面板上提示用户去更新 —— 以前每次引擎升级都得靠人工提醒「记得重装书签」，
+     而用户自己根本看不出落后了几个版本。
+     用 XHR 不用 fetch：书签是 ES5 代码，得在老浏览器里也能跑。
+     跨域被页面 CSP 拦了就静默失败：提示不出来而已，绝不影响填表本身。 */
+  function checkVer() {
+    try {
+      var GATE = 'https://resume-autofill-gate.onrender.com';
+      var x = new XMLHttpRequest();
+      x.open('GET', GATE + '/ver', true);
+      x.onload = function () {
+        try {
+          var j = JSON.parse(x.responseText || '{}');
+          if (j && j.version && verNum(j.version) > verNum(ENGINE_VER)) {
+            RES.newer = j.version;
+            tr('引擎有新版 ' + j.version + '，当前 ' + ENGINE_VER);
+            /* 版本查询可能比填表流程晚返回，那时面板已经画完了，补画一次 */
+            try { panel(); } catch (eP) {}
+          }
+        } catch (e2) {}
+      };
+      x.onerror = function () {};
+      x.send();
+    } catch (e1) {}
+  }
+  function verNum(v) { var m = String(v || '').match(/v(\d+)/); return m ? +m[1] : 0; }
+
 
   /* 经历区起止时间核对：主循环把这些框交给经历逻辑填，这里等日期队列跑完后
      回读一遍。填上了记一笔「起止时间 = 2025-07」；还是空的按 putCell 留下的原因
@@ -3568,7 +3645,7 @@ function applyResume(D, O) {
         + (DIAG ? '#60a5fa' : RES.filled.length ? '#4ade80' : '#f59e0b') + ';');
       var ttl = mk('div', 'flex:1;font-weight:600;',
         DIAG ? '页面字段清单 · ' + RES.diag.length + ' 个'
-          : (RES.busy ? '正在填下拉 ' + ASYNC.length + ' 个…' : '已填 ' + RES.filled.length + ' 项'));
+          : (RES._addTip ? RES._addTip : RES.busy ? '正在填下拉 ' + ASYNC.length + ' 个…' : '已填 ' + RES.filled.length + ' 项'));
       var sub = mk('div', 'font-size:11px;color:rgba(255,255,255,.48);', '点击展开');
       /* 把标题暴露出来，队列每处理一项就改一次，用户能看出「它还在动」 */
       RES._ttl = function (s) { try { ttl.textContent = s; } catch (eT0) {} };
@@ -3594,6 +3671,12 @@ function applyResume(D, O) {
       if (!DIAG && RES.sample) {
         body.appendChild(mk('div', 'font-size:12px;color:#ffcf7a;line-height:1.6;padding:2px 0 6px;',
           '当前填的是示例人物（张小明）的资料，不是你自己的。要填真实资料，请在本地那份表单助手里重新生成一次书签。'));
+      }
+      /* 书签是快照：落后线上几个版本时用户自己看不出来，这里明说 */
+      if (!DIAG && RES.newer && verNum(RES.newer) > verNum(RES.ver)) {
+        body.appendChild(mk('div', 'font-size:12px;color:#ffcf7a;line-height:1.6;padding:2px 0 6px;',
+          '这个书签是 ' + RES.ver + '，线上已经是 ' + RES.newer
+          + '。最近修过的几个问题都在新版里，建议去表单助手重新生成一次书签（旧书签删掉）。'));
       }
       /* 折叠区块里的必填框扫不到，用户只会觉得「这块没填」，得说清楚是没展开而不是没认出来 */
       if (!DIAG && RES.hiddenReq) {
@@ -3687,6 +3770,9 @@ function applyResume(D, O) {
   }
 
   /* 有下拉组件待填：先亮个面板，再一个个点开选，全填完刷新一次结果 */
+  /* 版本比对不阻塞填表：异步发出去，结果回来时面板自己会补一条提示 */
+  if (!DIAG) checkVer();
+
   if ((ASYNC.length || DATES.length) && !DIAG) {
     RES.busy = 1;
     panel();
@@ -3701,6 +3787,191 @@ function applyResume(D, O) {
     try { verifyFilled(); } catch (e) {}
     panel();
   }
+  }
+
+  /* v42：先按资料段数把「添加经历」点到够，再扫描。
+     DIAG（只看不填）不点按钮 —— 诊断模式下不该改动页面。 */
+  if (DIAG) { runScanAndFinish(); }
+  else {
+    try {
+      ensureBlocks(function () {
+        try { runScanAndFinish(); }
+        catch (e) { RES.failed.push({ l: '主扫描', r: String((e && e.message) || e) }); }
+      });
+    } catch (e) {
+      /* 补块逻辑自己出错也不能拦住填表：退回直接扫描 */
+      try { runScanAndFinish(); } catch (e2) {}
+    }
+  }
+  /* ---------- v42：按资料段数补足页面上的经历块 ---------- */
+
+  /* 资料里有几段经历：exp1..exp4 / prj1..prj6，取最后一个有值的段号 */
+  function segCount(pre) {
+    var n = 0;
+    for (var i = 1; i <= 6; i++) {
+      var v = D[pre + i + '_company'] || D[pre + i + '_org'] || D[pre + i + '_title'];
+      if (String(v || '').trim()) n = i;
+    }
+    return n;
+  }
+
+  /* 数段数专用的标签读取：直接取父容器里第一个子元素。
+     不能用 labelText —— 字段排在区块标题正下方时，nearLabel 的第一条路径
+     （父容器的上一个兄弟）会把 <h3>实习经历</h3> 当成标签返回，
+     整段经历就一个都数不到，引擎反而误判「页面没有经历」去点添加按钮。 */
+  function blockLabel(el) {
+    var p = el.parentElement;
+    if (!p) return '';
+    var fc = p.firstElementChild;
+    if (fc && fc !== el && !fc.contains(el)
+        && !(fc.querySelector && fc.querySelector('input,select,textarea'))) {
+      return clean(fc.innerText || '');
+    }
+    return '';
+  }
+
+  /* 页面上现在有几段：按「公司名称 / 项目名称」这类标签的可见输入框数。
+     每段经历只有一个单位名框，数它比数容器稳（容器 class 名各站都不一样）。 */
+  function countBlocksOnPage(kind) {
+    var n = 0, all = document.querySelectorAll('input,textarea');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      try { if (!shown(el)) continue; } catch (e) { continue; }
+      var t = clean(blockLabel(el) || labelText(el) || upLabel(el) || geoLabel(el) || '');
+      if (!t) continue;
+      var ok = kind === 'project'
+        ? /^(项目名称|项目标题|项目课题|项目\/?课题|所属项目|项目所属|代表项目)/
+        : /^(公司|单位|企业)(名称|全称)?\s*\*?$|^(实习|工作)单位\s*\*?$|^所属(公司|单位)\s*\*?$/;
+      if (ok.test(t)) n++;
+    }
+    return n;
+  }
+
+  /* 找「添加经历」按钮：文字像添加、是个按钮、可见、且能看出属于哪个区。
+     工作经历区不点 —— 用户是学生，资料里没有正式工作经历。 */
+  function addBtnsFor(kind) {
+    var out = [], seen = {};
+    var btns = document.querySelectorAll('button,a,[role="button"]');
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      try { if (!shown(b)) continue; } catch (e) { continue; }
+      var t = clean(b.textContent || '');
+      if (!t || t.length > 8) continue;
+      if (!/^[＋+\s-]*(添加|新增)(一?段|经历|实习|项目)?\s*$|^add\s*more$/i.test(t)) continue;
+      var host = addHostOf(b);
+      if (!host) continue;
+      var ht = clean(host.textContent || '').slice(0, 80);
+      var isP = /项目/.test(ht);
+      var isI = /(实习|实践)/.test(ht);
+      if (kind === 'project' ? isP : (isI && !isP)) {
+        var k = t + ':' + (b.getAttribute('class') || '') + ':' + (b.id || '');
+        if (!seen[k]) { seen[k] = 1; out.push(b); }
+      }
+    }
+    return out;
+  }
+
+  /* 按钮属于哪个区块：往上找最近的、文本里带区块标题的祖先 */
+  function addHostOf(el) {
+    var p = el;
+    for (var i = 0; i < 6 && p; i++) {
+      p = p.parentElement;
+      if (!p) break;
+      var t = clean(p.textContent || '');
+      if (t.length > 400) break;
+      if (/(实习经历|工作经历|项目经历|实践经验|职业经历|科研项目|主要项目)/.test(t)) return p;
+    }
+    return null;
+  }
+
+  /* 「没有实习经历」勾着的话，实习区整段不渲染，添加按钮也不存在 —— 先取消。
+     只认「已勾选 + 文字是没有/无/暂无 + 实习|工作|项目|实践」，不碰别的复选框。 */
+  function uncheckNoExp(cb) {
+    var hit = null;
+    var boxes = document.querySelectorAll('input[type="checkbox"]');
+    for (var i = 0; i < boxes.length; i++) {
+      var b = boxes[i];
+      try {
+        if (!b.checked) continue;
+        var t = clean(labelText(b) || upLabel(b) || (b.parentNode && b.parentNode.textContent) || '');
+        if (t.length > 30) t = t.slice(0, 30);
+        if (/(没有|无|暂无).{0,4}(实习|工作|项目|实践)/.test(t)) { hit = b; break; }
+      } catch (e) {}
+    }
+    if (!hit) { cb(); return; }
+    try { hit.click(); } catch (e) {}
+    tr('取消勾选「' + clean(labelText(hit) || upLabel(hit) || '没有实习经历') + '」');
+    setTimeout(cb, 500);
+  }
+
+  /* 点一下添加，然后轮询等新块真的出现（React 渲染是异步的，点完立刻数还是旧的）。
+     等不到就当作没点成 —— 绝不硬点多点。 */
+  function clickAdd(btn, before, kind, cb) {
+    try { btn.click(); } catch (e) {}
+    var t0 = Date.now();
+    (function poll() {
+      var now = 0;
+      try { now = countBlocksOnPage(kind); } catch (e) {}
+      if (now > before || Date.now() - t0 > 2500) { cb(now > before); return; }
+      setTimeout(poll, 130);
+    })();
+  }
+
+  function ensureBlocks(cb) {
+    var done = function () { try { cb(); } catch (e) {} };
+    if (!O.exp) { done(); return; }
+    var need = { intern: segCount('exp'), project: segCount('prj') };
+    if (need.intern <= 1 && need.project <= 1) { done(); return; }
+    var cur = { intern: 0, project: 0 };
+    try { cur = { intern: countBlocksOnPage('intern'), project: countBlocksOnPage('project') }; } catch (e) {}
+    var todo = [];
+    if (cur.intern < need.intern) todo.push({ kind: 'intern', left: need.intern - cur.intern });
+    if (cur.project < need.project) todo.push({ kind: 'project', left: need.project - cur.project });
+    if (!todo.length) { done(); return; }
+    RES.busy = 1;
+    RES._addTip = '正在补经历块（实习 ' + need.intern + ' 段 / 项目 ' + need.project + ' 段）…';
+    tr('补块：需要实习 ' + need.intern + ' 段、项目 ' + need.project + ' 段，页面现有 '
+      + cur.intern + ' / ' + cur.project);
+    try { panel(); } catch (e) {}
+    uncheckNoExp(function () {
+      var idx = 0;
+      (function step() {
+        if (idx >= todo.length) {
+          RES.busy = 0;
+          RES._addTip = '';
+          try { panel(); } catch (e) {}
+          done();
+          return;
+        }
+        var t = todo[idx];
+        var btns = addBtnsFor(t.kind);
+        if (!btns.length) {
+          /* 找不到添加按钮就不硬点：点错一次可能是提交或跳页。
+             记一条失败，让用户知道这几段得手动加。 */
+          RES.failed.push({
+            l: (t.kind === 'project' ? '项目' : '实习') + '第 ' + (t.left + 1) + ' 段起',
+            r: '页面上没找到「添加' + (t.kind === 'project' ? '项目' : '实习') + '」按钮，这几段得手动加'
+          });
+          idx++;
+          step();
+          return;
+        }
+        var before = 0;
+        try { before = countBlocksOnPage(t.kind); } catch (e) {}
+        clickAdd(btns[0], before, t.kind, function (grew) {
+          if (grew) {
+            t.left--;
+            tr('点了添加按钮，' + t.kind + ' 块 +1（还差 ' + t.left + ' 段）');
+          } else {
+            tr('点了添加按钮但页面没多出块，停手不硬点');
+          }
+          if (t.left > 0 && grew) { step(); }
+          else { idx++; step(); }
+        });
+      })();
+    });
+  }
+
   try { RES.data = D; } catch (e) {}
   try { if (typeof window !== 'undefined') window.__RZ = RES; } catch (e) {}
   /* 控制台留一行诊断摘要：出问题时用户复制这一行发回来，
@@ -3762,9 +4033,107 @@ function loadData() {
 
 /* v8：紧急联系人一栏当年填成了手机号，清掉，等真实姓名 */
 
+/* ---------- 多套资料（v42）----------
+   投不同岗位用不同版本：建筑设计师一份、营销策划一份，每套完整独立。
+   生成书签用的就是「当前这一套」，切换时整份换掉。 */
+const PF_KEY = 'resume_filler_profiles';
+let PF = { active: '', list: [] };
+
+function loadProfiles() {
+  try {
+    const raw = localStorage.getItem(PF_KEY);
+    if (raw) {
+      const o = JSON.parse(raw);
+      if (o && Array.isArray(o.list) && o.list.length) {
+        o.list.forEach(function (p) { p.data = Object.assign({}, DEFAULTS, p.data || {}); });
+        if (!o.list.some(function (p) { return p.id === o.active; })) o.active = o.list[0].id;
+        return o;
+      }
+    }
+  } catch (e) {}
+  /* 第一次用：把当前这份资料收进去，当默认套件 */
+  return { active: 'default', list: [{ id: 'default', name: '默认资料', data: Object.assign({}, DATA) }] };
+}
+
+function saveProfiles() {
+  try { localStorage.setItem(PF_KEY, JSON.stringify(PF)); } catch (e) {}
+}
+
+function curPF() {
+  for (var i = 0; i < PF.list.length; i++) if (PF.list[i].id === PF.active) return PF.list[i];
+  return PF.list[0] || null;
+}
+
+function switchProfile(id) {
+  if (!id || id === PF.active) return;
+  saveData();                      /* 旧套件先存盘，别丢改动 */
+  PF.active = id;
+  var p = curPF();
+  DATA = Object.assign({}, DEFAULTS, (p && p.data) || {});
+  saveProfiles();
+  saveData();
+  render(); renderHealth(); refreshBookmarks(); syncBanner(); renderProfiles();
+  toast('已切换到「' + ((p && p.name) || '') + '」');
+}
+
+function newProfile() {
+  saveData();
+  var n = 1;
+  PF.list.forEach(function (p) { if (/^副本/.test(p.name)) n++; });
+  var id = 'p' + Date.now().toString(36);
+  PF.list.push({ id: id, name: '副本 ' + n, data: Object.assign({}, DATA) });
+  PF.active = id;
+  saveProfiles(); saveData();
+  renderProfiles(); refreshBookmarks(); syncBanner();
+  toast('已另存为「副本 ' + n + '」——改完数据要重新生成书签');
+}
+
+function renameProfile() {
+  var p = curPF();
+  if (!p) return;
+  var nm = window.prompt('给这套资料起个名字（比如「建筑设计师」「营销策划」）', p.name);
+  if (!nm || !nm.trim()) return;
+  p.name = String(nm).trim().slice(0, 20);
+  saveProfiles(); renderProfiles(); refreshBookmarks();
+}
+
+function delProfile() {
+  if (PF.list.length <= 1) { toast('只剩一套了，删不掉'); return; }
+  var p = curPF();
+  if (!p) return;
+  if (!window.confirm('删除「' + p.name + '」？这套资料会整份没了。')) return;
+  PF.list = PF.list.filter(function (x) { return x.id !== p.id; });
+  PF.active = PF.list[0].id;
+  var q = curPF();
+  DATA = Object.assign({}, DEFAULTS, (q && q.data) || {});
+  saveProfiles(); saveData();
+  render(); renderHealth(); refreshBookmarks(); syncBanner(); renderProfiles();
+  toast('已删除，当前是「' + ((q && q.name) || '') + '」');
+}
+
+function renderProfiles() {
+  var sel = document.getElementById('pf-select');
+  if (!sel) return;
+  sel.innerHTML = '';
+  PF.list.forEach(function (p) {
+    var o = document.createElement('option');
+    o.value = p.id;
+    o.textContent = p.name;
+    if (p.id === PF.active) o.selected = true;
+    sel.appendChild(o);
+  });
+  var cur = document.getElementById('pf-cur');
+  if (cur) cur.textContent = (curPF() || {}).name || '';
+}
+
+PF = loadProfiles();
+
 function saveData() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(Object.assign({}, DATA, { __v: DATA_VERSION })));
+    /* 多套资料：当前这套也跟着存一份，切走再切回来数据还在 */
+    var _p = curPF();
+    if (_p) { _p.data = Object.assign({}, DATA); saveProfiles(); }
   } catch (e) {}
 }
 
@@ -5441,6 +5810,13 @@ document.getElementById('hello-x').addEventListener('click', () => {
   try { localStorage.setItem('resume_filler_hello', '1'); } catch (e) {}
 });
 
+/* 引导块里的「先填份示例看看效果」：直接替用户点一下填入示例按钮 */
+var helloSample = document.getElementById('hello-sample');
+if (helloSample) helloSample.addEventListener('click', function () {
+  var b = document.getElementById('btn-example');
+  if (b) b.click();
+});
+
 /* 示例数据可以一键撤销：点示例前先把当前数据整份存进 localStorage，
    再点同一个按钮就原样还回来，免得手滑把自己的内容覆盖掉。 */
 var SAMPLE_BK_KEY = 'rz_sample_backup';
@@ -5872,11 +6248,24 @@ window.ghLogged = ghLogged; window.ghLogin = ghLogin; window.ghWho = ghWho;
 window.ghParseHash = ghParseCallback; window.ghFinish = ghFinish; window.ghBackHome = ghBackHome; window.ghBar = ghBar;
 window.uiDl = uiDl; window.canDownload = canDownload; window.ghCallback = ghCallback;
 
+/* ---------- 多套资料 UI ---------- */
+(function () {
+  var sel = document.getElementById('pf-select');
+  if (sel) sel.addEventListener('change', function () { switchProfile(sel.value); });
+  var bNew = document.getElementById('pf-new');
+  if (bNew) bNew.addEventListener('click', newProfile);
+  var bRen = document.getElementById('pf-rename');
+  if (bRen) bRen.addEventListener('click', renameProfile);
+  var bDel = document.getElementById('pf-del');
+  if (bDel) bDel.addEventListener('click', delProfile);
+})();
+
 /* ---------- 启动 ---------- */
 render();
 renderHealth();
 refreshBookmarks();
 syncBanner();
+renderProfiles();
 
 document.getElementById('btn-dl').addEventListener('click', () => {
   if (!ghLogged()) return ghLogin();
