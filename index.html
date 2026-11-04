@@ -2608,7 +2608,7 @@ function applyResume(D, O) {
        ② 区块标题：按「文档坐标」找上方最近的标题，并排除 position:sticky/fixed 的侧栏指示器
      两条都判不出就返回 ''（不知道就不拦）—— 宁可多填一个，也别整段丢掉。 */
   var ZEDU = /(学校|院校|学院|专业|学历|学位|班级|学号|在校|就读|入学|毕业|绩点|排名|教育)/;
-  var ZEXP = /(公司|单位|职位|岗位|职务|部门|担任|职责|团队|项目名称|项目角色|项目描述|工作内容|工作经历|实习经历|项目经历)/;
+  var ZEXP = /(公司|单位|职位|岗位|职务|部门|担任|职责|团队|项目名称|项目角色|项目描述|工作内容|工作经历|实习经历|项目经历|校园|学生工作|学生干部|社团|组织经历|在校经历|社会实践|学生会|班团)/;
 
   /* 往上找几层，看有没有 sticky/fixed 的祖先（左侧那块区块指示器就是 sticky） */
   function stickyUp(pe) {
@@ -2663,6 +2663,7 @@ function applyResume(D, O) {
         if (!t || t.length > 12) continue;
         var k = '';
         if (/(教育经历|教育背景|教育信息|教育情况|学历信息|教育及培训)/.test(t)) k = 'edu';
+        else if (/(校园经历|在校经历|学生工作|学生干部|社团经历|组织经历|校园实践|社会实践|学生会|班团|社团)/.test(t)) k = 'campus';
         else if (/(实习经历|工作经历|实践经历|职业经历|工作经验|实习经验)/.test(t)) k = 'intern';
         else if (/(项目经历|项目经验|项目实践|主要项目|科研项目|代表项目)/.test(t)) k = 'project';
         if (!k) continue;
@@ -2998,7 +2999,7 @@ function applyResume(D, O) {
              只有「明确判定为经历区」才拦；判不出来（长表单 + sticky 侧栏）就照填 ——
              之前就是这里 continue 掉的，而且面板上连一条记录都不留，
              用户只看到「第一遍压根没填，滚到那一块再点一次才填上」。 */
-          if (zNow === 'exp') {
+          if (zNow === 'exp' || zNow === 'campus') {
             /* 这一格归「实习/项目时间」字段管（下面那段经历逻辑会填）。
                但「交给别人填」不等于「填上了」：资料里没有这段时间、或者那段经历
                的框没认出来，都会让它一直空着。所以先记下来，
@@ -3127,22 +3128,24 @@ function applyResume(D, O) {
     }
     if (/^exp\d_/.test(k)) return k.replace(/^exp(\d)_/, '实习$1·');
     if (/^prj\d_/.test(k)) return k.replace(/^prj(\d)_/, '项目$1·');
+    if (/^sch\d_/.test(k)) return k.replace(/^sch(\d)_/, '校园$1·');
     return k;
   }
 
   /* ---------- 可选：多段经历（实习 / 项目分开对位） ---------- */
   if (O.exp && !DIAG) {
     (function () {
-      var R_ORG   = [/((公司|单位|企业)(名称|全称)?|实习单位|工作单位|所属(公司|单位)|项目所属)/, /(学校|院校|推荐|紧急)/];
+      var R_ORG   = [/((公司|单位|企业)(名称|全称)?|实习单位|工作单位|所属(公司|单位)|项目所属|组织(名称|全称)?|社团(名称|全称)?|学生组织|学生部门|部门名称)/, /(学校|院校|推荐|紧急)/];
       var R_TITLE = [/(项目名称|实习项目|项目课题|项目\/?课题|项目标题)/, /(学校|课程|专业)/];
       var R_ROLE  = [/(职位|岗位|职务|担任角色|角色|承担角色|项目角色)/, /(应聘|意向|期望|申请|描述|内容)/];
       var R_START = [/(开始时间|起始时间|入职时间|开始日期|项目开始)/, null];
       var R_END   = [/(结束时间|离职时间|截止时间|结束日期|项目结束)/, null];
-      var R_SPAN  = [/(项目时间|项目起止|起止时间|时间区间|起止日期)/, null];
+      var R_SPAN  = [/(项目时间|项目起止|起止时间|时间区间|起止日期|任职时间|任职起止|在校时间|活动时间|参与时间)/, null];
       var R_DESC  = [/(描述|工作内容|工作描述|实习内容|职责描述|主要职责|业绩描述|项目描述|项目内容|项目职责|项目介绍|项目成果|项目业绩)/, /(自我|个人|简介)/];
 
       /* 页面把「实习」和「项目」分成两节时，按所在节归位，别串到一起 */
       var HP = /(项目经历|项目经验|项目实践|主要项目|科研项目|代表项目)/;
+      var HC = /(校园经历|在校经历|学生工作|学生干部|社团经历|组织经历|校园实践|社会实践|学生会|班团|社团)/;
       var HI = /(实习经历|工作经历|实践经历|职业经历|工作履历|实习经验|工作经验)/;
       var HEADS = [];
       try {
@@ -3150,9 +3153,10 @@ function applyResume(D, O) {
         while ((tn = wk.nextNode())) {
           var st = (tn.nodeValue || '').replace(/\s/g, '');
           if (!st || st.length > 12) continue;
-          var a1 = HP.test(st), b1 = HI.test(st);
-          if (a1 && b1) continue;            /* 「工作及项目经历」这种不算分节 */
-          var kd = a1 ? 'project' : (b1 ? 'intern' : '');
+          var a1 = HP.test(st), b1 = HI.test(st), c1 = HC.test(st);
+          /* 「工作及项目经历」「学生工作及实习」这种一个标题管两类的，不算分节 */
+          if ((a1 && b1) || (a1 && c1) || (b1 && c1)) continue;
+          var kd = a1 ? 'project' : (b1 ? 'intern' : (c1 ? 'campus' : ''));
           if (!kd) continue;
           var pe = tn.parentNode;
           try { if (!pe || !shown(pe)) continue; } catch (e) { continue; }
@@ -3276,7 +3280,7 @@ function applyResume(D, O) {
 
       try { markSpanPairs(); } catch (e) {}
 
-      var POOL = { intern: {}, project: {}, none: {} };
+      var POOL = { intern: {}, project: {}, campus: {}, none: {} };
       function add(kd, f, el) { (POOL[kd][f] = POOL[kd][f] || []).push(el); }
 
       /* 第一轮：描述框，它决定这页到底有没有经历块 */
@@ -3317,7 +3321,7 @@ function applyResume(D, O) {
         }
         return out;
       }
-      var INTERN = pack('exp', 8), PROJ = pack('prj', 8);
+      var INTERN = pack('exp', 8), PROJ = pack('prj', 8), CAMPUS = pack('sch', 8);
 
       /* 写一个格子：时间框只认年月日，其余原样写。块对位与全局排队共用这一段 */
       /* 给某个起止时间框记下「为什么没填上」，checkSpanWait() 回读时用 */
@@ -3422,7 +3426,9 @@ function applyResume(D, O) {
         for (var n = 0; n < BLKS.length; n++) {
           var b = BLKS[n], kd = b.kind || '', ni = 0;
           for (var q = 0; q < n; q++) if ((BLKS[q].kind || '') === kd) ni++;
-          var list = kd === 'intern' ? INTERN : (kd === 'project' ? PROJ : INTERN.concat(PROJ));
+          var list = kd === 'intern' ? INTERN
+                   : (kd === 'project' ? PROJ
+                   : (kd === 'campus' ? CAMPUS : INTERN.concat(PROJ, CAMPUS)));
           var d = list[ni];
           if (!d) continue;
           var map = { org: d.org, title: d.title, role: d.role, start: d.start, end: d.end, desc: d.desc };
@@ -3470,9 +3476,10 @@ function applyResume(D, O) {
         if (HEADS.length) {
           fill('intern', INTERN);
           fill('project', PROJ);
+          fill('campus', CAMPUS);
         } else {
-          /* 没分节：实习在前、项目在后，按顺序对位到同一批块 */
-          fill('none', INTERN.concat(PROJ));
+          /* 没分节：实习、项目、校园依次对位到同一批块 */
+          fill('none', INTERN.concat(PROJ, CAMPUS));
         }
       }
     })();
@@ -3983,7 +3990,9 @@ const SEG_META = {
   exp: { base: 2, max: 8, cn: '实习',
          head: [['company', '单位'], ['title', '岗位'], ['role', '角色'], ['time', '时间'], ['desc', '描述']] },
   prj: { base: 6, max: 8, cn: '项目',
-         head: [['title', '名称'], ['org', '所属'], ['role', '角色'], ['time', '时间'], ['desc', '描述']] }
+         head: [['title', '名称'], ['org', '所属'], ['role', '角色'], ['time', '时间'], ['desc', '描述']] },
+  sch: { base: 2, max: 8, cn: '校园',
+         head: [['org', '组织/社团'], ['role', '职务'], ['time', '时间'], ['desc', '描述']] }
 };
 function derivedSegN(pre) {
   const m = SEG_META[pre];
@@ -4058,6 +4067,7 @@ const GROUPS = [
     ['transferAccept','接受调剂'], ['transferCities','可接受工作地点'], ['tripartite','可签三方']
   ]},
   { title: '实习经历', seg: 'exp'},
+  { title: '校园经历（校园 / 学生工作 / 组织）', seg: 'sch'},
   { title: '项目经历', seg: 'prj'},
   { title: '证书与语言', fields: [
     ['certName','证书名称'], ['language','语言'], ['languageLevel','精通程度'], ['languageScore','分数']
@@ -4076,7 +4086,8 @@ const YESNO = [
 
 const TODO = new Set([]);
 const LONG = new Set(['selfEval','skills','awards','courses','coursesFull','exp1_desc','exp2_desc',
-  'prj1_desc','prj2_desc','prj3_desc','prj4_desc','prj5_desc','prj6_desc']);
+  'prj1_desc','prj2_desc','prj3_desc','prj4_desc','prj5_desc','prj6_desc','prj7_desc','prj8_desc',
+  'sch1_desc','sch2_desc','sch3_desc','sch4_desc','sch5_desc','sch6_desc','sch7_desc','sch8_desc']);
 
 /* 枚举字段：给个可选下拉，手输也不受限（datalist 不是硬约束） */
 const ENUMS = {
@@ -5821,7 +5832,7 @@ function applyResume(D, O) {
        ② 区块标题：按「文档坐标」找上方最近的标题，并排除 position:sticky/fixed 的侧栏指示器
      两条都判不出就返回 ''（不知道就不拦）—— 宁可多填一个，也别整段丢掉。 */
   var ZEDU = /(学校|院校|学院|专业|学历|学位|班级|学号|在校|就读|入学|毕业|绩点|排名|教育)/;
-  var ZEXP = /(公司|单位|职位|岗位|职务|部门|担任|职责|团队|项目名称|项目角色|项目描述|工作内容|工作经历|实习经历|项目经历)/;
+  var ZEXP = /(公司|单位|职位|岗位|职务|部门|担任|职责|团队|项目名称|项目角色|项目描述|工作内容|工作经历|实习经历|项目经历|校园|学生工作|学生干部|社团|组织经历|在校经历|社会实践|学生会|班团)/;
 
   /* 往上找几层，看有没有 sticky/fixed 的祖先（左侧那块区块指示器就是 sticky） */
   function stickyUp(pe) {
@@ -5876,6 +5887,7 @@ function applyResume(D, O) {
         if (!t || t.length > 12) continue;
         var k = '';
         if (/(教育经历|教育背景|教育信息|教育情况|学历信息|教育及培训)/.test(t)) k = 'edu';
+        else if (/(校园经历|在校经历|学生工作|学生干部|社团经历|组织经历|校园实践|社会实践|学生会|班团|社团)/.test(t)) k = 'campus';
         else if (/(实习经历|工作经历|实践经历|职业经历|工作经验|实习经验)/.test(t)) k = 'intern';
         else if (/(项目经历|项目经验|项目实践|主要项目|科研项目|代表项目)/.test(t)) k = 'project';
         if (!k) continue;
@@ -6194,7 +6206,7 @@ function applyResume(D, O) {
              只有「明确判定为经历区」才拦；判不出来（长表单 + sticky 侧栏）就照填 ——
              之前就是这里 continue 掉的，而且面板上连一条记录都不留，
              用户只看到「第一遍压根没填，滚到那一块再点一次才填上」。 */
-          if (zNow === 'exp') {
+          if (zNow === 'exp' || zNow === 'campus') {
             /* 这一格归「实习/项目时间」字段管（下面那段经历逻辑会填），
                不算「未识别」，单独记一笔，免得面板上看着像引擎没认出来。 */
             if (RES.handled.length < 20) RES.handled.push('（实习/项目区）起止时间');
@@ -6309,22 +6321,24 @@ function applyResume(D, O) {
     }
     if (/^exp\d_/.test(k)) return k.replace(/^exp(\d)_/, '实习$1·');
     if (/^prj\d_/.test(k)) return k.replace(/^prj(\d)_/, '项目$1·');
+    if (/^sch\d_/.test(k)) return k.replace(/^sch(\d)_/, '校园$1·');
     return k;
   }
 
   /* ---------- 可选：多段经历（实习 / 项目分开对位） ---------- */
   if (O.exp && !DIAG) {
     (function () {
-      var R_ORG   = [/((公司|单位|企业)(名称|全称)?|实习单位|工作单位|所属(公司|单位)|项目所属)/, /(学校|院校|推荐|紧急)/];
+      var R_ORG   = [/((公司|单位|企业)(名称|全称)?|实习单位|工作单位|所属(公司|单位)|项目所属|组织(名称|全称)?|社团(名称|全称)?|学生组织|学生部门|部门名称)/, /(学校|院校|推荐|紧急)/];
       var R_TITLE = [/(项目名称|实习项目|项目课题|项目\/?课题|项目标题)/, /(学校|课程|专业)/];
       var R_ROLE  = [/(职位|岗位|职务|担任角色|角色|承担角色|项目角色)/, /(应聘|意向|期望|申请|描述|内容)/];
       var R_START = [/(开始时间|起始时间|入职时间|开始日期|项目开始)/, null];
       var R_END   = [/(结束时间|离职时间|截止时间|结束日期|项目结束)/, null];
-      var R_SPAN  = [/(项目时间|项目起止|起止时间|时间区间|起止日期)/, null];
+      var R_SPAN  = [/(项目时间|项目起止|起止时间|时间区间|起止日期|任职时间|任职起止|在校时间|活动时间|参与时间)/, null];
       var R_DESC  = [/(描述|工作内容|工作描述|实习内容|职责描述|主要职责|业绩描述|项目描述|项目内容|项目职责|项目介绍|项目成果|项目业绩)/, /(自我|个人|简介)/];
 
       /* 页面把「实习」和「项目」分成两节时，按所在节归位，别串到一起 */
       var HP = /(项目经历|项目经验|项目实践|主要项目|科研项目|代表项目)/;
+      var HC = /(校园经历|在校经历|学生工作|学生干部|社团经历|组织经历|校园实践|社会实践|学生会|班团|社团)/;
       var HI = /(实习经历|工作经历|实践经历|职业经历|工作履历|实习经验|工作经验)/;
       var HEADS = [];
       try {
@@ -6332,9 +6346,10 @@ function applyResume(D, O) {
         while ((tn = wk.nextNode())) {
           var st = (tn.nodeValue || '').replace(/\s/g, '');
           if (!st || st.length > 12) continue;
-          var a1 = HP.test(st), b1 = HI.test(st);
-          if (a1 && b1) continue;            /* 「工作及项目经历」这种不算分节 */
-          var kd = a1 ? 'project' : (b1 ? 'intern' : '');
+          var a1 = HP.test(st), b1 = HI.test(st), c1 = HC.test(st);
+          /* 「工作及项目经历」「学生工作及实习」这种一个标题管两类的，不算分节 */
+          if ((a1 && b1) || (a1 && c1) || (b1 && c1)) continue;
+          var kd = a1 ? 'project' : (b1 ? 'intern' : (c1 ? 'campus' : ''));
           if (!kd) continue;
           var pe = tn.parentNode;
           try { if (!pe || !shown(pe)) continue; } catch (e) { continue; }
@@ -6458,7 +6473,7 @@ function applyResume(D, O) {
 
       try { markSpanPairs(); } catch (e) {}
 
-      var POOL = { intern: {}, project: {}, none: {} };
+      var POOL = { intern: {}, project: {}, campus: {}, none: {} };
       function add(kd, f, el) { (POOL[kd][f] = POOL[kd][f] || []).push(el); }
 
       /* 第一轮：描述框，它决定这页到底有没有经历块 */
@@ -6499,7 +6514,7 @@ function applyResume(D, O) {
         }
         return out;
       }
-      var INTERN = pack('exp', 8), PROJ = pack('prj', 8);
+      var INTERN = pack('exp', 8), PROJ = pack('prj', 8), CAMPUS = pack('sch', 8);
 
       /* 写一个格子：时间框只认年月日，其余原样写。块对位与全局排队共用这一段 */
       function putCell(cell, d, kk, mv) {
@@ -6577,7 +6592,9 @@ function applyResume(D, O) {
         for (var n = 0; n < BLKS.length; n++) {
           var b = BLKS[n], kd = b.kind || '', ni = 0;
           for (var q = 0; q < n; q++) if ((BLKS[q].kind || '') === kd) ni++;
-          var list = kd === 'intern' ? INTERN : (kd === 'project' ? PROJ : INTERN.concat(PROJ));
+          var list = kd === 'intern' ? INTERN
+                   : (kd === 'project' ? PROJ
+                   : (kd === 'campus' ? CAMPUS : INTERN.concat(PROJ, CAMPUS)));
           var d = list[ni];
           if (!d) continue;
           var map = { org: d.org, title: d.title, role: d.role, start: d.start, end: d.end, desc: d.desc };
@@ -6609,9 +6626,10 @@ function applyResume(D, O) {
         if (HEADS.length) {
           fill('intern', INTERN);
           fill('project', PROJ);
+          fill('campus', CAMPUS);
         } else {
-          /* 没分节：实习在前、项目在后，按顺序对位到同一批块 */
-          fill('none', INTERN.concat(PROJ));
+          /* 没分节：实习、项目、校园依次对位到同一批块 */
+          fill('none', INTERN.concat(PROJ, CAMPUS));
         }
       }
     })();
