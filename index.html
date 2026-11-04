@@ -83,7 +83,7 @@ button.primary:hover{background:#000;}
 .card h2::after{content:"";flex:1;height:1px;background:var(--line);}
 
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
-@media(max-width:720px){.grid{grid-template-columns:1fr;}.prog-row{grid-template-columns:1fr;}}
+@media(max-width:720px){.grid{grid-template-columns:1fr;}}
 
 .f{display:flex;flex-direction:column;gap:5px;min-width:0;}
 .f.wide{grid-column:1/-1;}
@@ -104,19 +104,6 @@ button.primary:hover{background:#000;}
 
 .cp{font-size:11px;padding:2px 8px;border-radius:5px;color:var(--sub);border-color:transparent;background:transparent;}
 .cp:hover{background:var(--gold-soft);color:var(--gold);border-color:transparent;}
-
-/* ---------- 自检 ---------- */
-.hsum{font-size:13px;padding:9px 12px;border-radius:8px;margin-bottom:10px;}
-.hsum.ok{background:#eef6f0;color:var(--ok);}
-.hsum.warn{background:#fdf6e6;color:#8a6415;}
-.hsum.bad{background:#fbeeec;color:var(--bad);}
-.hsum.idle{background:#f4f1ec;color:var(--sub);font-size:12.5px;line-height:1.6;}
-.hlist{list-style:none;display:grid;gap:5px;}
-.hl{font-size:12.5px;padding-left:15px;position:relative;color:#4a463f;line-height:1.55;}
-.hl::before{content:"";position:absolute;left:3px;top:7px;width:5px;height:5px;border-radius:50%;background:#c9c2b6;}
-.hl.err::before{background:var(--bad);}
-.hl.warn::before{background:var(--warn);}
-.hl.todo::before{background:#bdb6ac;}
 
 /* ---------- 右侧 ---------- */
 .side{position:sticky;top:74px;}
@@ -410,11 +397,13 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #progress .ptxt .no{color:var(--bad);}
 #progress .ptxt .sm{color:var(--bad);font-weight:600;}
 
-/* 填写进度 + 数据自检并排两格：原来叠在一张卡里，白占半屏高度 */
+/* 填写进度 + 资料套件并排两格：原来各占一整行，白占半屏高度 */
 .prog-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
 .prog-row>.card{margin-bottom:0;min-width:0;padding:14px 15px 15px;}
 .prog-row>.card h2{margin-bottom:10px;}
 .prog-row>.stip{grid-column:1/-1;margin:0;}
+/* 窄屏单列：两格并排在半屏宽下会把「另存为新套件」挤成两行 */
+@media(max-width:900px){.prog-row{grid-template-columns:1fr;}}
 
 #groups .card h2{cursor:pointer;user-select:none;}
 #groups .card.flash{box-shadow:0 0 0 2px rgba(184,146,74,.5);transition:box-shadow .2s;}
@@ -459,12 +448,17 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #btn-dl.locked{opacity:.85;}
 /* 资料套件门：没登录或没点星时整块盖住，跟下载门同一套判定（登录 + 点星） */
 #profiles{position:relative}
-#pf-gate{position:absolute;left:0;right:0;top:0;bottom:0;z-index:5;cursor:pointer;
+/* 盖住卡片正文、留出标题：这块现在和「填写进度」并排，只有半宽，连标题一起盖会显得整张卡是空的 */
+#pf-gate{position:absolute;left:0;right:0;top:46px;bottom:0;z-index:5;cursor:pointer;
   display:flex;align-items:center;justify-content:center;text-align:center;
-  background:rgba(255,255,255,.9);border-radius:11px;padding:16px}
+  background:rgba(255,255,255,.94);border-radius:0 0 11px 11px;padding:10px 14px 16px}
 #pf-gate[hidden]{display:none!important}
 #pf-gate .pfg-b{font-size:14.5px;font-weight:600;color:#5f4520;margin-bottom:6px}
-#pf-gate .pfg-p{font-size:12.5px;line-height:1.85;color:#8a7a5c;margin:0 0 12px;max-width:470px}
+#pf-gate .pfg-p{font-size:12.5px;line-height:1.8;color:#8a7a5c;margin:0 0 12px;max-width:470px}
+/* 并排后只有半宽：下拉独占一行，三个按钮平分第二行，不然「删除」会单独甩到第三行 */
+.prog-row #profiles .prow{gap:6px}
+.prog-row #profiles .prow select{flex:1 1 100%;min-width:0;padding:7px 10px}
+.prog-row #profiles .prow button{flex:1 1 0;min-width:0;padding:7px 8px;font-size:12.5px;text-align:center}
 #profiles.locked .prow{opacity:.32}
 #profiles.locked .ptip{opacity:.32}
 /* 填写进度里的分组小格：一眼看出哪一组还差几项，点一下直接跳过去 */
@@ -4026,7 +4020,7 @@ function segBar(pre) {
     btn.addEventListener('click', () => {
       if (segN(pre) >= m.max) return;
       DATA[pre + '_count'] = segN(pre) + 1;
-      saveData(); render(); renderHealth(); refreshBookmarks();
+      saveData(); render(); refreshBookmarks();
       toast('已加到第 ' + segN(pre) + ' 段，生成书签时会按顺序填进网申表单');
     });
   }
@@ -6915,7 +6909,7 @@ function switchProfile(id) {
   DATA = Object.assign({}, DEFAULTS, (p && p.data) || {});
   saveProfiles();
   saveData();
-  render(); renderHealth(); refreshBookmarks(); syncBanner(); renderProfiles();
+  render(); refreshBookmarks(); syncBanner(); renderProfiles();
   toast('已切换到「' + ((p && p.name) || '') + '」');
 }
 
@@ -6953,7 +6947,7 @@ function delProfile() {
   var q = curPF();
   DATA = Object.assign({}, DEFAULTS, (q && q.data) || {});
   saveProfiles(); saveData();
-  render(); renderHealth(); refreshBookmarks(); syncBanner(); renderProfiles();
+  render(); refreshBookmarks(); syncBanner(); renderProfiles();
   toast('已删除，当前是「' + ((q && q.name) || '') + '」');
 }
 
@@ -7042,78 +7036,6 @@ async function copyText(text) {
   }
 }
 
-/* =====================================================================
-   4. 数据自检
-   ===================================================================== */
-const PROVS = ['北京','天津','上海','重庆','河北','山西','辽宁','吉林','黑龙江','江苏','浙江','安徽','福建','江西','山东','河南','湖北','湖南','广东','海南','四川','贵州','云南','陕西','甘肃','青海','内蒙古','广西','西藏','宁夏','新疆'];
-function provOf(s) {
-  const m = String(s || '').match(new RegExp(PROVS.join('|')));
-  return m ? m[0] : '';
-}
-function checkId(id) {
-  const s = String(id).trim().toUpperCase();
-  if (!/^\d{17}[\dX]$/.test(s)) return { ok: false, msg: '不是 18 位' };
-  const w = [7,9,10,5,8,4,2,1,6,3,7,9,10,5,8,4,2];
-  const c = '10X98765432';
-  let sum = 0;
-  for (let i = 0; i < 17; i++) sum += Number(s[i]) * w[i];
-  const expect = c[sum % 11];
-  return { ok: expect === s[17], expect, bd: s.slice(6, 14) };
-}
-function parseSpan(s) {
-  const m = String(s || '').split('-').map(x => x.trim());
-  if (!m[0]) return null;
-  const norm = x => /至今|现在|now/i.test(x) ? '9999.99' : x;
-  return { start: norm(m[0]), end: norm(m[1] || '') };
-}
-
-function healthCheck() {
-  const out = [];
-  const add = (lv, t) => out.push({ lv, t });
-  const g = k => String(DATA[k] || '').trim();
-
-  ['name','phone','email','school','major','degree','targetJob','targetCity']
-    .forEach(k => { if (!g(k)) add('err', (LABELS[k] || k) + ' 为空，必填项'); });
-
-  const id = g('idcard');
-  if (id) {
-    const r = checkId(id);
-    if (!r.ok) add('err', '身份证校验位不通过（第 18 位应为 ' + r.expect + '）');
-    else if (r.bd && r.bd !== g('birthday').replace(/-/g, ''))
-      add('warn', '身份证里的出生日期是 ' + r.bd + '，与生日字段 ' + g('birthday') + ' 不一致');
-  }
-  if (g('phone') && !/^1[3-9]\d{9}$/.test(g('phone'))) add('err', '手机号不是 11 位有效号码');
-  if (g('email') && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(g('email'))) add('err', '邮箱格式不对');
-
-  if (g('enrollDate') && g('graduateDate') && g('enrollDate') >= g('graduateDate'))
-    add('err', '入学时间晚于毕业时间');
-
-  const esp = [];
-  for (let ei = 1; ei <= SEG_META.exp.max; ei++) {
-    const t = g('exp' + ei + '_time');
-    const r = t ? parseSpan(t) : null;
-    if (r) esp.push({ i: ei, r, raw: t });
-  }
-  for (let ej = 1; ej < esp.length; ej++) {
-    const a = esp[ej - 1], b = esp[ej];
-    if (a.r.end && b.r.start && a.r.end > b.r.start)
-      add('warn', '实习' + a.i + ' 结束（' + String(a.raw).split('-')[1] + '）晚于 实习' + b.i + ' 开始，时间重叠');
-  }
-
-  if (g('currentCity') && g('address')) {
-    const a = provOf(g('currentCity')), b = provOf(g('address'));
-    if (a && b && a !== b) add('warn', '现居在' + a + '，通讯地址在' + b + '，确认哪个为准');
-  }
-
-  if (g('emergencyPhone') && !g('emergencyName'))
-    add('warn', '紧急联系人只有电话没有姓名');
-  if (/^\d{11}$/.test(g('emergencyName')))
-    add('err', '「紧急联系人」里存的是手机号，不是姓名');
-
-  TODO.forEach(k => { if (!g(k)) add('todo', (LABELS[k] || k) + ' 未填'); });
-  return out;
-}
-
 /* ---------- 建议存一份到本地（防止数据丢失） ----------
    数据只在本机浏览器的 localStorage 里：清缓存、换电脑、换浏览器都会读不到，
    而且这类操作不可逆，没有任何云端兜底。所以填到一定量以后主动提醒一次。 */
@@ -7124,8 +7046,8 @@ function savedAt() { try { return Number(localStorage.getItem(SAVED_KEY) || 0); 
 function tipOff() { try { return localStorage.getItem(TIPOFF_KEY) === '1'; } catch (e) { return false; } }
 
 function renderSaveTip() {
-  /* 建议存一份的提示横跨两格放，塞进半宽的自检格里会挤成五五行 */
-  var host = document.querySelector('.prog-row') || document.getElementById('health');
+  /* 建议存一份的提示横跨两格放，塞进半宽的格里会挤成五五行 */
+  var host = document.querySelector('.prog-row') || document.querySelector('.main');
   if (!host) return;
   var old = document.getElementById('save-tip');
   if (old) old.remove();
@@ -7174,59 +7096,9 @@ function renderSaveTip() {
   host.appendChild(box);
 }
 
-function renderHealth() {
-  let box = document.getElementById('health');
-  if (!box) {
-    /* 进度卡片还没建，先建它（自检区就在这张卡片里） */
-    if (typeof renderProgress === 'function') renderProgress();
-    box = document.getElementById('health');
-  }
-  if (!box) return;
-  const blank = GROUPS.every(g => groupFields(g).every(f =>
-    f[0] === 'age' || !String(DATA[f[0]] || '').trim()));
-  const list = blank ? [] : healthCheck();
-  const errs  = list.filter(x => x.lv === 'err').length;
-  const warns = list.filter(x => x.lv === 'warn').length;
-  const todos = list.filter(x => x.lv === 'todo').length;
-
-  box.innerHTML = '';
-  const h = document.createElement('h2');
-  h.textContent = '数据自检';
-  box.appendChild(h);
-
-  const sum = document.createElement('div');
-  if (blank) {
-    sum.className = 'hsum idle';
-    sum.textContent = '还没开始填。填完必填项后这里自动校验。';
-  } else {
-    sum.className = 'hsum ' + (errs ? 'bad' : warns ? 'warn' : 'ok');
-    sum.textContent = errs ? `${errs} 项需要修正`
-      : warns ? `${warns} 项建议确认`
-      : '必填项齐全，格式校验通过';
-    if (todos) sum.textContent += ` · ${todos} 项待补充`;
-  }
-  box.appendChild(sum);
-
-  if (list.length) {
-    const ul = document.createElement('ul');
-    ul.className = 'hlist';
-    list.forEach(it => {
-      const li = document.createElement('li');
-      li.className = 'hl ' + it.lv;
-      li.textContent = it.t;
-      ul.appendChild(li);
-    });
-    box.appendChild(ul);
-  }
-
-  const ver = document.getElementById('ver');
-  if (ver) ver.textContent = (errs ? `${errs} 项待修` : '');
-
-  renderSaveTip();
-}
 
 /* =====================================================================
-   5. 面板渲染
+   4. 面板渲染
    ===================================================================== */
 function render() {
   const box = document.getElementById('groups');
@@ -7267,7 +7139,7 @@ function render() {
               if (has && !confirm('第 ' + cur + ' 段里已经填了内容，删掉就找不回了，确定？')) return;
               ks.forEach(k => { delete DATA[k]; });
               DATA[segPre + '_count'] = cur - 1;
-              saveData(); render(); renderHealth(); refreshBookmarks();
+              saveData(); render(); refreshBookmarks();
               toast('已删掉第 ' + cur + ' 段');
             });
             sh.appendChild(del);
@@ -7482,7 +7354,7 @@ function renderCustomRows() {
 }
 
 /* =====================================================================
-   6. 脚本 / 书签生成
+   5. 脚本 / 书签生成
    ===================================================================== */
 function toAscii(src) {
   return src.replace(/[\u0080-\uFFFF]/g, c =>
@@ -7661,7 +7533,6 @@ function scheduleRefresh() {
   clearTimeout(scheduleRefresh._tm);
   scheduleRefresh._tm = setTimeout(() => {
     refreshBookmarks();
-    renderHealth();
     syncBanner();
   }, 500);
 }
@@ -7704,7 +7575,7 @@ function download(name, text, type) {
 }
 
 /* =====================================================================
-   7. 交互绑定
+   6. 交互绑定
    ===================================================================== */
 document.getElementById('btn-copyall').addEventListener('click', async () => {
   const lines = [];
@@ -7781,7 +7652,6 @@ function clearAllFields() {
   DATA = blank;
   saveData();
   render();
-  renderHealth();
   refreshBookmarks();
   syncBanner();
   toast('已清空');
@@ -7799,7 +7669,6 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   DATA = Object.assign({}, DEFAULTS);
   saveData();
   render();
-  renderHealth();
   refreshBookmarks();
   syncBanner();
   toast('已清空');
@@ -7852,8 +7721,11 @@ document.getElementById('btn-reset').addEventListener('click', () => {
     var narrow = window.matchMedia('(max-width:1180px)').matches;
     if (narrow) {
       if (tut.parentElement !== main) {
-        var pg = document.getElementById('progress');
-        main.insertBefore(tut, pg ? pg.nextElementSibling : main.firstElementChild);
+        /* 「填写进度」现在和「资料套件」一起包在 .prog-row 里，要跟在整行后面；
+           进度卡的下一个兄弟节点是并排格的另一半，不能再当插入锚点用 */
+        var row = document.querySelector('.prog-row');
+        var at = (row && row.parentElement === main) ? row.nextElementSibling : main.firstElementChild;
+        main.insertBefore(tut, at);
       }
     } else if (tut.parentElement !== side) {
       var sc = document.getElementById('card-about');
@@ -8048,7 +7920,7 @@ document.addEventListener('keydown', ev => {
 })();
 
 /* =====================================================================
-   9. 简历识别：PDF / 文本 → 字段
+   7. 简历识别：PDF / 文本 → 字段
    —— 全部在本地完成。PDF 用 pdf.js（首次用时从 CDN 动态加载），
       加载不到就明确提示改用「粘贴文本」，不会静默失败。
    ===================================================================== */
@@ -8738,7 +8610,7 @@ function isSampleOn() {
 function renderProgress() {
   let box = document.getElementById('progress');
   if (!box) {
-    /* 两格并排：左「填写进度」、右「数据自检」。以前全叠在一张卡里，占掉半屏高度 */
+    /* 两格并排：左「填写进度」、右「资料套件」。资料套件原来单独占一整行 */
     const row = document.createElement('div');
     row.className = 'prog-row';
 
@@ -8761,13 +8633,11 @@ function renderProgress() {
     tip.textContent = '填完 8 个必填项就能生成书签。点分组小格直接跳过去，点区块标题收起。';
     box.appendChild(tip);
 
-    /* 数据自检单独一格，和进度并排 */
-    const hb = document.createElement('div');
-    hb.className = 'card';
-    hb.id = 'health';
-
     row.appendChild(box);
-    row.appendChild(hb);
+
+    /* 资料套件挪到原来「数据自检」那一格，和进度并排 */
+    const pf = document.getElementById('profiles');
+    if (pf) row.appendChild(pf);
 
     const main = document.querySelector('.main');
     if (main) main.insertBefore(row, main.firstElementChild);
@@ -8833,6 +8703,9 @@ function renderProgress() {
     });
     gr.appendChild(chip);
   });
+
+  /* 自检模块删掉后，这里接管「建议存一份到本地」提示的刷新 */
+  if (typeof renderSaveTip === 'function') renderSaveTip();
 }
 
 function syncHello() {
@@ -8885,7 +8758,6 @@ document.getElementById('btn-example').addEventListener('click', () => {
     try { localStorage.removeItem(SAMPLE_BK_KEY); } catch (e) {}
     saveData();
     render();
-    renderHealth();
     refreshBookmarks();
     syncBanner();
     uiSample();
@@ -8908,7 +8780,6 @@ document.getElementById('btn-example').addEventListener('click', () => {
   DATA = Object.assign({}, DEFAULTS, keepCustom, SAMPLE);
   saveData();
   render();
-  renderHealth();
   refreshBookmarks();
   syncBanner();
   uiSample();
@@ -9335,7 +9206,6 @@ window.uiProfiles = uiProfiles; window.pfUnlocked = pfUnlocked; window.pfGateGo 
 
 /* ---------- 启动 ---------- */
 render();
-renderHealth();
 refreshBookmarks();
 syncBanner();
 renderProfiles();
