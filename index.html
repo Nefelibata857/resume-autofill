@@ -169,8 +169,6 @@ pre.script{
 .segadd:hover:not(:disabled){border-color:var(--gold);color:var(--ink);}
 .segadd:disabled{opacity:.45;cursor:default;}
 .segtip{font-size:11.5px;color:var(--sub);}
-.status{font-size:12px;color:var(--ok);margin-top:6px;min-height:16px;}
-.status.dirty{color:var(--warn);}
 
 /* ---------- 引擎版本切换 ---------- */
 .engpick{display:flex;gap:6px;margin:0 0 9px;}
@@ -183,7 +181,6 @@ pre.script{
 .engbtn.on{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:600;}
 .engbtn.on:hover{border-color:var(--ink);color:#fff;}
 .engbtn b{font-weight:600;opacity:.72;margin-left:4px;font-variant-numeric:tabular-nums;}
-.engtip{font-size:11.5px;line-height:1.55;color:var(--sub);margin:0 0 12px;}
 .sep{height:1px;background:var(--line);margin:14px 0 12px;}
 
 /* ---------- 安装书签 ---------- */
@@ -458,8 +455,6 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
   font-variant-numeric:tabular-nums;
 }
 #tut video{width:100%;height:100%;display:block;background:#000;}
-#tut .vtip{font-size:12px;color:var(--sub);margin-top:10px;line-height:1.75;}
-#tut .vtip b{font-weight:600;color:#5f4520;}
 /* 未解锁时下载按钮弱化一点，解锁后恢复常态 */
 #btn-dl.locked{opacity:.85;}
 /* 资料套件门：没登录或没点星时整块盖住，跟下载门同一套判定（登录 + 点星） */
@@ -590,11 +585,6 @@ window.trackEvent = function (name, data) {
         <button id="btn-paste-clip">读剪贴板</button>
       </div>
 
-      <p style="font-size:12px;color:#8a7a5c;margin:8px 0 0">
-        手边没有简历？<a href="./sample-resume.pdf" download style="color:#b8924a">下载一份示例简历 PDF</a>
-        试试（虚构人物「张小明」，能认出 40 多个字段）
-      </p>
-
       <div id="parse-result"></div>
     </section>
 
@@ -629,10 +619,8 @@ window.trackEvent = function (name, data) {
         <button type="button" class="engbtn on" data-eng="stable" aria-pressed="true">稳定版<b id="eng-v-stable">v40</b></button>
         <button type="button" class="engbtn" data-eng="test" aria-pressed="false">测试版<b id="eng-v-test">v43</b></button>
       </div>
-      <p class="engtip" id="eng-tip">稳定版在最常见的网申表单上验证过，建议默认用它。</p>
 
       <button class="primary installbtn" id="btn-install">安装填表书签</button>
-      <div class="status" id="bm-status">点一下，代码进剪贴板，再按 3 下键就好</div>
 
       <div class="minsteps">
         <div class="ms"><i>1</i><div>点上面按钮 → <b>代码已复制</b></div></div>
@@ -661,7 +649,7 @@ window.trackEvent = function (name, data) {
     </div>
 
     <section class="card" id="tut">
-      <h2>视频教程<span class="sub">29 秒</span></h2>
+      <h2>视频教程</h2>
 
       <div class="vstage" id="vstage" role="button" tabindex="0" aria-label="播放视频教程">
         <img src="assets/tutorial-poster.jpg" alt="视频教程封面：简历填表助手页面与自动填表效果" loading="lazy" decoding="async">
@@ -669,7 +657,6 @@ window.trackEvent = function (name, data) {
         <span class="vdur">00:29</span>
       </div>
 
-      <p class="vtip">点封面播放，建议<b>全屏</b>看：怎么装书签，以及装完在招聘网站上自动填完整页。</p>
     </section>
 
     <div class="card" id="card-about">
@@ -7555,10 +7542,6 @@ function applyEngUI() {
   if (b) b.textContent = '安装填表书签 · ' + v;
   var t = document.getElementById('install-title');
   if (t) t.textContent = '安装填表书签 · ' + v;
-  var tip = document.getElementById('eng-tip');
-  if (tip) tip.textContent = id === 'test'
-    ? '测试版新修了「添加经历」「学历/下拉不填」的问题，还没在大厂表单上长期验证；遇到问题点左边切回稳定版。'
-    : '稳定版在最常见的网申表单上验证过，建议默认用它。';
 }
 function setEngine(id) {
   var want = id === 'test' ? 'test' : 'stable';
@@ -7668,12 +7651,6 @@ function refreshBookmarks() {
   const fn = document.getElementById('bm-filename');
   if (fn) fn.textContent = '简历填表书签-' + engVer(engSrc()) + '.html';
 
-  const s = document.getElementById('bm-status');
-  if (s) {
-    s.className = 'status';
-    s.textContent = '书签已就绪 · ' + engLabel() + ' · ' + (full.length / 1024).toFixed(1) + ' KB';
-  }
-
   /* 通用版：数据一变就同步进度条和引导条 */
   renderProgress();
   syncHello();
@@ -7681,8 +7658,6 @@ function refreshBookmarks() {
 
 /* 数据一改：重算自检 + 重生成书签 + 更新提示条（防抖） */
 function scheduleRefresh() {
-  const s = document.getElementById('bm-status');
-  if (s) { s.className = 'status dirty'; s.textContent = '数据已修改，正在重新生成…'; }
   clearTimeout(scheduleRefresh._tm);
   scheduleRefresh._tm = setTimeout(() => {
     refreshBookmarks();
@@ -8802,7 +8777,6 @@ function renderProgress() {
   const done = keys.filter(k => String(DATA[k] || '').trim()).length;
   const pct = total ? Math.round(done / total * 100) : 0;
   const miss = REQUIRED.filter(k => !String(DATA[k] || '').trim());
-  const optEmpty = OPTIONAL.filter(k => !String(DATA[k] || '').trim());
 
   box.querySelector('.pbar i').style.width = pct + '%';
   const t = box.querySelector('.ptxt');
@@ -8824,14 +8798,6 @@ function renderProgress() {
     b.textContent = pct >= 100 ? '全部填完，可以生成书签了' : '必填项已齐，可以生成书签了';
   }
   t.appendChild(b);
-
-  if (optEmpty.length) {
-    const c = document.createElement('span');
-    c.className = 'mut';
-    c.textContent = '另有 ' + optEmpty.length + ' 项选填（'
-      + optEmpty.map(k => (LABELS[k] || k).replace(/（.*?）/g, '')).join('、') + '）不计入完成度';
-    t.appendChild(c);
-  }
 
   /* 分组小格：一眼看出哪一组还差几项，点一下直接跳过去。
      分母跟着段数走（底段固定算，多加的空段不算），和上面的总进度同一套规则。 */
