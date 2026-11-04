@@ -420,6 +420,7 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 .prog-row>.stip{grid-column:1/-1;margin:0;}
 
 #groups .card h2{cursor:pointer;user-select:none;}
+#groups .card.flash{box-shadow:0 0 0 2px rgba(184,146,74,.5);transition:box-shadow .2s;}
 #groups .card h2::before{
   content:"−";font-size:14px;line-height:1;color:#b3aa9c;flex:0 0 10px;
 }
@@ -471,10 +472,20 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #pf-gate .pfg-p{font-size:12.5px;line-height:1.85;color:#8a7a5c;margin:0 0 12px;max-width:470px}
 #profiles.locked .prow{opacity:.32}
 #profiles.locked .ptip{opacity:.32}
-/* 示例资料警示：网页上填了示例（或下载了示例状态的本地版）时，钉在书签卡片上 */
-.bmswarn{margin-top:10px;padding:10px 12px;background:#fdeceb;border:1px solid #f2c4c0;border-radius:9px;
-  font-size:12.5px;line-height:1.75;color:#8c2f28}
-.bmswarn b{display:block;font-weight:600;margin-bottom:2px}
+/* 填写进度里的分组小格：一眼看出哪一组还差几项，点一下直接跳过去 */
+#progress .pgrp{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+#progress .pg{
+  font:inherit;font-size:11.5px;line-height:1;padding:6px 8px;border-radius:7px;cursor:pointer;
+  background:#f7f4ee;border:1px solid #e9e2d6;color:#6d675e;display:flex;gap:5px;align-items:baseline;
+  transition:.15s;font-variant-numeric:tabular-nums;
+}
+#progress .pg b{font-weight:600;color:#4a463f}
+#progress .pg:hover{border-color:var(--gold);color:#5f4520}
+#progress .pg.full{background:#f2f6ee;border-color:#dde7d3;color:#5d7350}
+#progress .pg.full b{color:#4d6b43}
+#progress .pg.part{background:#fdf6e8;border-color:#f0dfb8;color:#8a5a12}
+#progress .pg.part b{color:#8a5a12}
+#progress .ptxt .mut{color:var(--sub);}
 
 /* 建议存一份到本地：贴在进度卡片底部，不挡操作 */
 .stip{position:relative;margin-top:12px;padding:11px 34px 11px 13px;
@@ -622,10 +633,6 @@ window.trackEvent = function (name, data) {
 
       <button class="primary installbtn" id="btn-install">安装填表书签</button>
       <div class="status" id="bm-status">点一下，代码进剪贴板，再按 3 下键就好</div>
-      <div class="bmswarn" id="bm-sample" hidden>
-        <b>⚠ 表单里现在是示例人物「张小明」的资料，不是你的</b>
-        从这里生成的书签会把张小明填进招聘网站（学校、起止时间、项目全是他的）。要么在下面改成你自己的资料，要么打开你下载到电脑本地的那份助手来生成。
-      </div>
 
       <div class="minsteps">
         <div class="ms"><i>1</i><div>点上面按钮 → <b>代码已复制</b></div></div>
@@ -7649,7 +7656,6 @@ function syncBanner() {
   try { saved = localStorage.getItem(HASH_KEY) || ''; } catch (e) {}
   const dirty = saved && saved !== payloadHash();
   b.classList.toggle('on', !!dirty);
-  uiSampleWarn();          /* 示例资料警示条跟着数据显隐 */
 }
 
 function refreshBookmarks() {
@@ -7907,11 +7913,7 @@ function sampleWarn() {
     + '确定要继续用示例资料生成吗？');
 }
 
-/* 示例资料警示条：数据还是张小明时就钉在书签卡片上（跟着数据变化显隐） */
-function uiSampleWarn() {
-  var el = document.getElementById('bm-sample');
-  if (el) el.hidden = !isSampleOn();
-}
+/* 示例资料只留一道「生成时确认」的闸门，书签卡片上不再钉常驻警示块 */
 
 const doDownloadBookmarks = () => {
   if (!sampleWarn()) return;
@@ -8706,6 +8708,12 @@ const SAMPLE = {
   prj6_title: '渲染表现素材库', prj6_org: '个人独立项目',
   prj6_role: '产品设计与开发', prj6_time: '2025.11 - 至今',
   prj6_desc: '独立搭建设计素材库网站，设计分类体系与前端页面，累计整理 300 余条材质、LUT 与渲染案例。',
+  sch1_org: '浙江大学建筑学会', sch1_role: '学术部部长',
+  sch1_time: '2023.09 - 2024.06',
+  sch1_desc: '统筹学会学术活动，一年办 12 场设计讲座与 2 次建筑考察，负责嘉宾邀约、场地与预算，累计参与 600 余人次。',
+  sch2_org: '建筑学2201班', sch2_role: '班长',
+  sch2_time: '2022.09 - 至今',
+  sch2_desc: '负责班级日常事务与学风建设，组织专业考察 4 次、评图互助 8 场，班级获校级先进班集体。',
   selfEval: '建筑学本科应届，五年制专业训练打底，做过 6 个从强排、总图到户型的完整项目。'
     + '熟 SketchUp / Rhino / CAD 建模制图，D5 与 Enscape 出效果图，能把方案推进到可汇报的深度。'
     + '做事偏细，习惯先把场地和人流摸清楚再动笔。',
@@ -8717,17 +8725,34 @@ const SAMPLE = {
   sports: '羽毛球、跑步'
 };
 
+/* 选填项：填了算加分，空着不算没填完（进度条要能走到 100%）
+   导师只有研究生才有，示例人物是本科生，留着必空 —— 放进来分母就永远差一项 */
+const OPTIONAL = ['tutor'];
+
+/* 进度里每一组算多少段：底段一定算（表单本来就摆在那），
+   多出来的段只有填了内容才算 —— 点了「加一段」但还没填，进度条不会往下掉 */
+function segCountStat(pre) {
+  const m = SEG_META[pre];
+  return Math.min(Math.max(m.base, derivedSegN(pre)), m.max);
+}
+
+/* 某一组要统计的字段键（不含年龄、不含选填） */
+function groupKeys(g) {
+  let fs;
+  if (g.seg) {
+    fs = [];
+    for (let i = 1; i <= segCountStat(g.seg); i++) {
+      segFields(g.seg, i).forEach(f => fs.push(f));
+    }
+  } else {
+    fs = g.fields;
+  }
+  return fs.map(f => f[0]).filter(k => k !== 'age' && OPTIONAL.indexOf(k) < 0);
+}
+
 function allKeys() {
-  /* 进度统计只数「有内容的段」：空段不算进分母，加了空段进度条不会往下掉 */
   const out = [];
-  GROUPS.forEach(g => {
-    const fs = g.seg ? segFields(g.seg, 0) && (function () {
-      const n = derivedSegN(g.seg), a = [];
-      for (let i = 1; i <= n; i++) segFields(g.seg, i).forEach(f => a.push(f));
-      return a;
-    })() : g.fields;
-    fs.forEach(f => { if (f[0] !== 'age') out.push(f[0]); });
-  });
+  GROUPS.forEach(g => { groupKeys(g).forEach(k => out.push(k)); });
   return out;
 }
 
@@ -8758,7 +8783,7 @@ function renderProgress() {
     const tip = document.createElement('div');
     tip.className = 'tip';
     tip.style.marginTop = '9px';
-    tip.textContent = '填完 8 个必填项就能生成书签，区块点标题可收起。';
+    tip.textContent = '填完 8 个必填项就能生成书签。点分组小格直接跳过去，点区块标题收起。';
     box.appendChild(tip);
 
     /* 数据自检单独一格，和进度并排 */
@@ -8777,6 +8802,7 @@ function renderProgress() {
   const done = keys.filter(k => String(DATA[k] || '').trim()).length;
   const pct = total ? Math.round(done / total * 100) : 0;
   const miss = REQUIRED.filter(k => !String(DATA[k] || '').trim());
+  const optEmpty = OPTIONAL.filter(k => !String(DATA[k] || '').trim());
 
   box.querySelector('.pbar i').style.width = pct + '%';
   const t = box.querySelector('.ptxt');
@@ -8787,17 +8813,60 @@ function renderProgress() {
   t.appendChild(a);
 
   const b = document.createElement('span');
-  if (isSampleOn()) {
-    b.className = 'sm';
-    b.textContent = '当前是示例数据，投递前必须全部改成你自己的';
-  } else if (miss.length) {
+  if (miss.length) {
     b.className = 'no';
     b.textContent = '还缺必填：' + miss.map(k => LABELS[k] || k).join('、');
+  } else if (isSampleOn()) {
+    b.className = 'mut';
+    b.textContent = '当前是示例资料，改成你自己的再投';
   } else {
     b.className = 'ok';
-    b.textContent = '必填项已齐，可以生成书签了';
+    b.textContent = pct >= 100 ? '全部填完，可以生成书签了' : '必填项已齐，可以生成书签了';
   }
   t.appendChild(b);
+
+  if (optEmpty.length) {
+    const c = document.createElement('span');
+    c.className = 'mut';
+    c.textContent = '另有 ' + optEmpty.length + ' 项选填（'
+      + optEmpty.map(k => (LABELS[k] || k).replace(/（.*?）/g, '')).join('、') + '）不计入完成度';
+    t.appendChild(c);
+  }
+
+  /* 分组小格：一眼看出哪一组还差几项，点一下直接跳过去。
+     分母跟着段数走（底段固定算，多加的空段不算），和上面的总进度同一套规则。 */
+  let gr = box.querySelector('.pgrp');
+  if (!gr) {
+    gr = document.createElement('div');
+    gr.className = 'pgrp';
+    box.appendChild(gr);
+  }
+  gr.innerHTML = '';
+  const cards = document.querySelectorAll('#groups .card');
+  GROUPS.forEach((g, i) => {
+    const ks = groupKeys(g);
+    const dn = ks.filter(k => String(DATA[k] || '').trim()).length;
+    const full = ks.length > 0 && dn >= ks.length;
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'pg' + (full ? ' full' : (dn ? ' part' : ''));
+    chip.title = full ? '这一组填完了' : '还差 ' + (ks.length - dn) + ' 项，点一下跳过去';
+    const nm = document.createElement('span');
+    nm.textContent = g.title.replace(/（.*?）/g, '');
+    const cnt = document.createElement('b');
+    cnt.textContent = dn + '/' + ks.length;
+    chip.appendChild(nm);
+    chip.appendChild(cnt);
+    chip.addEventListener('click', () => {
+      const card = cards[i];
+      if (!card) return;
+      card.classList.remove('fold');
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      card.classList.add('flash');
+      setTimeout(() => card.classList.remove('flash'), 1200);
+    });
+    gr.appendChild(chip);
+  });
 }
 
 function syncHello() {
@@ -9305,7 +9374,6 @@ refreshBookmarks();
 syncBanner();
 renderProfiles();
 uiProfiles();
-uiSampleWarn();
 
 document.getElementById('btn-dl').addEventListener('click', () => {
   if (!ghLogged()) return ghLogin();
