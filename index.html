@@ -610,7 +610,7 @@ window.trackEvent = function (name, data) {
       <h2>一键填表</h2>
 
       <div class="engpick" id="eng-pick" role="group" aria-label="选择引擎版本">
-        <button type="button" class="engbtn on" data-eng="stable" aria-pressed="true">稳定版<b id="eng-v-stable">v40</b></button>
+        <button type="button" class="engbtn on" data-eng="stable" aria-pressed="true">稳定版<b id="eng-v-stable">v42</b></button>
         <button type="button" class="engbtn" data-eng="test" aria-pressed="false">测试版<b id="eng-v-test">v43</b></button>
       </div>
 
@@ -914,7 +914,8 @@ window.trackEvent = function (name, data) {
 }
 </script>
 
-<!-- 测试版引擎（v43）：纯文本存放，本页面不执行；
+<!-- 测试版引擎（v43，含教育分段）：纯文本存放，本页面不执行；
+     稳定版在同文件的 applyResume（v42，无教育分段），两份引擎由 buildScript 选用；
      只有点「测试版」生成的书签才会带这段代码。默认用的是上面那段 applyResume。 -->
 <script type="text/plain" id="eng-test">
 function applyResume(D, O) {
@@ -4288,86 +4289,13 @@ GROUPS.forEach(g => {
 function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
-  var ENGINE_VER = 'v40';
-  /* ---------- 教育经历分段 ----------
-     资料里可能有多段学历（本科 / 硕士 / 博士），字段名是 edu1_school、edu2_school…
-     页面上「第几段教育」就取第几段资料；只有一段时，行为和以前完全一致。
-     段的边界拿「学校」输入框当锚点 —— 每段教育必有一个学校框，
-     按文档顺序数它是第几个，就知道这一段是第几段。 */
-  var EDUK = { school: 1, college: 1, major: 1, degree: 1, academicDegree: 1, eduType: 1,
-               studentId: 1, className: 1, tutor: 1, enrollDate: 1, graduateDate: 1,
-               gpa: 1, majorGpa: 1, rank: 1, majorRank: 1, courses: 1 };
-  var eduCount = 1;
-  try {
-    var _en = parseInt(D.edu_count, 10) || 0;
-    for (var _ei = 4; _ei >= 1; _ei--) {
-      if (String(D['edu' + _ei + '_school'] || '').trim()) { _en = Math.max(_en, _ei); break; }
-    }
-    eduCount = Math.min(Math.max(_en, 1), 4);
-    for (var _ek in EDUK) {
-      if (!String(D[_ek] || '').trim() && D['edu1_' + _ek] !== undefined) D[_ek] = D['edu1_' + _ek];
-    }
-    if (eduCount > 1) {
-      /* 「最高学历 / 最高学位」这种全局字段要取最高的一段，不是第一段 */
-      var HR = { '博士': 4, '硕士': 3, '研究生': 3, '本科': 2, '学士': 2, '大专': 1, '专科': 1 };
-      var _bi = 1, _bv = -1;
-      for (var _dj = 1; _dj <= eduCount; _dj++) {
-        var _ds = String(D['edu' + _dj + '_degree'] || '') + String(D['edu' + _dj + '_academicDegree'] || '');
-        var _rv = 0, _hk;
-        for (_hk in HR) { if (_ds.indexOf(_hk) >= 0 && HR[_hk] > _rv) _rv = HR[_hk]; }
-        if (_rv > _bv) { _bv = _rv; _bi = _dj; }
-      }
-      D.degree = D['edu' + _bi + '_degree'] || D.degree;
-      D.academicDegree = D['edu' + _bi + '_academicDegree'] || D.academicDegree;
-    }
-  } catch (eEd) {}
-
-  var _schoolA = null;
-  function schoolAnchors() {
-    if (_schoolA) return _schoolA;
-    _schoolA = [];
-    try {
-      var all = document.querySelectorAll('input,select,textarea');
-      for (var i = 0; i < all.length && _schoolA.length < 8; i++) {
-        var e = all[i];
-        var ok2 = true;
-        try { ok2 = shown(e); } catch (eS) {}
-        if (!ok2) continue;
-        var k0 = '';
-        try { k0 = matchRule(ctxText(e)); } catch (eC1) {}
-        if (!k0) { try { k0 = matchRule(labelText(e)); } catch (eC2) {} }
-        if (k0 === 'school') _schoolA.push(e);
-      }
-    } catch (eA) {}
-    return _schoolA;
-  }
-  function eduBlkOf(el) {
-    if (eduCount <= 1) return 0;
-    var A = schoolAnchors();
-    if (A.length < 2) return A.length ? 1 : 0;
-    var n = 0;
-    for (var j = 0; j < A.length; j++) {
-      if (A[j] === el) return j + 1;
-      var bet = false;
-      try { bet = !!(A[j].compareDocumentPosition(el) & 4); } catch (eC) {}
-      if (bet) n++; else break;
-    }
-    return n;
-  }
-  function eduVal(key, el) {
-    if (eduCount <= 1 || !EDUK[key]) return D[key];
-    var i2 = eduBlkOf(el);
-    if (i2 <= 0) {
-      /* 表单最上面那个「最高学历 / 最高学位」不属于任何一段教育 */
-      if (key === 'degree' || key === 'academicDegree') return D[key];
-      return D['edu1_' + key] !== undefined ? D['edu1_' + key] : D[key];
-    }
-    if (i2 > eduCount) return '';   /* 页面上多出来的空段，不拿同一份资料重复填 */
-    var v = D['edu' + i2 + '_' + key];
-    return v === undefined ? '' : v;
-  }
+  var ENGINE_VER = 'v42';
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER,
-             overwrite: [], handled: [], sample: 0 };
+             overwrite: [], handled: [], sample: 0, newer: '' };
+  /* 经历区（实习/项目）的起止时间框：主循环认出来后会交给下面的经历块逻辑填，
+     这里先记下来，等日期队列跑完回读一遍——填上了报喜，还是空的必须说清为什么，
+     不能再像以前那样 silently 丢掉了事。 */
+  var SPAN_WAIT = [];
   /* 数据源自检：书签里带的还是示例人物时提一句，
      否则用户以为填进去的是自己的资料（页面上会出现「张小明 / 浙江大学」）。 */
   try {
@@ -5410,6 +5338,14 @@ function applyResume(D, O) {
     var vv = normOpt(val), i, best = null, bl = 0, t, rng;
     if (!vv || !list || !list.length) return null;
     for (i = 0; i < list.length; i++) if (normOpt(list[i].t) === vv) return list[i];
+    /* 同字异序也算命中：字节校招的「学历类型」选项是「统招全日制」，
+       而表单助手里存的是「全日制统招」—— 字全一样只是顺序不同，
+       下面三条（含/被含/区间）全都比不上，下拉就永远选不上。 */
+    var vs = vv.split('').sort().join('');
+    for (i = 0; i < list.length; i++) {
+      t = normOpt(list[i].t);
+      if (t.length >= 2 && t.length === vv.length && t.split('').sort().join('') === vs) return list[i];
+    }
     /* 正向包含（选项比值长）：取「最接近」的那个，多出来的字最少。
        以前取最长，结果「全日制」会选中「统招非全日制」而不是「统招全日制」。 */
     for (i = 0; i < list.length; i++) {
@@ -6256,6 +6192,12 @@ function applyResume(D, O) {
   }
   if (hiddenReq >= 2) RES.hiddenReq = hiddenReq;
 
+  /* v42：主扫描整体延后到「经历块补足」之后执行。
+     不少网申页（字节就是）默认只显示一段实习、一段项目，第二段起要手点「+ 添加」；
+     资料里有 6 段项目、页面上只有 1 个框，多出来的 5 段永远填不上 ——
+     用户看到的是「第二段实习怎么没填」，其实页面压根没有那个框。
+     不需要补块时 ensureBlocks 会同步回调，行为和以前完全一样。 */
+  function runScanAndFinish() {
   /* ---------- 主循环 ---------- */
   var seenK = {};
   for (var di = 0; di < docs.length; di++) {
@@ -6385,6 +6327,17 @@ function applyResume(D, O) {
           continue;
         }
 
+        /* 多段经历模式下，「公司名称 / 职位名称 / 项目名称 / 项目角色」主扫描本来就不认
+           （RULES 里没这些规则，它们由下面的经历逻辑按段对位填写）。
+           以前会一条条进「未识别」，段数一多面板全是噪音，用户以为漏填了。 */
+        if (O.exp && !key) {
+          var _ul0 = clean(labelText(el) || upLabel(el) || geo || '');
+          if (_ul0 && /^(公司|单位|企业)(名称|全称)?\s*\*?$|^(实习|工作)单位\s*\*?$|^所属(公司|单位|企业)\s*\*?$/
+            .test(_ul0)) continue;
+          if (_ul0 && /^职位(名称)?\s*\*?$|^岗位(名称)?\s*\*?$|^担任?角色\s*\*?$|^项目角色\s*\*?$/.test(_ul0)) continue;
+          if (_ul0 && /^项目(名称|标题|课题)\s*\*?$|^项目\/?课题\s*\*?$|^项目所属\s*\*?$/.test(_ul0)) continue;
+        }
+
         if (!key) {
           var ul = labelText(el);
           if (!ul || PH.test(ul.replace(/\s/g, ''))) ul = geo || upLabel(el) || geoLabel(el) || clean(ctx).slice(0, 30);
@@ -6404,9 +6357,18 @@ function applyResume(D, O) {
              之前就是这里 continue 掉的，而且面板上连一条记录都不留，
              用户只看到「第一遍压根没填，滚到那一块再点一次才填上」。 */
           if (zNow === 'exp' || zNow === 'campus') {
-            /* 这一格归「实习/项目时间」字段管（下面那段经历逻辑会填），
-               不算「未识别」，单独记一笔，免得面板上看着像引擎没认出来。 */
-            if (RES.handled.length < 20) RES.handled.push('（实习/项目区）起止时间');
+            /* 这一格归「实习/项目时间」字段管（下面那段经历逻辑会填）。
+               但「交给别人填」不等于「填上了」：资料里没有这段时间、或者那段经历
+               的框没认出来，都会让它一直空着。所以先记下来，
+               等日期队列跑完由 checkSpanWait() 回读核对，空的说清楚原因。 */
+            if (SPAN_WAIT.length < 40) {
+              SPAN_WAIT.push({
+                el: el,
+                ord: (typeof el.__rzOrd === 'number') ? el.__rzOrd : -1,
+                lab: clean(labelText(el) || upLabel(el) || '起止时间') || '起止时间',
+                why: ''
+              });
+            }
             continue;
           }
           var ridx = dateRowIdx(el);
@@ -6414,7 +6376,7 @@ function applyResume(D, O) {
           else if (ridx === 1) key = 'graduateDate';
         }
 
-        var val = eduVal(key, el), ok = false, sugQ = false;
+        var val = D[key], ok = false, sugQ = false;
         /* 日期控件一律排到日期队列：要异步点开面板再回车，同步写完会被回滚。
            例外：纯文本框型的日期（type=text 且不是只读）压根没有日历面板，
            直接打字就成 —— 字节教育经历的「起止时间」就是这种框，
@@ -6469,6 +6431,11 @@ function applyResume(D, O) {
             try { pid = comboBox(pe); } catch (e) {}
             try {
               if (pe === el) { dup = true; break; }
+              /* 只有「同一个字段」才可能是内外两层重复。
+                 以前不看 key 就按组件容器判重：字节教育经历里「学历类型」和「学历」
+                 是两个挨着的下拉、容器同一个，后一个直接被当成重复吞掉 ——
+                 于是它既不填也不报错，面板上连一条失败都看不到。 */
+              if (ASYNC[z].k !== key) continue;
               /* 同一个下拉的内外层未必是祖先/后代（Semi 里是兄弟节点），
                  按「它们各自归属的组件容器」判断才准，否则一个控件会进两次队列，
                  第一遍填上、第二遍报一条假的「没有这一项」 */
@@ -6714,8 +6681,35 @@ function applyResume(D, O) {
       var INTERN = pack('exp', 8), PROJ = pack('prj', 8), CAMPUS = pack('sch', 8);
 
       /* 写一个格子：时间框只认年月日，其余原样写。块对位与全局排队共用这一段 */
+      /* 给某个起止时间框记下「为什么没填上」，checkSpanWait() 回读时用 */
+      function spanWhy(cell, why) {
+        for (var sw = 0; sw < SPAN_WAIT.length; sw++) {
+          if (SPAN_WAIT[sw].el === cell) { SPAN_WAIT[sw].why = why; return; }
+        }
+      }
+
       function putCell(cell, d, kk, mv) {
-        if (!cell || !mv) return false;
+        if (!cell) {
+          if (kk === 'start' || kk === 'end') {
+            RES.failed.push({ l: '第 ' + (d.key || '') + ' 段经历', r: '页面上的起止时间框没认出来，没填' });
+          }
+          return false;
+        }
+        if (!mv) {
+          /* 两种要分清：① 资料里压根没填这段时间（exp1_time / prj1_time 空着）；
+             ② 填了但拆不出年月 —— 最常见是「2026.01 - 至今」，「至今」不是日期。
+             以前一律说「资料里没有」，用户回去翻资料发现明明写着，白跑一趟。
+             两种以前都是静默 return false，用户连点三遍也不知道是该去补资料。 */
+          if (kk === 'start' || kk === 'end') {
+            var miss = String(d.span || d.time || '').trim()
+              ? '资料里 ' + (d.key || '') + '_time 是「' + String(d.span || d.time).slice(0, 24)
+                + '」，拆不出具体年月（「至今」要换成具体截止日期），这个框没填'
+              : '资料里没有 ' + (d.key || '') + '_time 这段时间，去表单助手里补上再点一次';
+            RES.failed.push({ l: labelText(cell) || '起止时间', r: miss });
+            spanWhy(cell, miss);
+          }
+          return false;
+        }
         if (kk === 'start' || kk === 'end') {
           var ct = (cell.getAttribute('type') || '').toLowerCase();
           if ((ct === 'date' || ct === 'month') && !/^\d{4}-\d{2}(-\d{2})?$/.test(mv)) {
@@ -6810,6 +6804,22 @@ function applyResume(D, O) {
           var d = list[n];
           var map = { org: d.org, title: d.title, role: d.role, start: d.start, end: d.end, span: d.span, desc: d.desc };
           for (var kk in map) {
+            /* 资料里没有这个字段的值：最常见是「这段时间压根没填进资料」
+               （exp1_time / prj1_time 空着）。以前这里静默 continue，
+               用户看到的就是这一块的时间框一直空着，连点三遍也没线索 ——
+               页面上明明有框、资料里却没值，必须说一声该去补什么。 */
+            if (!map[kk] && (kk === 'start' || kk === 'end') && P[kk] && P[kk][n]) {
+              /* 分清「资料里没填这段时间」和「填了但拆不出年月」：
+                 后者最常见是「2026.01 - 至今」——「至今」不是日期，
+                 以前一律说「资料里没有」，用户回去翻资料才发现明明写着，白跑一趟。 */
+              var miss = String(d.time || '').trim()
+                ? '资料里 ' + (d.key || '') + '_time 是「' + String(d.time).slice(0, 24)
+                  + '」，拆不出具体年月（「至今」要换成具体截止日期），这个框没填'
+                : '资料里没有 ' + (d.key || '') + '_time 这段时间，去表单助手里补上再点一次';
+              RES.failed.push({ l: labelText(P[kk][n]) || '起止时间', r: miss });
+              spanWhy(P[kk][n], miss);
+              continue;
+            }
             if (!map[kk] || !P[kk] || !P[kk][n]) continue;
             putCell(P[kk][n], d, kk, map[kk]);
           }
@@ -6830,6 +6840,57 @@ function applyResume(D, O) {
         }
       }
     })();
+  }
+
+  /* v42：书签是代码快照。问一句后端「线上最新引擎是哪个版本」，落后就记进 RES.newer，
+     面板上提示用户去更新 —— 以前每次引擎升级都得靠人工提醒「记得重装书签」，
+     而用户自己根本看不出落后了几个版本。
+     用 XHR 不用 fetch：书签是 ES5 代码，得在老浏览器里也能跑。
+     跨域被页面 CSP 拦了就静默失败：提示不出来而已，绝不影响填表本身。 */
+  function checkVer() {
+    try {
+      var GATE = 'https://resume-autofill-gate.onrender.com';
+      var x = new XMLHttpRequest();
+      x.open('GET', GATE + '/ver', true);
+      x.onload = function () {
+        try {
+          var j = JSON.parse(x.responseText || '{}');
+          if (j && j.version && verNum(j.version) > verNum(ENGINE_VER)) {
+            RES.newer = j.version;
+            tr('引擎有新版 ' + j.version + '，当前 ' + ENGINE_VER);
+            /* 版本查询可能比填表流程晚返回，那时面板已经画完了，补画一次 */
+            try { panel(); } catch (eP) {}
+          }
+        } catch (e2) {}
+      };
+      x.onerror = function () {};
+      x.send();
+    } catch (e1) {}
+  }
+  function verNum(v) { var m = String(v || '').match(/v(\d+)/); return m ? +m[1] : 0; }
+
+
+  /* 经历区起止时间核对：主循环把这些框交给经历逻辑填，这里等日期队列跑完后
+     回读一遍。填上了记一笔「起止时间 = 2025-07」；还是空的按 putCell 留下的原因
+     报出来（资料缺字段 / 框没认出来），不再无声无息。 */
+  function checkSpanWait() {
+    for (var i = 0; i < SPAN_WAIT.length; i++) {
+      var w = SPAN_WAIT[i], el = w.el, v = '';
+      try {
+        if (!el || !el.isConnected) {
+          var pool = liveFields(document);
+          if (w.ord >= 0 && pool[w.ord]) el = pool[w.ord];
+        }
+      } catch (e0) {}
+      try { v = String((el && el.value) || '').trim(); } catch (e1) {}
+      if (v) {
+        if (RES.handled.length < 20) RES.handled.push(w.lab + ' = ' + v.slice(0, 12));
+        continue;
+      }
+      if (RES.failed.length < 40) {
+        RES.failed.push({ l: w.lab, r: w.why || '经历区的起止时间没填上（资料里可能没有这段时间）' });
+      }
+    }
   }
 
   /* 收尾回读核对：写完 ≠ 填上。
@@ -6882,10 +6943,12 @@ function applyResume(D, O) {
         + 'color:#fff;background:#1a1917;border-radius:11px;box-shadow:0 12px 40px rgba(0,0,0,.34);overflow:hidden;');
       var head = mk('div', 'display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none;');
       var dot = mk('span', 'width:7px;height:7px;border-radius:50%;flex:0 0 7px;background:'
-        + (DIAG ? '#60a5fa' : RES.filled.length ? '#4ade80' : '#f59e0b') + ';');
+        + (DIAG ? '#60a5fa' : RES.sample ? '#f59e0b' : RES.filled.length ? '#4ade80' : '#f59e0b') + ';');
       var ttl = mk('div', 'flex:1;font-weight:600;',
         DIAG ? '页面字段清单 · ' + RES.diag.length + ' 个'
-          : (RES.busy ? '正在填下拉 ' + ASYNC.length + ' 个…' : '已填 ' + RES.filled.length + ' 项'));
+          : (RES._addTip ? RES._addTip : RES.busy ? '正在填下拉 ' + ASYNC.length + ' 个…'
+             : RES.sample ? '⚠ 示例资料（不是你的）· 已填 ' + RES.filled.length + ' 项'
+             : '已填 ' + RES.filled.length + ' 项'));
       var sub = mk('div', 'font-size:11px;color:rgba(255,255,255,.48);', '点击展开');
       /* 把标题暴露出来，队列每处理一项就改一次，用户能看出「它还在动」 */
       RES._ttl = function (s) { try { ttl.textContent = s; } catch (eT0) {} };
@@ -6911,6 +6974,13 @@ function applyResume(D, O) {
       if (!DIAG && RES.sample) {
         body.appendChild(mk('div', 'font-size:12px;color:#ffcf7a;line-height:1.6;padding:2px 0 6px;',
           '当前填的是示例人物（张小明）的资料，不是你自己的。要填真实资料，请在本地那份表单助手里重新生成一次书签。'));
+      }
+      /* 书签是快照：落后线上几个版本时用户自己看不出来，这里明说 */
+      if (!DIAG && RES.newer && verNum(RES.newer) > verNum(RES.ver)) {
+        body.appendChild(mk('div', 'font-size:12px;color:#ffcf7a;line-height:1.6;padding:2px 0 6px;',
+          '这个书签是 ' + RES.ver + '，线上已经是 ' + RES.newer
+          + '。最近修过的几个问题都在新版里——请打开你下载到电脑本地的那份「简历填表助手」重新生成'
+          + '（在公开网页上直接生成，用的可能是网页当时的资料，别搞错）。'));
       }
       /* 折叠区块里的必填框扫不到，用户只会觉得「这块没填」，得说清楚是没展开而不是没认出来 */
       if (!DIAG && RES.hiddenReq) {
@@ -7003,20 +7073,252 @@ function applyResume(D, O) {
     } catch (e) {}
   }
 
+  /* 示例资料终局警告：真实事故是用户在网页上点了「填入示例」再生成书签，
+     把张小明（浙江大学/2022-09/城市微更新）填进了字节招聘页，自己的资料还在本地版里。
+     面板 9 秒会自动收起，必须再给一个关不掉的醒目提示。 */
+  function sampleToast() {
+    try {
+      var old = document.getElementById('__rz_sample_warn');
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      var d = document.createElement('div');
+      d.id = '__rz_sample_warn';
+      d.textContent = '⚠ 刚填进页面的是示例人物（张小明）的资料，不是你的！'
+        + '学校、起止时间、项目全是他的。请用你下载到电脑本地的那份「简历填表助手」重新生成书签，再点一次。';
+      d.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:2147483647;'
+        + 'max-width:min(560px,calc(100vw - 32px));background:#b8433a;color:#fff;'
+        + 'font:13px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;'
+        + 'padding:11px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.3);text-align:center;';
+      var x = document.createElement('span');
+      x.textContent = ' ✕';
+      x.style.cssText = 'cursor:pointer;opacity:.85;margin-left:6px;font-weight:600;';
+      x.onclick = function () { if (d.parentNode) d.parentNode.removeChild(d); };
+      d.appendChild(x);
+      document.body.appendChild(d);
+      setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 20000);
+    } catch (eT) {}
+  }
+
   /* 有下拉组件待填：先亮个面板，再一个个点开选，全填完刷新一次结果 */
+  /* 版本比对不阻塞填表：异步发出去，结果回来时面板自己会补一条提示 */
+  if (!DIAG) checkVer();
+
   if ((ASYNC.length || DATES.length) && !DIAG) {
     RES.busy = 1;
     panel();
     runCombo(function () {
       runDates(function () {
+        try { checkSpanWait(); } catch (e) {}
         try { verifyFilled(); } catch (e) {}
         try { panel(); } catch (e) {}
+        try { if (RES.sample && RES.filled.length) sampleToast(); } catch (eT) {}
       });
     });
   } else {
     try { verifyFilled(); } catch (e) {}
     panel();
+    try { if (RES.sample && RES.filled.length) sampleToast(); } catch (eT) {}
   }
+  }
+
+  /* v42：先按资料段数把「添加经历」点到够，再扫描。
+     DIAG（只看不填）不点按钮 —— 诊断模式下不该改动页面。 */
+  if (DIAG) { runScanAndFinish(); }
+  else {
+    try {
+      ensureBlocks(function () {
+        try { runScanAndFinish(); }
+        catch (e) { RES.failed.push({ l: '主扫描', r: String((e && e.message) || e) }); }
+      });
+    } catch (e) {
+      /* 补块逻辑自己出错也不能拦住填表：退回直接扫描 */
+      try { runScanAndFinish(); } catch (e2) {}
+    }
+  }
+  /* ---------- v42：按资料段数补足页面上的经历块 ---------- */
+
+  /* 资料里有几段经历：exp1..exp4 / prj1..prj6，取最后一个有值的段号 */
+  function segCount(pre) {
+    var n = 0;
+    for (var i = 1; i <= 8; i++) {
+      var v = D[pre + i + '_company'] || D[pre + i + '_org'] || D[pre + i + '_title'];
+      if (String(v || '').trim()) n = i;
+    }
+    return n;
+  }
+
+  /* 数段数专用的标签读取：直接取父容器里第一个子元素。
+     不能用 labelText —— 字段排在区块标题正下方时，nearLabel 的第一条路径
+     （父容器的上一个兄弟）会把 <h3>实习经历</h3> 当成标签返回，
+     整段经历就一个都数不到，引擎反而误判「页面没有经历」去点添加按钮。 */
+  function blockLabel(el) {
+    var p = el.parentElement;
+    if (!p) return '';
+    var fc = p.firstElementChild;
+    if (fc && fc !== el && !fc.contains(el)
+        && !(fc.querySelector && fc.querySelector('input,select,textarea'))) {
+      return clean(fc.innerText || '');
+    }
+    return '';
+  }
+
+  /* 页面上现在有几段：按「公司名称 / 项目名称」这类标签的可见输入框数。
+     每段经历只有一个单位名框，数它比数容器稳（容器 class 名各站都不一样）。 */
+  function countBlocksOnPage(kind) {
+    var n = 0, all = document.querySelectorAll('input,textarea');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      try { if (!shown(el)) continue; } catch (e) { continue; }
+      var t = clean(blockLabel(el) || labelText(el) || upLabel(el) || geoLabel(el) || '');
+      if (!t) continue;
+      var ok = kind === 'project'
+        ? /^(项目名称|项目标题|项目课题|项目\/?课题|所属项目|项目所属|代表项目)/
+        : /^(公司|单位|企业)(名称|全称)?\s*\*?$|^(实习|工作)单位\s*\*?$|^所属(公司|单位)\s*\*?$/;
+      if (ok.test(t)) n++;
+    }
+    return n;
+  }
+
+  /* 找「添加经历」按钮：文字像添加、是个按钮、可见、且能看出属于哪个区。
+     工作经历区不点 —— 用户是学生，资料里没有正式工作经历。 */
+  function addBtnsFor(kind) {
+    var out = [], seen = {};
+    var btns = document.querySelectorAll('button,a,[role="button"]');
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      try { if (!shown(b)) continue; } catch (e) { continue; }
+      var t = clean(b.textContent || '');
+      if (!t || t.length > 8) continue;
+      if (!/^[＋+\s-]*(添加|新增)(一?段|经历|实习|项目)?\s*$|^add\s*more$/i.test(t)) continue;
+      var host = addHostOf(b);
+      if (!host) continue;
+      var ht = clean(host.textContent || '').slice(0, 80);
+      var isP = /项目/.test(ht);
+      var isI = /(实习|实践)/.test(ht);
+      if (kind === 'project' ? isP : (isI && !isP)) {
+        var k = t + ':' + (b.getAttribute('class') || '') + ':' + (b.id || '');
+        if (!seen[k]) { seen[k] = 1; out.push(b); }
+      }
+    }
+    return out;
+  }
+
+  /* 按钮属于哪个区块：往上找最近的、文本里带区块标题的祖先 */
+  function addHostOf(el) {
+    var p = el;
+    for (var i = 0; i < 10 && p; i++) {
+      p = p.parentElement;
+      if (!p) break;
+      if (p === document.body || p === document.documentElement) break;
+      var t = clean(p.textContent || '');
+      /* 以前文本超过 400 字就 break。字节这种「左边区块标题、右边字段」的版式，
+         区块容器把字段提示也算进 textContent，很容易超 400 字，
+         结果「＋ 添加」按钮一个都找不到，6 段项目永远只有第 1 段。
+         现在继续往上找，只挡住整页级别的容器。 */
+      if (t.length > 3000) continue;
+      if (/(实习经历|工作经历|项目经历|实践经验|职业经历|科研项目|主要项目)/.test(t)) return p;
+    }
+    return null;
+  }
+
+  /* 「没有实习经历」勾着的话，实习区整段不渲染，添加按钮也不存在 —— 先取消。
+     只认「已勾选 + 文字是没有/无/暂无 + 实习|工作|项目|实践」，不碰别的复选框。 */
+  function uncheckNoExp(cb) {
+    var hit = null;
+    var boxes = document.querySelectorAll('input[type="checkbox"]');
+    for (var i = 0; i < boxes.length; i++) {
+      var b = boxes[i];
+      try {
+        if (!b.checked) continue;
+        /* 标签可能在 label 元素、紧邻的文字节点、父容器里（字节是「☑ 没有实习经历」内联一行），
+           挨个试，别只认一条路 —— 认不出来实习区就整段不渲染，后面全填不上。 */
+        var cands = [];
+        try { if (b.labels && b.labels.length) cands.push(b.labels[0].textContent); } catch (eL) {}
+        try { if (b.nextElementSibling) cands.push(b.nextElementSibling.textContent); } catch (eS) {}
+        try { if (b.parentElement) cands.push(b.parentElement.textContent); } catch (eP) {}
+        try { cands.push(labelText(b) || '', upLabel(b) || '', b.getAttribute('aria-label') || ''); } catch (eT) {}
+        var got = false;
+        for (var ci = 0; ci < cands.length && !got; ci++) {
+          var tt = clean(cands[ci] || '').slice(0, 40);
+          if (/(没有|无|暂无).{0,6}(实习|工作|项目|实践)/.test(tt)) got = true;
+        }
+        if (got) { hit = b; break; }
+      } catch (e) {}
+    }
+    if (!hit) { cb(); return; }
+    try { hit.click(); } catch (e) {}
+    tr('取消勾选「' + clean(labelText(hit) || upLabel(hit) || '没有实习经历').slice(0, 12) + '」');
+    /* 取消勾选后区块是异步渲染出来的，多等一拍再数段数 */
+    setTimeout(cb, 900);
+  }
+
+  /* 点一下添加，然后轮询等新块真的出现（React 渲染是异步的，点完立刻数还是旧的）。
+     等不到就当作没点成 —— 绝不硬点多点。 */
+  function clickAdd(btn, before, kind, cb) {
+    try { btn.click(); } catch (e) {}
+    var t0 = Date.now();
+    (function poll() {
+      var now = 0;
+      try { now = countBlocksOnPage(kind); } catch (e) {}
+      if (now > before || Date.now() - t0 > 2500) { cb(now > before); return; }
+      setTimeout(poll, 130);
+    })();
+  }
+
+  function ensureBlocks(cb) {
+    var done = function () { try { cb(); } catch (e) {} };
+    if (!O.exp) { done(); return; }
+    var need = { intern: segCount('exp'), project: segCount('prj') };
+    if (need.intern <= 1 && need.project <= 1) { done(); return; }
+    var cur = { intern: 0, project: 0 };
+    try { cur = { intern: countBlocksOnPage('intern'), project: countBlocksOnPage('project') }; } catch (e) {}
+    var todo = [];
+    if (cur.intern < need.intern) todo.push({ kind: 'intern', left: need.intern - cur.intern });
+    if (cur.project < need.project) todo.push({ kind: 'project', left: need.project - cur.project });
+    if (!todo.length) { done(); return; }
+    RES.busy = 1;
+    RES._addTip = '正在补经历块（实习 ' + need.intern + ' 段 / 项目 ' + need.project + ' 段）…';
+    tr('补块：需要实习 ' + need.intern + ' 段、项目 ' + need.project + ' 段，页面现有 '
+      + cur.intern + ' / ' + cur.project);
+    try { panel(); } catch (e) {}
+    uncheckNoExp(function () {
+      var idx = 0;
+      (function step() {
+        if (idx >= todo.length) {
+          RES.busy = 0;
+          RES._addTip = '';
+          try { panel(); } catch (e) {}
+          done();
+          return;
+        }
+        var t = todo[idx];
+        var btns = addBtnsFor(t.kind);
+        if (!btns.length) {
+          /* 找不到添加按钮就不硬点：点错一次可能是提交或跳页。
+             记一条失败，让用户知道这几段得手动加。 */
+          RES.failed.push({
+            l: (t.kind === 'project' ? '项目' : '实习') + '第 ' + (t.left + 1) + ' 段起',
+            r: '页面上没找到「添加' + (t.kind === 'project' ? '项目' : '实习') + '」按钮，这几段得手动加'
+          });
+          idx++;
+          step();
+          return;
+        }
+        var before = 0;
+        try { before = countBlocksOnPage(t.kind); } catch (e) {}
+        clickAdd(btns[0], before, t.kind, function (grew) {
+          if (grew) {
+            t.left--;
+            tr('点了添加按钮，' + t.kind + ' 块 +1（还差 ' + t.left + ' 段）');
+          } else {
+            tr('点了添加按钮但页面没多出块，停手不硬点');
+          }
+          if (t.left > 0 && grew) { step(); }
+          else { idx++; step(); }
+        });
+      })();
+    });
+  }
+
   try { RES.data = D; } catch (e) {}
   try { if (typeof window !== 'undefined') window.__RZ = RES; } catch (e) {}
   /* 控制台留一行诊断摘要：出问题时用户复制这一行发回来，
@@ -7599,10 +7901,12 @@ function toAscii(src) {
 /* 进书签的代码要尽量短：删掉注释行和行首缩进，能省掉四分之一体积。
    只在「剪完还能被 JS 解析」时才采用，否则退回原文，不会因为压缩把功能弄坏。 */
 /* =====================================================================
-   引擎版本：稳定版 / 测试版
-   页面里那段 applyResume 就是稳定版（默认）；测试版源码以纯文本存在页面底部
-   #eng-test 里，只在「生成书签」时取用，本页面不执行它。
-   切换只影响生成出来的书签，不影响这个页面本身。
+   引擎版本：稳定版 v42 / 测试版 v43
+   - 稳定版 = 页面里这段 applyResume（默认，本页面执行的就是它），只认 school / major 这类老字段；
+   - 测试版 = 页面底部 #eng-test 的纯文本源码，多认 eduN_* 教育分段，本页面不执行它，
+     只在「生成书签」时取用。
+   数据由 buildScript 按引擎版本翻译（见 eduSplit）：老引擎把第 1 段摊平成 school / major…，
+   新引擎保留 eduN_* 并把 edu_count 一起带上。切换只影响生成出来的书签，不影响这个页面本身。
    ===================================================================== */
 var ENG_STORE = 'resume_engine_pick';
 var ENG_TEXT_ID = 'eng-test';
@@ -7696,12 +8000,50 @@ const SHORT_KEYS = new Set([
 
 function buildScript(opts, engWhich) {
   opts = opts || {};
-  const payload = {};
+  /* 引擎分两代，数据得翻译成对方认得的写法：
+     v43 认得 eduN_* 分段（页面第几段教育就取第几段资料）；
+     v42 及以前只认 school / major 这些老字段 —— 多段数据直接塞过去它也不会对位，
+     反而可能把硕士的学校填进本科框，所以只摊平第 1 段，「最高学历 / 最高学位」单独挑最高那段。 */
+  const engNo = parseInt(String(engVer(engSrc(engWhich))).replace(/\D/g, ''), 10) || 0;
+  const eduSplit = engNo >= 43;
+  const raw = {};
   Object.keys(DATA).forEach(k => {
     if (k.indexOf('__') === 0) return;   /* __custom 是清单，值已经在各自字段里 */
     const v = String(DATA[k] || '').trim();
     if (!v) return;
-    if (opts.short && !SHORT_KEYS.has(k) && k.indexOf('cx_') !== 0) return;
+    raw[k] = v;
+  });
+  if (!eduSplit) {
+    const RANK = { '博士': 4, '硕士': 3, '研究生': 3, '本科': 2, '学士': 2, '大专': 1, '专科': 1 };
+    let bi = 1, bv = -1;
+    for (let i = 1; i <= 4; i++) {
+      const ds = (raw['edu' + i + '_degree'] || '') + (raw['edu' + i + '_academicDegree'] || '');
+      let rv = 0;
+      for (const h in RANK) if (ds.indexOf(h) >= 0 && RANK[h] > rv) rv = RANK[h];
+      if (rv > bv) { bv = rv; bi = i; }
+    }
+    const topDeg = raw['edu' + bi + '_degree'] || '';
+    const topAcd = raw['edu' + bi + '_academicDegree'] || '';
+    for (let i = 2; i <= 4; i++) {
+      Object.keys(raw).forEach(k => { if (k.indexOf('edu' + i + '_') === 0) delete raw[k]; });
+    }
+    Object.keys(raw).forEach(k => {
+      if (k.indexOf('edu1_') === 0) {
+        const t = k.slice(5);
+        if (!raw[t]) raw[t] = raw[k];
+        delete raw[k];
+      }
+    });
+    delete raw.edu_count;
+    if (topDeg) raw.degree = topDeg;
+    if (topAcd) raw.academicDegree = topAcd;
+  }
+
+  const payload = {};
+  Object.keys(raw).forEach(k => {
+    const v = raw[k];
+    const keep = SHORT_KEYS.has(k) || /^edu[1-4]_/.test(k) || k === 'edu_count';
+    if (opts.short && !keep && k.indexOf('cx_') !== 0) return;
     payload[k] = v;
   });
   /* 年龄按生日实时算，避免写死一个过期数字 */
