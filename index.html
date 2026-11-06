@@ -4113,10 +4113,51 @@ function segBar(pre) {
   const tip = document.createElement('span');
   tip.className = 'segtip';
   tip.textContent = pre === 'edu'
-    ? '按网申页面上「从上到下第几段教育」对应：多数表单最高学历在前（硕士第 1 段、本科第 2 段），按你那份表单的顺序摆'
+    ? '顺序照网申页面从上到下摆（多数表单最高学历在前）。学历是连着填的：硕士 / 博士要带本科，专升本再加一段专科'
     : '加出来的段会按顺序对应网申表单里的第几段经历';
   bar.appendChild(tip);
   return bar;
+}
+
+/* ---------- 学历链检查 ----------
+   硕士 / 博士 是在本科之上读的，专升本还要再往前接专科。
+   资料里只写「硕士 同济大学」一段，网申表单问「本科院校」时就填不出来；
+   所以选定学历后缺哪一段就自动加一段空的，并说清楚加它干什么。 */
+function eduDegrees() {
+  const n = segN('edu');
+  const out = [];
+  for (let i = 1; i <= n; i++) out.push(String(DATA['edu' + i + '_degree'] || '').trim());
+  return out;
+}
+function eduHas(re) {
+  return eduDegrees().some(d => re.test(d));
+}
+function checkEduChain() {
+  const ds = eduDegrees();
+  const all = ds.join(' ');
+  const grad = /硕士|研究生|博士/.test(all);
+  const up = String(DATA.isUpgrade || '').trim() === '是';
+  const has本科 = eduHas(/本科|学士/);
+  const has专科 = eduHas(/大专|专科/);
+
+  let miss = '';
+  if (grad && !has本科) miss = '本科';
+  else if ((grad || has本科) && up && !has专科) miss = '专科';
+  if (!miss) return;
+
+  const n = segN('edu');
+  if (n >= SEG_META.edu.max) {
+    toast('学历里还缺「' + miss + '」这一段，已经到 ' + SEG_META.edu.max + ' 段上限，删掉多余的一段再补', 4000);
+    return;
+  }
+  DATA.edu_count = n + 1;
+  saveData();
+  render();
+  refreshBookmarks();
+  const why = miss === '专科'
+    ? '专升本的学历前面要接一段「专科」'
+    : '研究生学历要连着「' + miss + '」一起填';
+  toast(why + '，已加第 ' + (n + 1) + ' 段，把学校补上', 4200);
 }
 
 const GROUPS = [
@@ -7399,6 +7440,12 @@ function render() {
         saveData();
         scheduleRefresh();
       });
+      /* 学历是连着读的：硕士 / 博士下面必须有本科，专升本还得有专科。
+         选完学历或改了「是否专升本」就地查一遍，缺哪段补哪段，
+         免得资料里只有一段研究生，网申页面问起本科就空着。 */
+      if (/^edu\d+_degree$/.test(key) || key === 'isUpgrade') {
+        el.addEventListener('change', () => { checkEduChain(); });
+      }
       f.appendChild(el);
       grid.appendChild(f);
     });
