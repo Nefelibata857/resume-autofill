@@ -921,6 +921,83 @@ function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
   var ENGINE_VER = 'v43';
+  /* ---------- 教育经历分段 ----------
+     资料里可能有多段学历（本科 / 硕士 / 博士），字段名是 edu1_school、edu2_school…
+     页面上「第几段教育」就取第几段资料；只有一段时，行为和以前完全一致。
+     段的边界拿「学校」输入框当锚点 —— 每段教育必有一个学校框，
+     按文档顺序数它是第几个，就知道这一段是第几段。 */
+  var EDUK = { school: 1, college: 1, major: 1, degree: 1, academicDegree: 1, eduType: 1,
+               studentId: 1, className: 1, tutor: 1, enrollDate: 1, graduateDate: 1,
+               gpa: 1, majorGpa: 1, rank: 1, majorRank: 1, courses: 1 };
+  var eduCount = 1;
+  try {
+    var _en = parseInt(D.edu_count, 10) || 0;
+    for (var _ei = 4; _ei >= 1; _ei--) {
+      if (String(D['edu' + _ei + '_school'] || '').trim()) { _en = Math.max(_en, _ei); break; }
+    }
+    eduCount = Math.min(Math.max(_en, 1), 4);
+    for (var _ek in EDUK) {
+      if (!String(D[_ek] || '').trim() && D['edu1_' + _ek] !== undefined) D[_ek] = D['edu1_' + _ek];
+    }
+    if (eduCount > 1) {
+      /* 「最高学历 / 最高学位」这种全局字段要取最高的一段，不是第一段 */
+      var HR = { '博士': 4, '硕士': 3, '研究生': 3, '本科': 2, '学士': 2, '大专': 1, '专科': 1 };
+      var _bi = 1, _bv = -1;
+      for (var _dj = 1; _dj <= eduCount; _dj++) {
+        var _ds = String(D['edu' + _dj + '_degree'] || '') + String(D['edu' + _dj + '_academicDegree'] || '');
+        var _rv = 0, _hk;
+        for (_hk in HR) { if (_ds.indexOf(_hk) >= 0 && HR[_hk] > _rv) _rv = HR[_hk]; }
+        if (_rv > _bv) { _bv = _rv; _bi = _dj; }
+      }
+      D.degree = D['edu' + _bi + '_degree'] || D.degree;
+      D.academicDegree = D['edu' + _bi + '_academicDegree'] || D.academicDegree;
+    }
+  } catch (eEd) {}
+
+  var _schoolA = null;
+  function schoolAnchors() {
+    if (_schoolA) return _schoolA;
+    _schoolA = [];
+    try {
+      var all = document.querySelectorAll('input,select,textarea');
+      for (var i = 0; i < all.length && _schoolA.length < 8; i++) {
+        var e = all[i];
+        var ok2 = true;
+        try { ok2 = shown(e); } catch (eS) {}
+        if (!ok2) continue;
+        var k0 = '';
+        try { k0 = matchRule(ctxText(e)); } catch (eC1) {}
+        if (!k0) { try { k0 = matchRule(labelText(e)); } catch (eC2) {} }
+        if (k0 === 'school') _schoolA.push(e);
+      }
+    } catch (eA) {}
+    return _schoolA;
+  }
+  function eduBlkOf(el) {
+    if (eduCount <= 1) return 0;
+    var A = schoolAnchors();
+    if (A.length < 2) return A.length ? 1 : 0;
+    var n = 0;
+    for (var j = 0; j < A.length; j++) {
+      if (A[j] === el) return j + 1;
+      var bet = false;
+      try { bet = !!(A[j].compareDocumentPosition(el) & 4); } catch (eC) {}
+      if (bet) n++; else break;
+    }
+    return n;
+  }
+  function eduVal(key, el) {
+    if (eduCount <= 1 || !EDUK[key]) return D[key];
+    var i2 = eduBlkOf(el);
+    if (i2 <= 0) {
+      /* 表单最上面那个「最高学历 / 最高学位」不属于任何一段教育 */
+      if (key === 'degree' || key === 'academicDegree') return D[key];
+      return D['edu1_' + key] !== undefined ? D['edu1_' + key] : D[key];
+    }
+    if (i2 > eduCount) return '';   /* 页面上多出来的空段，不拿同一份资料重复填 */
+    var v = D['edu' + i2 + '_' + key];
+    return v === undefined ? '' : v;
+  }
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER,
              overwrite: [], handled: [], sample: 0, newer: '' };
   /* 经历区（实习/项目）的起止时间框：主循环认出来后会交给下面的经历块逻辑填，
@@ -3007,7 +3084,7 @@ function applyResume(D, O) {
           else if (ridx === 1) key = 'graduateDate';
         }
 
-        var val = D[key], ok = false, sugQ = false;
+        var val = eduVal(key, el), ok = false, sugQ = false;
         /* 日期控件一律排到日期队列：要异步点开面板再回车，同步写完会被回滚。
            例外：纯文本框型的日期（type=text 且不是只读）压根没有日历面板，
            直接打字就成 —— 字节教育经历的「起止时间」就是这种框，
@@ -3980,13 +4057,21 @@ const SEG_META = {
   prj: { base: 6, max: 8, cn: '项目',
          head: [['title', '名称'], ['org', '所属'], ['role', '角色'], ['time', '时间'], ['desc', '描述']] },
   sch: { base: 2, max: 8, cn: '校园',
-         head: [['org', '组织/社团'], ['role', '职务'], ['time', '时间'], ['desc', '描述']] }
+         head: [['org', '组织/社团'], ['role', '职务'], ['time', '时间'], ['desc', '描述']] },
+  /* 教育经历也可能不止一段：本科 / 硕士 / 博士。默认 1 段，
+     在职读研、专升本、二学位的人可以自己加到第 2、3、4 段。 */
+  edu: { base: 1, max: 4, cn: '教育',
+         head: [['school', '学校'], ['college', '学院/院系'], ['major', '专业'],
+                ['degree', '学历'], ['academicDegree', '学位'], ['eduType', '培养方式'],
+                ['enrollDate', '入学时间'], ['graduateDate', '毕业时间'],
+                ['gpa', 'GPA'], ['rank', '排名']] }
 };
 function derivedSegN(pre) {
   const m = SEG_META[pre];
   let n = 0;
   for (let i = 1; i <= m.max; i++) {
-    const v = DATA[pre + i + '_company'] || DATA[pre + i + '_org'] || DATA[pre + i + '_title'];
+    const v = DATA[pre + i + '_company'] || DATA[pre + i + '_org'] || DATA[pre + i + '_title']
+      || DATA[pre + i + '_school'];
     if (String(v || '').trim()) n = i;
   }
   return n;
@@ -4027,7 +4112,9 @@ function segBar(pre) {
   bar.appendChild(btn);
   const tip = document.createElement('span');
   tip.className = 'segtip';
-  tip.textContent = '加出来的段会按顺序对应网申表单里的第几段经历';
+  tip.textContent = pre === 'edu'
+    ? '按网申页面上「从上到下第几段教育」对应：多数表单最高学历在前（硕士第 1 段、本科第 2 段），按你那份表单的顺序摆'
+    : '加出来的段会按顺序对应网申表单里的第几段经历';
   bar.appendChild(tip);
   return bar;
 }
@@ -4042,12 +4129,13 @@ const GROUPS = [
     ['maritalStatus','婚姻状况'], ['healthStatus','健康状况'],
     ['emergencyName','紧急联系人'], ['emergencyPhone','紧急联系人电话']
   ]},
-  { title: '教育背景', fields: [
-    ['school','学校'], ['college','学院/院系'], ['major','专业'], ['degree','学历'],
-    ['academicDegree','学位'], ['eduType','受教育类型'], ['isUpgrade','是否专升本'],
-    ['studentId','学号'], ['className','班级'], ['tutor','导师（研究生填，本科留空）'],
-    ['enrollDate','入学时间'], ['graduateDate','毕业时间'], ['gpa','GPA'], ['majorGpa','专业课绩点'],
-    ['rank','年级排名'], ['majorRank','专业排名'], ['courses','主修课程（精选）']
+  /* 教育经历按段填：默认 1 段，右下角「+ 加一段教育」可加到 4 段（本科 / 硕士 / 博士）。
+     段内的字段跟着那一段走；学号、班级、导师这种一份资料只填一次的放下面单独一组。 */
+  { title: '教育背景（本科 / 硕士 / 博士）', seg: 'edu' },
+  { title: '学籍信息（一份资料填一次）', fields: [
+    ['isUpgrade','是否专升本'], ['studentId','学号'], ['className','班级'],
+    ['tutor','导师（研究生填，本科留空）'],
+    ['majorGpa','专业课绩点'], ['majorRank','专业排名'], ['courses','主修课程（精选）']
   ]},
   { title: '求职意向', fields: [
     ['targetJob','目标岗位'], ['targetJob2','备选方向'], ['targetCity','期望城市'], ['expectSalary','期望薪资（分号分隔 = 备选顺序）'],
@@ -4139,6 +4227,9 @@ const PH = {
   coursesFull: '按成绩单原样罗列，网申「专业课程」长文本框用这一栏'
 };
 
+/* 解析简历文本时，这些字段属于「第一段教育」 */
+const EDU_KEYS = /^(school|college|major|degree|academicDegree|eduType|enrollDate|graduateDate|gpa|rank)$/;
+
 const LABELS = {};
 GROUPS.forEach(g => {
   if (g.seg) {
@@ -4157,6 +4248,83 @@ function applyResume(D, O) {
   O = O || {};
   var DIAG = !!O.diag;
   var ENGINE_VER = 'v40';
+  /* ---------- 教育经历分段 ----------
+     资料里可能有多段学历（本科 / 硕士 / 博士），字段名是 edu1_school、edu2_school…
+     页面上「第几段教育」就取第几段资料；只有一段时，行为和以前完全一致。
+     段的边界拿「学校」输入框当锚点 —— 每段教育必有一个学校框，
+     按文档顺序数它是第几个，就知道这一段是第几段。 */
+  var EDUK = { school: 1, college: 1, major: 1, degree: 1, academicDegree: 1, eduType: 1,
+               studentId: 1, className: 1, tutor: 1, enrollDate: 1, graduateDate: 1,
+               gpa: 1, majorGpa: 1, rank: 1, majorRank: 1, courses: 1 };
+  var eduCount = 1;
+  try {
+    var _en = parseInt(D.edu_count, 10) || 0;
+    for (var _ei = 4; _ei >= 1; _ei--) {
+      if (String(D['edu' + _ei + '_school'] || '').trim()) { _en = Math.max(_en, _ei); break; }
+    }
+    eduCount = Math.min(Math.max(_en, 1), 4);
+    for (var _ek in EDUK) {
+      if (!String(D[_ek] || '').trim() && D['edu1_' + _ek] !== undefined) D[_ek] = D['edu1_' + _ek];
+    }
+    if (eduCount > 1) {
+      /* 「最高学历 / 最高学位」这种全局字段要取最高的一段，不是第一段 */
+      var HR = { '博士': 4, '硕士': 3, '研究生': 3, '本科': 2, '学士': 2, '大专': 1, '专科': 1 };
+      var _bi = 1, _bv = -1;
+      for (var _dj = 1; _dj <= eduCount; _dj++) {
+        var _ds = String(D['edu' + _dj + '_degree'] || '') + String(D['edu' + _dj + '_academicDegree'] || '');
+        var _rv = 0, _hk;
+        for (_hk in HR) { if (_ds.indexOf(_hk) >= 0 && HR[_hk] > _rv) _rv = HR[_hk]; }
+        if (_rv > _bv) { _bv = _rv; _bi = _dj; }
+      }
+      D.degree = D['edu' + _bi + '_degree'] || D.degree;
+      D.academicDegree = D['edu' + _bi + '_academicDegree'] || D.academicDegree;
+    }
+  } catch (eEd) {}
+
+  var _schoolA = null;
+  function schoolAnchors() {
+    if (_schoolA) return _schoolA;
+    _schoolA = [];
+    try {
+      var all = document.querySelectorAll('input,select,textarea');
+      for (var i = 0; i < all.length && _schoolA.length < 8; i++) {
+        var e = all[i];
+        var ok2 = true;
+        try { ok2 = shown(e); } catch (eS) {}
+        if (!ok2) continue;
+        var k0 = '';
+        try { k0 = matchRule(ctxText(e)); } catch (eC1) {}
+        if (!k0) { try { k0 = matchRule(labelText(e)); } catch (eC2) {} }
+        if (k0 === 'school') _schoolA.push(e);
+      }
+    } catch (eA) {}
+    return _schoolA;
+  }
+  function eduBlkOf(el) {
+    if (eduCount <= 1) return 0;
+    var A = schoolAnchors();
+    if (A.length < 2) return A.length ? 1 : 0;
+    var n = 0;
+    for (var j = 0; j < A.length; j++) {
+      if (A[j] === el) return j + 1;
+      var bet = false;
+      try { bet = !!(A[j].compareDocumentPosition(el) & 4); } catch (eC) {}
+      if (bet) n++; else break;
+    }
+    return n;
+  }
+  function eduVal(key, el) {
+    if (eduCount <= 1 || !EDUK[key]) return D[key];
+    var i2 = eduBlkOf(el);
+    if (i2 <= 0) {
+      /* 表单最上面那个「最高学历 / 最高学位」不属于任何一段教育 */
+      if (key === 'degree' || key === 'academicDegree') return D[key];
+      return D['edu1_' + key] !== undefined ? D['edu1_' + key] : D[key];
+    }
+    if (i2 > eduCount) return '';   /* 页面上多出来的空段，不拿同一份资料重复填 */
+    var v = D['edu' + i2 + '_' + key];
+    return v === undefined ? '' : v;
+  }
   var RES = { filled: [], unmatched: [], failed: [], diag: [], skipped: 0, cross: 0, ver: ENGINE_VER,
              overwrite: [], handled: [], sample: 0 };
   /* 数据源自检：书签里带的还是示例人物时提一句，
@@ -6205,7 +6373,7 @@ function applyResume(D, O) {
           else if (ridx === 1) key = 'graduateDate';
         }
 
-        var val = D[key], ok = false, sugQ = false;
+        var val = eduVal(key, el), ok = false, sugQ = false;
         /* 日期控件一律排到日期队列：要异步点开面板再回车，同步写完会被回滚。
            例外：纯文本框型的日期（type=text 且不是只读）压根没有日历面板，
            直接打字就成 —— 字节教育经历的「起止时间」就是这种框，
@@ -6834,11 +7002,30 @@ const HOSTED = /^https?:$/.test(location.protocol) &&
 
 /* 每次往 resume-data 写新数据，这个数字 +1。
    页面下次打开会自动换上最新数据，同时保留你手动补过的空字段 */
-const DATA_VERSION = 3;
+const DATA_VERSION = 4;
 
 /* 已知错误的旧值要在升级时清掉，否则会一直被"保留空字段"的逻辑救活。
    注意：必须声明在 loadData() 被调用之前。 */
-const MIGRATIONS = [];
+/* ---------- v4：教育经历改成多段 ----------
+   老数据只有一个 school / major / degree …，搬进 edu1_*，页面上的分段卡片才读得到。
+   已经有 edu1_school 的（新填的）不动，重复执行也安全。 */
+function migrateEdu(o) {
+  if (!o) return o;
+  var moved = ['school', 'college', 'major', 'degree', 'academicDegree', 'eduType',
+               'enrollDate', 'graduateDate', 'gpa', 'rank'];
+  var any = false;
+  moved.forEach(function (k) {
+    if (String(o[k] || '').trim()) {
+      if (!String(o['edu1_' + k] || '').trim()) o['edu1_' + k] = o[k];
+      any = true;
+    }
+  });
+  moved.forEach(function (k) { delete o[k]; });
+  if (any) o.edu_count = Math.max(parseInt(o.edu_count, 10) || 1, 1);
+  return o;
+}
+
+const MIGRATIONS = [{ v: 4, f: migrateEdu }];
 
 let DATA = loadData();
 
@@ -6864,7 +7051,7 @@ function loadData() {
       return merged;
     }
   } catch (e) {}
-  return Object.assign({}, DEFAULTS);
+  return migrateEdu(Object.assign({}, DEFAULTS));
 }
 
 /* v8：紧急联系人一栏当年填成了手机号，清掉，等真实姓名 */
@@ -6881,7 +7068,7 @@ function loadProfiles() {
     if (raw) {
       const o = JSON.parse(raw);
       if (o && Array.isArray(o.list) && o.list.length) {
-        o.list.forEach(function (p) { p.data = Object.assign({}, DEFAULTS, p.data || {}); });
+        o.list.forEach(function (p) { p.data = migrateEdu(Object.assign({}, DEFAULTS, p.data || {})); });
         if (!o.list.some(function (p) { return p.id === o.active; })) o.active = o.list[0].id;
         return o;
       }
@@ -7176,11 +7363,12 @@ function render() {
 
       const el = document.createElement(isLong ? 'textarea' : 'input');
       el.value = key === 'age' ? (ageFrom(DATA.birthday) || '') : (DATA[key] || '');
-      el.placeholder = isTodo ? '待补充' : (PH[key] || '');
-      if (ENUMS[key]) {
+      var bk = key.replace(/^edu\d+_/, '');
+      el.placeholder = isTodo ? '待补充' : (PH[key] || PH[bk] || '');
+      if (ENUMS[key] || ENUMS[bk]) {
         const dl = document.createElement('datalist');
         dl.id = 'dl-' + key;
-        ENUMS[key].forEach(v => {
+        (ENUMS[key] || ENUMS[bk]).forEach(v => {
           const o = document.createElement('option');
           o.value = v;
           dl.appendChild(o);
@@ -8391,7 +8579,9 @@ document.getElementById('btn-parse').addEventListener('click', async () => {
     if (!text.trim()) { toast('先拖入文件，或把简历内容粘贴到框里'); return; }
     document.getElementById('resume-text').value = text.slice(0, 5000);
     btn.textContent = '识别中…';
-    parsedList = parseResumeText(text);
+    /* 教育类字段落到第一段：卡片上读的是 edu1_school 这种名字，
+       不转一下，粘贴简历识别出来的学校专业会写进看不见的老字段里 */
+    parsedList = parseResumeText(text).map(x => (EDU_KEYS.test(x.k) ? Object.assign({}, x, { k: 'edu1_' + x.k }) : x));
     showParseResult(parsedList);
     window.trackEvent && window.trackEvent('parse-resume', { count: parsedList.length });
   } catch (e) {
@@ -8500,7 +8690,7 @@ function applyParsed() {
 /* =====================================================================
    通用版扩展：示例数据 / 填写进度 / 引导条 / 卡片折叠
    ===================================================================== */
-const REQUIRED = ['name','phone','email','school','major','degree','targetJob','targetCity'];
+const REQUIRED = ['name','phone','email','edu1_school','edu1_major','edu1_degree','targetJob','targetCity'];
 
 /* 虚构人物，只用来演示每个字段该填什么格式，投简历前必须全部改掉。
    目标是点一次「填入示例」就能把面板里每个格子都填上（含驾照、分数这些后加的字段），
@@ -8519,12 +8709,13 @@ const SAMPLE = {
   height: '175', weight: '62', maritalStatus: '未婚', healthStatus: '健康',
   emergencyName: '张建国', emergencyPhone: '13900139000',
   jobSource: '学校;公众号;招聘网站;智联招聘',
-  school: '浙江大学', college: '建筑工程学院', major: '建筑学', degree: '本科',
-  academicDegree: '学士', eduType: '全日制统招', isUpgrade: '否',
+  edu_count: '1', isUpgrade: '否',
+  edu1_school: '浙江大学', edu1_college: '建筑工程学院', edu1_major: '建筑学', edu1_degree: '本科',
+  edu1_academicDegree: '学士', edu1_eduType: '全日制统招',
+  edu1_enrollDate: '2022-09-01', edu1_graduateDate: '2026-06-30',
   studentId: '3200100001', className: '建筑学2201班', tutor: '',
-  enrollDate: '2022-09-01', graduateDate: '2026-06-30',
   certName: '其他', language: '英语', languageLevel: 'CET-6', languageScore: '486',
-  gpa: '3.60', majorGpa: '3.85', rank: '前20%', majorRank: '前15%',
+  edu1_gpa: '3.60', majorGpa: '3.85', edu1_rank: '前20%', majorRank: '前15%',
   courses: '设计基础、建筑设计、建筑构造、中国建筑史、场地设计',
   targetJob: '建筑设计师', targetJob2: '城市设计师', targetCity: '杭州',
   expectSalary: '10000-15000元/月;15-20万/年', jobType: '全职（校园招聘）',
