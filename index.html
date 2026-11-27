@@ -8176,10 +8176,18 @@ document.getElementById('btn-copyall').addEventListener('click', async () => {
 function offlinePatch(html) {
   /* 数据当快照塞进去：只有本地还没有数据时才写入，免得覆盖你在离线版里后来的修改 */
   var snap = JSON.stringify(Object.assign({}, DATA, { __v: DATA_VERSION })).replace(/<\//g, '<\\/');
+  /* 多套资料也要一起带走：只快照 DATA 的话，下载的离线版里会塌缩成「默认资料」一套，
+     其余几套（建筑设计 / 营销策划…）全丢，而这个文件对外承诺的是「完整备份」。
+     同样只在本地还没有套件时写入，不覆盖离线版里后来新建的资料。 */
+  var pfSnap = '';
+  try { pfSnap = JSON.stringify(PF).replace(/<\//g, '<\\/'); } catch (e) {}
   var boot = '(function(){try{'
     + 'var K=' + JSON.stringify(STORE_KEY) + ',S=' + JSON.stringify(snap) + ',cur=null;'
     + 'try{cur=JSON.parse(localStorage.getItem(K)||"null");}catch(e){}'
     + 'if(!cur||!cur.__v){localStorage.setItem(K,S);}'
+    + 'var PK=' + JSON.stringify(PF_KEY) + ',PS=' + JSON.stringify(pfSnap) + ',pc=null;'
+    + 'try{pc=JSON.parse(localStorage.getItem(PK)||"null");}catch(e){}'
+    + 'if(PS&&!pc){localStorage.setItem(PK,PS);}'
     + '}catch(e){}'
     + 'document.documentElement.setAttribute("data-offline","1");'
     + '})();';
@@ -8200,6 +8208,7 @@ function offlinePatch(html) {
 
 async function dlTool() {
   var html = '';
+  saveData();   /* 先把当前改动写进当前套件，快照里的 PF 才是最新的 */
   toast('正在生成文件…', 1200);
   try {
     /* 3 秒拿不到原文件就直接用 DOM 序列化顶上，别让用户对着没反应的按钮等 */
