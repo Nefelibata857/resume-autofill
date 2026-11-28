@@ -138,12 +138,6 @@ button.primary:hover{background:#000;}
   font-size:12px;color:#6b5f4a;cursor:pointer}
 .prow button:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-soft)}
 .ptip{font-size:12px;color:#8a7a5c;margin:10px 0 0;line-height:1.7}
-.pf-attach{margin-top:12px;border-top:1px dashed #e6dcc6;padding-top:10px}
-.pf-attach label{display:block;font-size:12px;color:#8a7a5c;margin-top:8px;line-height:1.6}
-.pf-attach input{display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:7px 10px;
-  border:1px solid #e0d6c2;border-radius:8px;font-size:13px;background:#fffdf8;color:#3a3226}
-.pf-attach input:focus{outline:none;border-color:#c9a86a}
-#profiles.locked .pf-attach{opacity:.32;pointer-events:none}
 .logrow{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px dashed #eee2cc}
 .logmain{flex:1;min-width:0}
 .logt{font-size:13px;color:#3a3226;line-height:1.5;word-break:break-all}
@@ -604,14 +598,6 @@ window.trackEvent = function (name, data) {
       </div>
       <p class="ptip">当前用的是「<b id="pf-cur">默认资料</b>」。每套资料独立保存，
         生成书签 / 下载文件用的就是当前这一套；切换或改完数据后要重新生成书签。</p>
-      <div class="pf-attach">
-        <label>这套要投的简历 PDF
-          <input id="pf-resume" type="text" placeholder="例如：2027城市设计王勇超简历-广联达数字化运营.pdf"></label>
-        <label>作品集链接（随这套一起带走）
-          <input id="pf-portfolio" type="text" placeholder="https://…"></label>
-        <p class="ptip">书签填不了「文件上传」。填了这两项，书签跑完会在面板上提醒你<b>还要手动传哪份简历</b>，
-          免得广联达的岗位投了建筑设计的简历。</p>
-      </div>
       <div id="pf-gate" hidden>
         <div>
           <div class="pfg-b">🔒 登录 GitHub 并点星后解锁</div>
@@ -7633,35 +7619,7 @@ function renderProfiles() {
   });
   var cur = document.getElementById('pf-cur');
   if (cur) cur.textContent = (curPF() || {}).name || '';
-  syncAttach();
 }
-
-/* ---------- 套件附件：这套资料配哪份简历 PDF、哪个作品集链接 ----------
-   书签填不了文件上传，只能提醒。存 PF 而不是 DATA，免得被当成表单字段填出去。 */
-function curAttach() {
-  var p = curPF();
-  if (!p) return {};
-  if (!p.attach) p.attach = {};
-  return p.attach;
-}
-function syncAttach() {
-  var a = curAttach();
-  var r = document.getElementById('pf-resume');
-  var f = document.getElementById('pf-portfolio');
-  if (r && r.value !== (a.resume || '')) r.value = a.resume || '';
-  if (f && f.value !== (a.portfolio || '')) f.value = a.portfolio || '';
-}
-(function bindAttach() {
-  [['pf-resume', 'resume'], ['pf-portfolio', 'portfolio']].forEach(function (pair) {
-    var el = document.getElementById(pair[0]);
-    if (!el) return;
-    el.addEventListener('input', function () {
-      curAttach()[pair[1]] = el.value;
-      saveProfiles();
-      scheduleRefresh();   /* 附件进书签 flags，得重算书签和「改过没导出」提示条 */
-    });
-  });
-})();
 
 PF = loadProfiles();
 
