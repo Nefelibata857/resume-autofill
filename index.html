@@ -28,7 +28,7 @@ header{
   position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);
   backdrop-filter:blur(10px);border-bottom:1px solid var(--line);
 }
-.hd{max-width:1440px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.hd{max-width:1440px;margin:0 auto;padding:10px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
 .hd h1{font-size:17px;font-weight:600;letter-spacing:.02em;}
 .hd h1 span{color:var(--sub);font-weight:400;font-size:12px;margin-left:10px;letter-spacing:0;}
 .acts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;}
@@ -72,7 +72,7 @@ button.primary:hover{background:#000;}
 #ghbar button.x:hover{color:#2c4a68;background:none;}
 
 /* ---------- 布局 ---------- */
-.wrap{max-width:1440px;margin:0 auto;padding:22px 24px 80px;display:grid;grid-template-columns:1fr 380px;gap:22px;align-items:start;}
+.wrap{max-width:1440px;margin:0 auto;padding:16px 24px 80px;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start;}
 @media(max-width:1180px){.wrap{grid-template-columns:1fr;}.side{position:static!important;}}
 
 .card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:18px 18px 20px;margin-bottom:16px;}
@@ -174,33 +174,25 @@ pre.script{
 .engbtn.on{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:600;}
 .engbtn.on:hover{border-color:var(--ink);color:#fff;}
 .engbtn b{font-weight:600;opacity:.72;margin-left:4px;font-variant-numeric:tabular-nums;}
-.sep{height:1px;background:var(--line);margin:14px 0 12px;}
 
 /* ---------- 安装书签 ---------- */
 button.installbtn{
-  width:100%;padding:14px;font-size:14px;font-weight:600;letter-spacing:.02em;
+  width:100%;padding:10px;font-size:14px;font-weight:600;letter-spacing:.02em;
   background:var(--gold);border-color:var(--gold);color:#fff;
   box-shadow:0 1px 0 rgba(0,0,0,.06);
 }
 button.installbtn:hover{background:#9d7843;border-color:#9d7843;}
-.minsteps{display:grid;gap:7px;margin-top:12px;}
-.ms{display:flex;gap:9px;font-size:12.5px;color:#4a463f;line-height:1.55;}
-.ms i{
-  flex:0 0 16px;width:16px;height:16px;border-radius:50%;background:#efe9df;color:#8a7f6d;
-  font-size:10.5px;font-weight:600;font-style:normal;display:flex;align-items:center;
-  justify-content:center;margin-top:2px;
-}
-.ms b{color:var(--ink);font-weight:600;}
 kbd{
   display:inline-block;background:#f4f1ec;border:1px solid #e2dbd0;border-radius:4px;
   padding:0 5px;font:11px/16px ui-monospace,Consolas,monospace;color:#5c554b;margin:0 1px;
 }
-details.alt{margin-top:4px;}
-details.alt summary{
-  font-size:12px;color:var(--sub);cursor:pointer;padding:3px 0;list-style:none;
-}
-details.alt summary::-webkit-details-marker{display:none;}
-details.alt summary::before{content:"▸ ";color:#b9b2a6;}
+details.alt{margin-top:8px;}
+details.alt > summary,.disclosure > summary{font-size:12px;color:var(--sub);cursor:pointer;padding:3px 0;}
+.disclosure.card{padding:9px 14px;margin-bottom:12px;}
+.disclosure > summary{font-weight:600;}
+.disclosure[open] > summary{margin-bottom:8px;}
+.side > .card:first-child,#importer{padding:13px 15px;margin-bottom:12px;}
+.side > .card:first-child h2,#importer h2{margin-bottom:9px;}
 details.alt[open] summary::before{content:"▾ ";}
 details.alt summary:hover{color:var(--gold);}
 details.alt[open] summary{margin-bottom:9px;}
@@ -320,19 +312,17 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 /* ---------- 简历识别 ---------- */
 .card .sub{font-weight:400;font-size:11.5px;color:var(--mute);margin-left:8px;letter-spacing:0;}
 .drop{
-  border:1.5px dashed #d5cec3;border-radius:10px;padding:20px 16px;text-align:center;
+  border:1.5px dashed #d5cec3;border-radius:8px;padding:8px 10px;
+  display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;
   background:#fbf9f5;transition:.18s;cursor:pointer;
 }
 .drop:hover,.drop.over{border-color:var(--gold);background:#fdf8ee;}
-.drop .dicon{font-size:19px;color:var(--gold);line-height:1;margin-bottom:7px;}
-.drop b{display:block;font-size:13.5px;color:var(--ink);margin-bottom:4px;}
-.drop span{display:block;font-size:11.5px;color:var(--mute);margin-bottom:11px;}
+.drop span{flex:1 1 170px;min-width:0;overflow-wrap:anywhere;font-size:12px;color:var(--sub);}
 .drop button{font-size:12px;padding:6px 14px;}
-.impacts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
-.impacts button{flex:1 1 auto;min-width:120px;padding:9px 12px;font-size:12.5px;}
+.impacts{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;}
 #resume-text{
-  width:100%;margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
-  font:13px/1.7 inherit;color:var(--ink);background:#fff;resize:vertical;box-sizing:border-box;
+  display:block;width:100%;margin-top:8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;
+  font:inherit;font-size:13px;line-height:1.5;color:var(--ink);background:#fff;resize:vertical;box-sizing:border-box;
 }
 #resume-text:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(184,146,74,.1);}
 
@@ -404,12 +394,12 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #progress .ptxt .sm{color:var(--bad);font-weight:600;}
 
 /* 填写进度 + 资料套件并排两格：原来各占一整行，白占半屏高度 */
-.prog-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.prog-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
 .prog-row>.card{margin-bottom:0;min-width:0;padding:14px 15px 15px;}
 .prog-row>.card h2{margin-bottom:10px;}
 .prog-row>.stip{grid-column:1/-1;margin:0;}
 /* 窄屏单列：两格并排在半屏宽下会把「另存为新套件」挤成两行 */
-@media(max-width:900px){.prog-row{grid-template-columns:1fr;}}
+@media(max-width:640px){.prog-row{grid-template-columns:1fr;}}
 
 #groups .card h2{cursor:pointer;user-select:none;}
 #groups .card.flash{box-shadow:0 0 0 2px rgba(184,146,74,.5);transition:box-shadow .2s;}
@@ -452,21 +442,12 @@ button.ghost:hover{background:#efe2cb;border-color:var(--gold);color:#5f4520;}
 #tut video{width:100%;height:100%;display:block;background:#000;}
 /* 未解锁时下载按钮弱化一点，解锁后恢复常态 */
 #btn-dl.locked{opacity:.85;}
-/* 资料套件门：没登录或没点星时整块盖住，跟下载门同一套判定（登录 + 点星） */
-#profiles{position:relative}
-/* 盖住卡片正文、留出标题：这块现在和「填写进度」并排，只有半宽，连标题一起盖会显得整张卡是空的 */
-#pf-gate{position:absolute;left:0;right:0;top:46px;bottom:0;z-index:5;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;text-align:center;
-  background:rgba(255,255,255,.94);border-radius:0 0 11px 11px;padding:10px 14px 16px}
-#pf-gate[hidden]{display:none!important}
-#pf-gate .pfg-b{font-size:14.5px;font-weight:600;color:#5f4520;margin-bottom:6px}
-#pf-gate .pfg-p{font-size:12.5px;line-height:1.8;color:#8a7a5c;margin:0 0 12px;max-width:470px}
+#pf-gate .pfg-p{font-size:12px;color:var(--sub);margin:0 0 8px;}
 /* 并排后只有半宽：下拉独占一行，三个按钮平分第二行，不然「删除」会单独甩到第三行 */
 .prog-row #profiles .prow{gap:6px}
 .prog-row #profiles .prow select{flex:1 1 100%;min-width:0;padding:7px 10px}
 .prog-row #profiles .prow button{flex:1 1 0;min-width:0;padding:7px 8px;font-size:12.5px;text-align:center}
-#profiles.locked .prow{opacity:.32}
-#profiles.locked .ptip{opacity:.32}
+#profiles.locked .prow,#profiles.locked .ptip{display:none;}
 /* 填写进度里的分组小格：一眼看出哪一组还差几项，点一下直接跳过去 */
 #progress .pgrp{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 #progress .pg{
@@ -525,7 +506,7 @@ window.trackEvent = function (name, data) {
 
 <header>
   <div class="hd">
-    <h1>简历填表助手<span>通用版 · 填一次，以后每份网申一键填完</span><span id="ver"></span></h1>
+    <h1>简历填表助手<span id="ver"></span></h1>
     <div class="acts">
       <button id="btn-video" class="ghost">看视频教程</button>
       <button id="btn-help" class="ghost">使用说明</button>
@@ -568,17 +549,15 @@ window.trackEvent = function (name, data) {
 <div class="wrap">
   <div class="main">
     <section class="card" id="importer">
-      <h2>识别简历<span class="sub">把简历丢进来，自动提取字段填到下面</span></h2>
+      <h2>识别简历</h2>
 
       <div class="drop" id="drop-zone">
-        <div class="dicon">↓</div>
-        <b>拖入简历文件</b>
-        <span>支持 PDF / TXT · 也可以直接粘贴文字</span>
+        <span role="status">拖入简历文件（PDF、TXT 或 Markdown）</span>
         <button class="ghost" id="btn-pick">选择文件</button>
         <input type="file" id="file-resume" accept=".pdf,.txt,.md" hidden>
       </div>
 
-      <textarea id="resume-text" rows="5" placeholder="把简历内容整段粘贴到这里，自动挑出姓名、电话、学校、专业、经历……&#10;例：张小明　男　2004.08　某某大学　建筑学　本科"></textarea>
+      <textarea id="resume-text" rows="3" aria-label="简历文本" placeholder="或在这里粘贴简历文本"></textarea>
 
       <div class="impacts">
         <button class="primary" id="btn-parse">识别并预览</button>
@@ -589,27 +568,22 @@ window.trackEvent = function (name, data) {
     </section>
 
     <section class="card" id="profiles">
-      <h2>资料套件<span class="sub">投不同岗位用不同版本，一键切换</span></h2>
+      <h2>资料套件</h2>
       <div class="prow">
         <select id="pf-select" title="切换资料套件"></select>
         <button id="pf-new" type="button">另存为新套件</button>
         <button id="pf-rename" type="button">重命名</button>
         <button id="pf-del" type="button">删除</button>
       </div>
-      <p class="ptip">当前用的是「<b id="pf-cur">默认资料</b>」。每套资料独立保存，
-        生成书签 / 下载文件用的就是当前这一套；切换或改完数据后要重新生成书签。</p>
+      <p class="ptip">切换或修改套件后，请重新生成书签。</p>
       <div id="pf-gate" hidden>
-        <div>
-          <div class="pfg-b">🔒 登录 GitHub 并点星后解锁</div>
-          <p class="pfg-p">资料套件和「下载表单助手到本地」一样，要先登录 GitHub 并给项目点个 star。
-            登录只用来确认点星，不读取、不上传你的任何资料。</p>
-          <button class="primary" id="pf-gate-go" type="button">登录 GitHub 解锁</button>
-        </div>
+        <p class="pfg-p">登录 GitHub 并给项目点星后，即可管理多套资料。</p>
+        <button id="pf-gate-go" type="button">登录 GitHub 解锁</button>
       </div>
     </section>
 
-    <section class="card" id="applog">
-      <h2>投递记录<span class="sub">填完表点书签面板上的「记录投递」</span></h2>
+    <details class="card disclosure" id="applog">
+      <summary>投递记录 <span id="log-count"></span></summary>
       <div id="log-list"></div>
       <div class="prow" style="margin-top:10px">
         <button id="log-csv" type="button">导出 CSV</button>
@@ -618,7 +592,7 @@ window.trackEvent = function (name, data) {
       <p class="ptip">记录只存在这台电脑的浏览器里，导出 CSV 可以直接贴进投递跟踪表。
         书签跑在招聘网站的域里，没法直接写回来，所以它把记录编码进本页网址带回来——
         网址 # 后面的部分不会发给服务器。</p>
-    </section>
+    </details>
 
     <div id="groups"></div>
   </div>
@@ -634,18 +608,6 @@ window.trackEvent = function (name, data) {
 
       <button class="primary installbtn" id="btn-install">安装填表书签</button>
 
-      <div class="minsteps">
-        <div class="ms"><i>1</i><div>点上面按钮 → <b>代码已复制</b></div></div>
-        <div class="ms"><i>2</i><div>按 <kbd>Ctrl</kbd>+<kbd>D</kbd> 添加收藏夹</div></div>
-        <div class="ms"><i>3</i><div><kbd>Ctrl</kbd>+<kbd>V</kbd> 粘进<b>网址</b>框后回车</div></div>
-      </div>
-
-      <div class="tip" style="margin-top:10px">
-        存到「<b>书签栏</b>」，别丢进文件夹。以后改完数据点一次「安装填表书签」重装即可（会覆盖同名书签，先删旧的再存不会重复）。
-      </div>
-
-      <div class="sep"></div>
-
       <details class="alt">
         <summary>其他安装方式</summary>
         <a class="bm" id="bm-full" href="javascript:void 0"><span class="drag">⇢</span> 直接拖我到书签栏</a>
@@ -660,8 +622,8 @@ window.trackEvent = function (name, data) {
       </details>
     </div>
 
-    <section class="card" id="tut">
-      <h2>视频教程</h2>
+    <details class="card disclosure" id="tut">
+      <summary>视频教程 · 29 秒</summary>
 
       <div class="vstage" id="vstage" role="button" tabindex="0" aria-label="播放视频教程">
         <img src="assets/tutorial-poster.jpg" alt="视频教程封面：简历填表助手页面与自动填表效果" loading="lazy" decoding="async">
@@ -669,10 +631,10 @@ window.trackEvent = function (name, data) {
         <span class="vdur">00:29</span>
       </div>
 
-    </section>
+    </details>
 
-    <div class="card" id="card-about">
-      <h2>说明</h2>
+    <details class="card disclosure" id="card-about">
+      <summary>说明</summary>
       <div class="tip">
         · 这个文件<b>不含任何个人信息</b>，可以直接发给同学、朋友，各填各的。<br>
         · 你填的内容只存在<b>你这台电脑的浏览器</b>里，不上传，关掉页面也不会丢。<br>
@@ -682,7 +644,7 @@ window.trackEvent = function (name, data) {
         · 但生成的书签文件里有你的身份证和手机号，<b>别外发</b>。<br>
         · 换电脑：数据存在各自浏览器的本地，换机后在新设备重新填写即可。
       </div>
-    </div>
+    </details>
   </div>
 </div>
 
@@ -7617,8 +7579,6 @@ function renderProfiles() {
     if (p.id === PF.active) o.selected = true;
     sel.appendChild(o);
   });
-  var cur = document.getElementById('pf-cur');
-  if (cur) cur.textContent = (curPF() || {}).name || '';
 }
 
 PF = loadProfiles();
@@ -8431,12 +8391,14 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   var hb = document.getElementById('btn-video');
   if (hb) hb.addEventListener('click', function () {
     var tut = document.getElementById('tut');
-    if (tut) tut.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setTimeout(playVideo, 280);
+    if (!tut) return;
+    tut.open = true;
+    tut.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    playVideo();
   });
 
   /* 窄屏是单列：侧栏整块排在主栏之后，视频就跟着沉到页面最底部（实测要滚 1 万多像素）。
-     所以窄屏把视频卡临时挪进主栏、跟在进度卡后面；宽屏再挪回侧栏原本的位置。 */
+     所以窄屏把视频卡移到简历识别下方，宽屏再放回侧栏。 */
   function placeTut() {
     var tut = document.getElementById('tut');
     var main = document.querySelector('.main');
@@ -8445,11 +8407,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
     var narrow = window.matchMedia('(max-width:1180px)').matches;
     if (narrow) {
       if (tut.parentElement !== main) {
-        /* 「填写进度」现在和「资料套件」一起包在 .prog-row 里，要跟在整行后面；
-           进度卡的下一个兄弟节点是并排格的另一半，不能再当插入锚点用 */
-        var row = document.querySelector('.prog-row');
-        var at = (row && row.parentElement === main) ? row.nextElementSibling : main.firstElementChild;
-        main.insertBefore(tut, at);
+        main.insertBefore(tut, document.getElementById('applog'));
       }
     } else if (tut.parentElement !== side) {
       var sc = document.getElementById('card-about');
@@ -8491,6 +8449,7 @@ function fmtTime(d) {
       const a = logAll();
       a.push(rec);
       logSave(a);
+      document.getElementById('applog').open = true;
       toast('已记录一条投递：' + (rec.ti || rec.h || ''));
     }
   } catch (e) { toast('这条投递记录没读出来'); }
@@ -8502,6 +8461,7 @@ function renderLog() {
   const box = document.getElementById('log-list');
   if (!box) return;
   const a = logAll().slice().reverse();
+  document.getElementById('log-count').textContent = a.length ? '· ' + a.length + ' 条' : '';
   box.innerHTML = '';
   if (!a.length) {
     const p = document.createElement('p');
@@ -9459,11 +9419,15 @@ function renderProgress() {
     const txt = document.createElement('div');
     txt.className = 'ptxt';
     box.appendChild(txt);
-    const tip = document.createElement('div');
-    tip.className = 'tip';
-    tip.style.marginTop = '9px';
-    tip.textContent = '填完 8 个必填项就能生成书签。点分组小格直接跳过去，点区块标题收起。';
-    box.appendChild(tip);
+    const details = document.createElement('details');
+    details.className = 'alt';
+    const summary = document.createElement('summary');
+    summary.textContent = '查看各项进度';
+    details.appendChild(summary);
+    const groups = document.createElement('div');
+    groups.className = 'pgrp';
+    details.appendChild(groups);
+    box.appendChild(details);
 
     row.appendChild(box);
 
@@ -9503,12 +9467,7 @@ function renderProgress() {
 
   /* 分组小格：一眼看出哪一组还差几项，点一下直接跳过去。
      分母跟着段数走（底段固定算，多加的空段不算），和上面的总进度同一套规则。 */
-  let gr = box.querySelector('.pgrp');
-  if (!gr) {
-    gr = document.createElement('div');
-    gr.className = 'pgrp';
-    box.appendChild(gr);
-  }
+  const gr = box.querySelector('.pgrp');
   gr.innerHTML = '';
   const cards = document.querySelectorAll('#groups .card');
   GROUPS.forEach((g, i) => {
@@ -10023,9 +9982,8 @@ window.uiProfiles = uiProfiles; window.pfUnlocked = pfUnlocked; window.pfGateGo 
 
 /* ---------- 多套资料 UI ---------- */
 (function () {
-  /* 整块盖住的解锁层：点哪儿都算「去解锁」，和点下载按钮一个行为 */
-  var gate = document.getElementById('pf-gate');
-  if (gate) gate.addEventListener('click', pfGateGo);
+  var gateButton = document.getElementById('pf-gate-go');
+  if (gateButton) gateButton.addEventListener('click', pfGateGo);
   var sel = document.getElementById('pf-select');
   if (sel) sel.addEventListener('change', function () { switchProfile(sel.value); });
   var bNew = document.getElementById('pf-new');
