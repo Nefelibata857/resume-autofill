@@ -138,6 +138,18 @@ button.primary:hover{background:#000;}
   font-size:12px;color:#6b5f4a;cursor:pointer}
 .prow button:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-soft)}
 .ptip{font-size:12px;color:#8a7a5c;margin:10px 0 0;line-height:1.7}
+.pf-attach{margin-top:12px;border-top:1px dashed #e6dcc6;padding-top:10px}
+.pf-attach label{display:block;font-size:12px;color:#8a7a5c;margin-top:8px;line-height:1.6}
+.pf-attach input{display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:7px 10px;
+  border:1px solid #e0d6c2;border-radius:8px;font-size:13px;background:#fffdf8;color:#3a3226}
+.pf-attach input:focus{outline:none;border-color:#c9a86a}
+#profiles.locked .pf-attach{opacity:.32;pointer-events:none}
+.logrow{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px dashed #eee2cc}
+.logmain{flex:1;min-width:0}
+.logt{font-size:13px;color:#3a3226;line-height:1.5;word-break:break-all}
+.logs{font-size:11px;color:#9a8a6c;margin-top:2px;line-height:1.5;word-break:break-all}
+.logrow button{all:unset;cursor:pointer;color:#b09a76;font-size:16px;line-height:1.2;padding:0 4px}
+.logrow button:hover{color:#a4442e}
 .linkbtn:hover{background:none;border:none;color:#8a6a35;}
 
 pre.script{
@@ -592,6 +604,14 @@ window.trackEvent = function (name, data) {
       </div>
       <p class="ptip">当前用的是「<b id="pf-cur">默认资料</b>」。每套资料独立保存，
         生成书签 / 下载文件用的就是当前这一套；切换或改完数据后要重新生成书签。</p>
+      <div class="pf-attach">
+        <label>这套要投的简历 PDF
+          <input id="pf-resume" type="text" placeholder="例如：2027城市设计王勇超简历-广联达数字化运营.pdf"></label>
+        <label>作品集链接（随这套一起带走）
+          <input id="pf-portfolio" type="text" placeholder="https://…"></label>
+        <p class="ptip">书签填不了「文件上传」。填了这两项，书签跑完会在面板上提醒你<b>还要手动传哪份简历</b>，
+          免得广联达的岗位投了建筑设计的简历。</p>
+      </div>
       <div id="pf-gate" hidden>
         <div>
           <div class="pfg-b">🔒 登录 GitHub 并点星后解锁</div>
@@ -600,6 +620,18 @@ window.trackEvent = function (name, data) {
           <button class="primary" id="pf-gate-go" type="button">登录 GitHub 解锁</button>
         </div>
       </div>
+    </section>
+
+    <section class="card" id="applog">
+      <h2>投递记录<span class="sub">填完表点书签面板上的「记录投递」</span></h2>
+      <div id="log-list"></div>
+      <div class="prow" style="margin-top:10px">
+        <button id="log-csv" type="button">导出 CSV</button>
+        <button id="log-clear" type="button">清空</button>
+      </div>
+      <p class="ptip">记录只存在这台电脑的浏览器里，导出 CSV 可以直接贴进投递跟踪表。
+        书签跑在招聘网站的域里，没法直接写回来，所以它把记录编码进本页网址带回来——
+        网址 # 后面的部分不会发给服务器。</p>
     </section>
 
     <div id="groups"></div>
@@ -850,6 +882,12 @@ window.trackEvent = function (name, data) {
   "language": "",
   "languageLevel": "",
   "languageScore": "",
+  "cet4Score": "",
+  "cet6Score": "",
+  "ieltsScore": "",
+  "toeflScore": "",
+  "computerLevel": "",
+  "mandarinLevel": "",
   "gpa": "",
   "majorGpa": "",
   "rank": "",
@@ -1073,6 +1111,15 @@ function applyResume(D, O) {
     ['tripartite',    /(三方协议)/, null],
     ['availableDate', /(到岗时间|可到岗|可入职时间)/, /(经历|工作经历)/],
     ['portfolio',     /(作品集|个人主页|作品链接|portfolio|github)/i, /(文件|上传|附件)/],
+    /* 四六级 / 计算机 / 普通话是网申最常平铺问的字段，必须排在下面通用的
+       languageScore（/分数|成绩/）前面，否则「英语四级成绩」会被通用分数规则吃掉。
+       「四六级」合并填一格的先不匹配——宁可落到未识别，也别把六级分数填进四级框。 */
+    ['cet4Score',   /(cet[\s\-_]?4|英语四级|大学英语四级|四级)/i, /(六级|口语|时间|日期|编号|上传|照片|通过|是否)/],
+    ['cet6Score',   /(cet[\s\-_]?6|英语六级|大学英语六级|六级)/i, /(四级|口语|时间|日期|编号|上传|照片|通过|是否)/],
+    ['ieltsScore',  /(雅思|ielts)/i, /(时间|日期|编号|上传|照片)/],
+    ['toeflScore',  /(托福|toefl)/i, /(时间|日期|编号|上传|照片)/],
+    ['computerLevel',/(计算机(等级|水平|一级|二级|三级|四级)|全国计算机)/, /(专业|课程|技能|时间|日期|上传)/],
+    ['mandarinLevel',/(普通话)/, /(时间|日期|编号|上传|照片)/],
     /* 字节这类页面把「证书」「语言能力」单独成块：一个名称/语言下拉 + 一个等级或描述 */
     ['certName',      /(证书名称|资格证书|执业资格|技能证书|证书(?!编号|日期|时间|照片|扫描|上传|描述|类型))/, /(描述|编号|说明|时间|日期)/],
     ['languageLevel', /(精通程度|熟练程度|掌握程度|语言水平|外语水平|语言等级|语言能力等级)/, null],
@@ -3718,6 +3765,22 @@ function applyResume(D, O) {
         listBlock('已填明细', RES.filled, function (o) { return o.k + ' = ' + o.v; });
       }
 
+      /* 附件提醒：书签填不了「文件上传」，把这套资料该投的简历摆出来，免得投错版本 */
+      if (O.attach && (O.attach.r || O.attach.p)) {
+        var ab = mk('div', 'margin-top:10px;padding:9px 11px;border:1px solid rgba(255,207,122,.45);'
+          + 'border-radius:7px;background:rgba(255,207,122,.09);font-size:12px;line-height:1.7;color:#ffcf7a;');
+        ab.appendChild(mk('div', 'font-weight:600;', '还要手动上传（书签填不了文件）'));
+        if (O.attach.r) ab.appendChild(mk('div', 'color:#f0e6d2;word-break:break-all;', '· 简历：' + O.attach.r));
+        if (O.attach.p) {
+          var lk = mk('a', 'display:block;color:#9ecbff;word-break:break-all;text-decoration:underline;', '· 作品集：' + O.attach.p);
+          lk.href = O.attach.p;
+          lk.target = '_blank';
+          lk.rel = 'noopener';
+          ab.appendChild(lk);
+        }
+        body.appendChild(ab);
+      }
+
       var bar = mk('div', 'display:flex;gap:7px;margin-top:11px;');
       var bCopy = mk('button', 'all:unset;display:inline-block;cursor:pointer;flex:1;text-align:center;background:#fff;color:#1a1917;'
         + 'border-radius:6px;padding:7px 0;font-size:12px;font-weight:600;', '复制清单');
@@ -3758,6 +3821,30 @@ function applyResume(D, O) {
         setTimeout(function () { bCopy.textContent = '复制清单'; }, 1600);
       });
       bar.appendChild(bCopy);
+
+      /* 投递记录：书签跑在招聘网站的域里，它的 localStorage 工具页读不到，
+         所以把记录编码进工具页 URL 的 hash 带回去（hash 不会发给服务器）。
+         回到工具页自动入库，可以导出 CSV 贴进投递跟踪表。 */
+      var bLog = mk('button', 'all:unset;display:inline-block;cursor:pointer;background:rgba(255,255,255,.12);color:#fff;'
+        + 'border-radius:6px;padding:7px 13px;font-size:12px;', '记录投递');
+      bLog.addEventListener('click', function () {
+        try {
+          var rec = {
+            d: new Date().getTime(),
+            h: location.hostname,
+            ti: String(document.title || '').slice(0, 60),
+            pf: String(O.pf || ''),
+            r: String((O.attach && O.attach.r) || ''),
+            p: String((O.attach && O.attach.p) || ''),
+            n: RES.filled.length
+          };
+          window.open('https://nefelibata857.github.io/resume-autofill/#log='
+            + encodeURIComponent(JSON.stringify(rec)), '_blank');
+          bLog.textContent = '已带到工具页';
+          setTimeout(function () { bLog.textContent = '记录投递'; }, 2000);
+        } catch (e) {}
+      });
+      bar.appendChild(bLog);
 
       var bHide = mk('button', 'all:unset;display:inline-block;cursor:pointer;background:rgba(255,255,255,.12);color:#fff;'
         + 'border-radius:6px;padding:7px 13px;font-size:12px;', '收起');
@@ -4188,7 +4275,10 @@ const GROUPS = [
   { title: '校园经历（校园 / 学生工作 / 组织）', seg: 'sch'},
   { title: '项目经历', seg: 'prj'},
   { title: '证书与语言', fields: [
-    ['certName','证书名称'], ['language','语言'], ['languageLevel','精通程度'], ['languageScore','分数']
+    ['cet4Score','英语四级（CET-4）成绩'], ['cet6Score','英语六级（CET-6）成绩'],
+    ['ieltsScore','雅思成绩'], ['toeflScore','托福成绩'],
+    ['computerLevel','计算机等级'], ['mandarinLevel','普通话等级'],
+    ['certName','其他证书名称'], ['language','其他语言'], ['languageLevel','精通程度'], ['languageScore','分数']
   ]},
   { title: '长文本', fields: [
     ['selfEval','自我评价 / 自我介绍'], ['skills','专业技能'], ['awards','奖项荣誉'],
@@ -4364,6 +4454,15 @@ function applyResume(D, O) {
     ['tripartite',    /(三方协议)/, null],
     ['availableDate', /(到岗时间|可到岗|可入职时间)/, /(经历|工作经历)/],
     ['portfolio',     /(作品集|个人主页|作品链接|portfolio|github)/i, /(文件|上传|附件)/],
+    /* 四六级 / 计算机 / 普通话是网申最常平铺问的字段，必须排在下面通用的
+       languageScore（/分数|成绩/）前面，否则「英语四级成绩」会被通用分数规则吃掉。
+       「四六级」合并填一格的先不匹配——宁可落到未识别，也别把六级分数填进四级框。 */
+    ['cet4Score',   /(cet[\s\-_]?4|英语四级|大学英语四级|四级)/i, /(六级|口语|时间|日期|编号|上传|照片|通过|是否)/],
+    ['cet6Score',   /(cet[\s\-_]?6|英语六级|大学英语六级|六级)/i, /(四级|口语|时间|日期|编号|上传|照片|通过|是否)/],
+    ['ieltsScore',  /(雅思|ielts)/i, /(时间|日期|编号|上传|照片)/],
+    ['toeflScore',  /(托福|toefl)/i, /(时间|日期|编号|上传|照片)/],
+    ['computerLevel',/(计算机(等级|水平|一级|二级|三级|四级)|全国计算机)/, /(专业|课程|技能|时间|日期|上传)/],
+    ['mandarinLevel',/(普通话)/, /(时间|日期|编号|上传|照片)/],
     /* 字节这类页面把「证书」「语言能力」单独成块：一个名称/语言下拉 + 一个等级或描述 */
     ['certName',      /(证书名称|资格证书|执业资格|技能证书|证书(?!编号|日期|时间|照片|扫描|上传|描述|类型))/, /(描述|编号|说明|时间|日期)/],
     ['languageLevel', /(精通程度|熟练程度|掌握程度|语言水平|外语水平|语言等级|语言能力等级)/, null],
@@ -7009,6 +7108,22 @@ function applyResume(D, O) {
         listBlock('已填明细', RES.filled, function (o) { return o.k + ' = ' + o.v; });
       }
 
+      /* 附件提醒：书签填不了「文件上传」，把这套资料该投的简历摆出来，免得投错版本 */
+      if (O.attach && (O.attach.r || O.attach.p)) {
+        var ab = mk('div', 'margin-top:10px;padding:9px 11px;border:1px solid rgba(255,207,122,.45);'
+          + 'border-radius:7px;background:rgba(255,207,122,.09);font-size:12px;line-height:1.7;color:#ffcf7a;');
+        ab.appendChild(mk('div', 'font-weight:600;', '还要手动上传（书签填不了文件）'));
+        if (O.attach.r) ab.appendChild(mk('div', 'color:#f0e6d2;word-break:break-all;', '· 简历：' + O.attach.r));
+        if (O.attach.p) {
+          var lk = mk('a', 'display:block;color:#9ecbff;word-break:break-all;text-decoration:underline;', '· 作品集：' + O.attach.p);
+          lk.href = O.attach.p;
+          lk.target = '_blank';
+          lk.rel = 'noopener';
+          ab.appendChild(lk);
+        }
+        body.appendChild(ab);
+      }
+
       var bar = mk('div', 'display:flex;gap:7px;margin-top:11px;');
       var bCopy = mk('button', 'all:unset;display:inline-block;cursor:pointer;flex:1;text-align:center;background:#fff;color:#1a1917;'
         + 'border-radius:6px;padding:7px 0;font-size:12px;font-weight:600;', '复制清单');
@@ -7049,6 +7164,30 @@ function applyResume(D, O) {
         setTimeout(function () { bCopy.textContent = '复制清单'; }, 1600);
       });
       bar.appendChild(bCopy);
+
+      /* 投递记录：书签跑在招聘网站的域里，它的 localStorage 工具页读不到，
+         所以把记录编码进工具页 URL 的 hash 带回去（hash 不会发给服务器）。
+         回到工具页自动入库，可以导出 CSV 贴进投递跟踪表。 */
+      var bLog = mk('button', 'all:unset;display:inline-block;cursor:pointer;background:rgba(255,255,255,.12);color:#fff;'
+        + 'border-radius:6px;padding:7px 13px;font-size:12px;', '记录投递');
+      bLog.addEventListener('click', function () {
+        try {
+          var rec = {
+            d: new Date().getTime(),
+            h: location.hostname,
+            ti: String(document.title || '').slice(0, 60),
+            pf: String(O.pf || ''),
+            r: String((O.attach && O.attach.r) || ''),
+            p: String((O.attach && O.attach.p) || ''),
+            n: RES.filled.length
+          };
+          window.open('https://nefelibata857.github.io/resume-autofill/#log='
+            + encodeURIComponent(JSON.stringify(rec)), '_blank');
+          bLog.textContent = '已带到工具页';
+          setTimeout(function () { bLog.textContent = '记录投递'; }, 2000);
+        } catch (e) {}
+      });
+      bar.appendChild(bLog);
 
       var bHide = mk('button', 'all:unset;display:inline-block;cursor:pointer;background:rgba(255,255,255,.12);color:#fff;'
         + 'border-radius:6px;padding:7px 13px;font-size:12px;', '收起');
@@ -7411,7 +7550,7 @@ function loadProfiles() {
     if (raw) {
       const o = JSON.parse(raw);
       if (o && Array.isArray(o.list) && o.list.length) {
-        o.list.forEach(function (p) { p.data = migrateEdu(Object.assign({}, DEFAULTS, p.data || {})); });
+        o.list.forEach(function (p) { p.data = migrateEdu(Object.assign({}, DEFAULTS, p.data || {})); p.attach = p.attach || {}; });
         if (!o.list.some(function (p) { return p.id === o.active; })) o.active = o.list[0].id;
         return o;
       }
@@ -7494,7 +7633,35 @@ function renderProfiles() {
   });
   var cur = document.getElementById('pf-cur');
   if (cur) cur.textContent = (curPF() || {}).name || '';
+  syncAttach();
 }
+
+/* ---------- 套件附件：这套资料配哪份简历 PDF、哪个作品集链接 ----------
+   书签填不了文件上传，只能提醒。存 PF 而不是 DATA，免得被当成表单字段填出去。 */
+function curAttach() {
+  var p = curPF();
+  if (!p) return {};
+  if (!p.attach) p.attach = {};
+  return p.attach;
+}
+function syncAttach() {
+  var a = curAttach();
+  var r = document.getElementById('pf-resume');
+  var f = document.getElementById('pf-portfolio');
+  if (r && r.value !== (a.resume || '')) r.value = a.resume || '';
+  if (f && f.value !== (a.portfolio || '')) f.value = a.portfolio || '';
+}
+(function bindAttach() {
+  [['pf-resume', 'resume'], ['pf-portfolio', 'portfolio']].forEach(function (pair) {
+    var el = document.getElementById(pair[0]);
+    if (!el) return;
+    el.addEventListener('input', function () {
+      curAttach()[pair[1]] = el.value;
+      saveProfiles();
+      scheduleRefresh();   /* 附件进书签 flags，得重算书签和「改过没导出」提示条 */
+    });
+  });
+})();
 
 PF = loadProfiles();
 
@@ -7995,7 +8162,8 @@ const SHORT_KEYS = new Set([
   'transferAccept','transferCities','tripartite',
   'school','college','major','degree','academicDegree','eduType','isUpgrade','studentId','className','tutor',
   'enrollDate','graduateDate','gpa','majorGpa','rank','majorRank','courses',
-  'targetJob','targetJob2','targetCity','expectSalary','jobType','availableDate','portfolio'
+  'targetJob','targetJob2','targetCity','expectSalary','jobType','availableDate','portfolio',
+  'cet4Score','cet6Score','ieltsScore','toeflScore','computerLevel','mandarinLevel'
 ]);
 
 function buildScript(opts, engWhich) {
@@ -8053,6 +8221,18 @@ function buildScript(opts, engWhich) {
   const flags = {};
   if (opts.exp) flags.exp = 1;
   if (opts.diag) flags.diag = 1;
+
+  /* 当前套件的附件信息随书签走：书签填不了文件上传，只能在面板上提醒还要手动传哪份。
+     放 flags 而不是 payload——这些是提示，不是网申字段，绝不能被拿去匹配输入框。 */
+  try {
+    const _pf = (typeof curPF === 'function') ? curPF() : null;
+    const _at = (_pf && _pf.attach) || {};
+    const _pn = String((_pf && _pf.name) || '').trim();
+    if (_pn) flags.pf = _pn;
+    const _r = String(_at.resume || '').trim();
+    const _l = String(_at.portfolio || '').trim() || String(raw.portfolio || '').trim();
+    if (_r || _l) flags.attach = { n: _pn, r: _r, p: _l };
+  } catch (e) {}
 
   /* 自定义字段的匹配词一起进书签：[[key, "别名1|别名2"]] */
   const cx = getCustom()
@@ -8322,6 +8502,111 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   window.addEventListener('load', placeTut);
   window.addEventListener('resize', placeTut);
 })();
+
+/* ---------- 投递记录 ----------
+   书签在招聘网站的域里跑，localStorage 不互通，所以它把记录编码进本页 hash 带回来。
+   hash 不随请求发给服务器，记录也只写本机 localStorage。 */
+const LOG_KEY = 'rz_apply_log';
+function logAll() {
+  try {
+    const a = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    return Array.isArray(a) ? a : [];
+  } catch (e) { return []; }
+}
+function logSave(a) {
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(a.slice(-300))); } catch (e) {}
+}
+function fmtTime(d) {
+  const t = new Date(Number(d));
+  if (isNaN(t)) return '';
+  const p = n => String(n).padStart(2, '0');
+  return t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate())
+    + ' ' + p(t.getHours()) + ':' + p(t.getMinutes());
+}
+(function ingestLog() {
+  const m = location.hash.match(/#log=(.+)$/);
+  if (!m) return;
+  try {
+    const rec = JSON.parse(decodeURIComponent(m[1]));
+    if (rec && typeof rec === 'object') {
+      rec.id = 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      const a = logAll();
+      a.push(rec);
+      logSave(a);
+      toast('已记录一条投递：' + (rec.ti || rec.h || ''));
+    }
+  } catch (e) { toast('这条投递记录没读出来'); }
+  /* 读完就抹掉 hash，刷新不会重复入库 */
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+})();
+
+function renderLog() {
+  const box = document.getElementById('log-list');
+  if (!box) return;
+  const a = logAll().slice().reverse();
+  box.innerHTML = '';
+  if (!a.length) {
+    const p = document.createElement('p');
+    p.className = 'ptip';
+    p.textContent = '还没有记录。在招聘网站填完表，点书签面板上的「记录投递」就会出现在这里。';
+    box.appendChild(p);
+    return;
+  }
+  a.slice(0, 50).forEach(rec => {
+    const row = document.createElement('div');
+    row.className = 'logrow';
+    const main = document.createElement('div');
+    main.className = 'logmain';
+    const l1 = document.createElement('div');
+    l1.className = 'logt';
+    /* 标题来自招聘网站，不可信：一律 textContent，不拼 HTML */
+    l1.textContent = rec.ti || rec.h || '(无标题)';
+    const l2 = document.createElement('div');
+    l2.className = 'logs';
+    l2.textContent = fmtTime(rec.d) + ' · ' + (rec.h || '')
+      + (rec.pf ? ' · ' + rec.pf : '') + (rec.n ? ' · 填了 ' + rec.n + ' 项' : '');
+    main.appendChild(l1);
+    main.appendChild(l2);
+    if (rec.r) {
+      const l3 = document.createElement('div');
+      l3.className = 'logs';
+      l3.textContent = '简历：' + rec.r;
+      main.appendChild(l3);
+    }
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = '×';
+    del.title = '删除这条';
+    del.addEventListener('click', () => {
+      logSave(logAll().filter(x => x.id !== rec.id));
+      renderLog();
+    });
+    row.appendChild(main);
+    row.appendChild(del);
+    box.appendChild(row);
+  });
+}
+
+const btnLogCsv = document.getElementById('log-csv');
+if (btnLogCsv) btnLogCsv.addEventListener('click', () => {
+  const a = logAll();
+  if (!a.length) { toast('还没有投递记录'); return; }
+  const esc = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
+  const rows = [['投递时间', '来源网站', '页面标题', '资料套件', '简历附件', '作品集链接', '已填字段数'].map(esc).join(',')];
+  a.forEach(r => rows.push([fmtTime(r.d), r.h, r.ti, r.pf, r.r, r.p, r.n].map(esc).join(',')));
+  /* BOM 不能省：Excel 打开无 BOM 的 UTF-8 CSV 会把中文看成乱码 */
+  download('投递记录.csv', '\ufeff' + rows.join('\r\n'), 'text/csv;charset=utf-8');
+  toast('已导出 ' + a.length + ' 条');
+});
+const btnLogClear = document.getElementById('log-clear');
+if (btnLogClear) btnLogClear.addEventListener('click', () => {
+  if (!logAll().length) { toast('本来就是空的'); return; }
+  if (!confirm('清空所有投递记录？建议先导出 CSV。')) return;
+  logSave([]);
+  renderLog();
+  toast('已清空');
+});
+renderLog();
 
 /* 必填还没填完就导出书签，等于白导入一次，先提醒一句 */
 function incompleteWarn() {
